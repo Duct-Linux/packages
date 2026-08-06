@@ -1,0 +1,10 @@
+# The Duct package repository.
+#
+# Install as /etc/tape/repos/duct.toml -- the filename is load-bearing. The
+# repository signature is bound to the name "duct", and tape derives that name
+# from this file's basename. Renaming the file makes verification fail.
+[repo]
+name = "Duct"
+baseurl = "https://repo.duct.dss-net.de"
+enabled = true
+priority = 10

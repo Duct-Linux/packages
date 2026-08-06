@@ -1,0 +1,19 @@
+[package]
+name = "linux-headers"
+description = "Linux kernel API headers for userspace"
+version = "6.16.1"
+subversion = "1"
+authors = ["upstream"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+# The kernel has no configure script and nothing to compile here -- only the
+# exported headers -- so the generic build stage is skipped entirely.
+[install]
+script = "install.sh"
+
+[dependencies]
+
+[dependencies.build]

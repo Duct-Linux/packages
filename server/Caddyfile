@@ -1,0 +1,77 @@
+# Caddy config for the Duct package repository.
+#
+# tape requests exactly three shapes of path and nothing else:
+#
+#   /repo.db                                          SQLite index
+#   /repo.db.sig                                      detached ed25519 signature over it
+#   /packages/<name>-<ver>-<sub>.<arch>.tape.tar.gz   the packages themselves
+#
+# So this needs to be a static file server and nothing more: no directory index
+# is required, no CGI, no special MIME configuration.
+#
+# Deploy to /etc/caddy/Caddyfile (or import it from there) and reload with
+# `caddy reload --config /etc/caddy/Caddyfile`.
+
+repo.duct.dss-net.de {
+	root * /srv/duct/repo
+
+	# The signature covers the index, so the two are only meaningful as a pair.
+	# They must never be cacheable for different lengths of time: a fresh index
+	# served beside a stale signature fails verification as "signature is not
+	# valid for this content", which is indistinguishable from tampering and
+	# leaves the client with no way to recover but to wait. One matcher, one
+	# TTL, deliberately.
+	@meta path /repo.db /repo.db.sig
+	header @meta Cache-Control "public, max-age=60, must-revalidate"
+
+	# Package filenames carry name, version, subversion and architecture, and
+	# Duct builds reproducibly -- the same filename really does mean the same
+	# bytes. That is what makes `immutable` honest rather than optimistic.
+	#
+	# The corollary is a hard rule for whoever publishes: any rebuild MUST bump
+	# subversion. Publishing different bytes under a name a client cached for a
+	# year will fail that client's sha256 check against the index, and no amount
+	# of retrying fixes it.
+	@pkg path /packages/*
+	header @pkg {
+		Cache-Control "public, max-age=31536000, immutable"
+		Content-Type "application/octet-stream"
+	}
+
+	# The index gets a distinctive content type purely so the encoder below can
+	# single it out. Left to sniffing it would be octet-stream, which is also
+	# what the packages are, and there would be no way to compress one without
+	# the other.
+	@index path /repo.db
+	header @index Content-Type "application/vnd.sqlite3"
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		-Server
+	}
+
+	# Packages are gzip already; recompressing costs CPU and saves nothing. The
+	# index is SQLite and compresses by roughly an order of magnitude, and it is
+	# the one thing here worth compressing: tape has no conditional-request
+	# support at all -- it would treat a 304 as an error -- so every client
+	# refetches the entire index, in full, once an hour, forever. That is the
+	# only recurring bandwidth this server serves.
+	encode zstd gzip {
+		match {
+			header Content-Type text/*
+			header Content-Type application/json*
+			header Content-Type application/vnd.sqlite3*
+		}
+	}
+
+	# Optional. tape never lists a directory, so this is purely for humans --
+	# and the package list is public information anyway.
+	file_server browse
+
+	log {
+		output file /var/log/caddy/repo.log {
+			roll_size 100MiB
+			roll_keep 5
+		}
+	}
+}

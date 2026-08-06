@@ -1,0 +1,148 @@
+name: build packages
+
+# Every package is built inside duct/builder, which already contains the whole
+# package set -- so unlike a from-scratch bootstrap, each package's dependencies
+# are simply present and the builds are independent. That is what makes a
+# per-package matrix possible here where the local Makefile needs an ordered
+# loop.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'pkgs/**'
+      - '.github/workflows/build.yml'
+  pull_request:
+    paths:
+      - 'pkgs/**'
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: 'Space-separated package names, or "all"'
+        default: 'all'
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+env:
+  BUILDER: ghcr.io/duct-linux/builder:latest
+  RUST_BUILDER: ghcr.io/duct-linux/rust:latest
+
+jobs:
+  # Which packages to build, as a JSON matrix.
+  #
+  # A push touching one recipe rebuilds only that recipe -- a typo fix has no
+  # business recompiling gcc. But versions.env and _scripts/ are inputs to
+  # *every* package, so a change to either forces the full set.
+  select:
+    runs-on: ubuntu-latest
+    outputs:
+      packages: ${{ steps.pick.outputs.packages }}
+      any_packages: ${{ steps.pick.outputs.any_packages }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - id: pick
+        run: |
+          set -euo pipefail
+          all() { ls pkgs | grep -v '^_scripts$' | grep -v '^versions.env$'; }
+
+          if [ '${{ github.event_name }}' = 'workflow_dispatch' ] \
+             && [ '${{ inputs.packages }}' != 'all' ]; then
+            sel='${{ inputs.packages }}'
+          elif [ '${{ github.event_name }}' = 'release' ] \
+             || [ '${{ github.event_name }}' = 'workflow_dispatch' ]; then
+            sel=$(all)
+          else
+            changed=$(git diff --name-only HEAD^ HEAD -- pkgs/ || true)
+            if grep -qE '^pkgs/(versions\.env|_scripts/)' <<<"$changed"; then
+              echo "shared input changed; rebuilding everything"
+              sel=$(all)
+            else
+              sel=$(sed -n 's|^pkgs/\([^/]*\)/.*|\1|p' <<<"$changed" | sort -u)
+            fi
+          fi
+
+          # duct-filesystem is stamped "any" and is byte-identical on every
+          # architecture. Building it per-arch would produce duplicates that
+          # add-to-repo rejects, so it gets its own single-lane job.
+          arch_pkgs=$(grep -v '^duct-filesystem$' <<<"$sel" | grep -v '^$' || true)
+          any_pkgs=$(grep  '^duct-filesystem$' <<<"$sel" || true)
+
+          echo "packages=$(jq -cRn '[inputs|select(length>0)]' <<<"$arch_pkgs")" >>"$GITHUB_OUTPUT"
+          echo "any_packages=$(jq -cRn '[inputs|select(length>0)]' <<<"$any_pkgs")" >>"$GITHUB_OUTPUT"
+          echo "selected: $(tr '\n' ' ' <<<"$sel")"
+
+  build:
+    needs: select
+    if: needs.select.outputs.packages != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.select.outputs.packages) }}
+        include:
+          - { runner: ubuntu-latest,    arch: x86_64 }
+          - { runner: ubuntu-24.04-arm, arch: aarch64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Fetched here, not in the container: duct/builder has no curl or wget,
+      # on purpose. Verified against the sha256 in versions.env before it is
+      # ever mounted.
+      - name: Fetch source
+        run: DUCT_SRC_CACHE="$PWD/sources" ./tools/fetch-source.sh '${{ matrix.package }}'
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          docker run --rm \
+            -v "$PWD/pkgs":/pkgs:ro \
+            -v "$PWD/out":/out \
+            -v "$PWD/sources":/cache:ro \
+            -e DUCT_SRC_CACHE=/cache \
+            -e DUCT_JOBS="$(nproc)" \
+            "$BUILDER" \
+            bash -c 'cp -R /pkgs /tmp/pkgs && exec tape-builder build /tmp/pkgs/${{ matrix.package }} -t ${{ matrix.arch }}-linux-gnu -o /out'
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.package }}-${{ matrix.arch }}
+          path: out/*.tape.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  # Architecture-independent packages, built once.
+  build-any:
+    needs: select
+    if: needs.select.outputs.any_packages != '[]'
+    strategy:
+      fail-fast: false
+      matrix:
+        package: ${{ fromJSON(needs.select.outputs.any_packages) }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch source
+        run: DUCT_SRC_CACHE="$PWD/sources" ./tools/fetch-source.sh '${{ matrix.package }}'
+      - name: Build
+        run: |
+          set -euo pipefail
+          mkdir -p out sources
+          docker run --rm \
+            -v "$PWD/pkgs":/pkgs:ro -v "$PWD/out":/out -v "$PWD/sources":/cache:ro \
+            -e DUCT_SRC_CACHE=/cache -e DUCT_JOBS="$(nproc)" \
+            "$BUILDER" \
+            bash -c 'cp -R /pkgs /tmp/pkgs && exec tape-builder build /tmp/pkgs/${{ matrix.package }} -t any -o /out'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.package }}-any
+          path: out/*.tape.tar.gz
+          if-no-files-found: error
+          retention-days: 7

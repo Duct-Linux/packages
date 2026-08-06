@@ -1,0 +1,26 @@
+[package]
+name = "glibc"
+description = "The GNU C Library"
+version = "2.42.0"
+subversion = "1"
+authors = ["upstream"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "prepare.sh"
+
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+# glibc sits at the bottom of the stack: it depends on the kernel headers it is
+# compiled against and on nothing else.
+[dependencies]
+linux-headers = ">=6.16.1"
+
+[dependencies.build]

@@ -1,0 +1,18 @@
+[package]
+name = "tape"
+description = "The Duct package manager"
+version = "0.1.0"
+subversion = "1"
+authors = ["ItzYanick"]
+packagers = ["ItzYanick"]
+
+# tape is written in Go and statically linked (CGO_ENABLED=0, pure-Go sqlite
+# driver), so it has no runtime dependencies at all -- not even glibc. It does
+# want the filesystem skeleton to exist underneath it.
+[install]
+script = "install.sh"
+
+[dependencies]
+duct-filesystem = ">=0.1.0"
+
+[dependencies.build]

@@ -1,0 +1,26 @@
+[package]
+name = "bzip2"
+description = "Block-sorting file compressor"
+version = "1.0.8"
+subversion = "1"
+authors = ["upstream"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "prepare.sh"
+
+# bzip2 predates autotools and ships a hand-written Makefile, so neither the
+# generic build nor the generic install applies.
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]

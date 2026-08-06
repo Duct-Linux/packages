@@ -1,0 +1,29 @@
+[package]
+name = "gcc"
+description = "The GNU Compiler Collection (C and C++)"
+version = "15.2.0"
+subversion = "1"
+authors = ["upstream"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+# gmp, mpfr and mpc are used at runtime by cc1, so they are real dependencies
+# rather than build-only ones. Taking them from the system instead of building
+# them in-tree is what makes them upgradable independently of the compiler.
+[dependencies]
+glibc = ">=2.42.0"
+binutils = ">=2.45.0"
+gmp = ">=6.3.0"
+mpfr = ">=4.2.2"
+mpc = ">=1.3.1"
+zlib = ">=1.3.1"
+
+[dependencies.build]

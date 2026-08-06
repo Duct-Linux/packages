@@ -1,0 +1,24 @@
+[package]
+name = "uutils-coreutils"
+description = "GNU coreutils reimplemented in Rust"
+version = "0.10.0"
+subversion = "1"
+authors = ["uutils"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "prepare.sh"
+
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]

@@ -1,0 +1,25 @@
+[package]
+name = "perl"
+description = "Practical Extraction and Report Language"
+version = "5.42.0"
+subversion = "1"
+authors = ["upstream"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+# Perl uses its own Configure, not an autotools configure, and it does not
+# accept the same options -- so both stages are hand-written.
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+zlib = ">=1.3.1"
+bzip2 = ">=1.0.8"
+
+[dependencies.build]
