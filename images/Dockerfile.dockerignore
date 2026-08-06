@@ -1,4 +1,0 @@
-# The image assembly needs the public signing key and nothing else -- every
-# package comes off the repository server over HTTPS.
-*
-!server/duct.key.pub

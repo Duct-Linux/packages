@@ -13,29 +13,22 @@ the whole package set -- so each build has its dependencies present and the
 builds are independent of one another. `server/` holds the Caddy config and the
 client files (`duct.toml`, the public signing key).
 
-## How a change reaches an image
+## How a change reaches the repository
 
 ```
 push a recipe  ->  build packages   one job per package, in duct/builder
                         |
                         v
                    publish          sign the index, upload over FTPS
-                        |           https://repo.duct.dss-net.de
-                        v
-                   assemble images  duct/base and duct/builder, installed
-                                    from that published repository by tape
+                                    https://repo.duct.dss-net.de
 ```
 
-The images are assembled *from the repository*, not from a local build tree.
-That is deliberate: the build exercises the same index, the same signature and
-the same public key a user's machine would, so a broken publish fails here
-rather than on someone's first `tape install`. It also means anything that can
-reach the repo server can produce the images.
+Packages are built inside `ghcr.io/duct-linux/builder`, which already contains
+the whole package set, so each build has its dependencies present and the builds
+are independent of one another.
 
-Bootstrapping the toolchain that produces `duct/builder` in the first place is
-a different and much slower thing, and lives in
-[Duct-Linux/images](https://github.com/Duct-Linux/images). It is only needed to
-bring up a new architecture or to rebuild from nothing.
+Producing those images -- both the bootstrap that creates the toolchain and the
+assembly of `duct/base` and `duct/builder` -- is not handled here yet.
 
 Package recipes, and the build that turns them into a signed repository and two
 `FROM scratch` images.
