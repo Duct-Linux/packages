@@ -58,7 +58,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # An architecture only exists once its bootstrap has published one. Skip
+      # rather than fail: until the x86_64 bootstrap has run there is nothing
+      # to assemble from, and that is a known state, not an error.
+      - id: have
+        run: |
+          if docker manifest inspect "$REGISTRY/bootstrap:${{ matrix.arch }}" >/dev/null 2>&1; then
+            echo "yes=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "::notice::no bootstrap image for ${{ matrix.arch }}; skipping"
+            echo "yes=false" >>"$GITHUB_OUTPUT"
+          fi
+
       - uses: docker/login-action@v3
+        if: steps.have.outputs.yes == 'true'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -67,6 +80,7 @@ jobs:
       # Fail early and legibly if the repository is not actually serving. The
       # image build would fail anyway, but twenty lines into a daemon log.
       - name: Check the repository is reachable
+        if: steps.have.outputs.yes == 'true'
         run: |
           set -euo pipefail
           curl -fsS -o /dev/null "$REPO_URL/repo.db"
@@ -74,6 +88,7 @@ jobs:
           echo "repository is serving an index and a signature"
 
       - name: Assemble duct/base
+        if: steps.have.outputs.yes == 'true'
         run: |
           docker build -f images/Dockerfile \
             --build-arg BOOTSTRAP="$REGISTRY/bootstrap:${{ matrix.arch }}" \
@@ -83,6 +98,7 @@ jobs:
             -t "$REGISTRY/base:${{ matrix.arch }}" .
 
       - name: Assemble duct/builder
+        if: steps.have.outputs.yes == 'true'
         run: |
           docker build -f images/Dockerfile \
             --build-arg BOOTSTRAP="$REGISTRY/bootstrap:${{ matrix.arch }}" \
@@ -95,6 +111,7 @@ jobs:
       # Both images have a shell and a compiler, so unlike a minimal rootfs they
       # can simply be asked whether they work.
       - name: Test
+        if: steps.have.outputs.yes == 'true'
         run: |
           set -euo pipefail
           docker run --rm "$REGISTRY/base:${{ matrix.arch }}" /usr/bin/bash -c '
@@ -108,7 +125,9 @@ jobs:
             taped & sleep 2; tape refresh-repos' 2>&1 | tail -2
 
       - name: Push
-        if: github.event_name == 'workflow_run' || inputs.push
+        if: >
+          steps.have.outputs.yes == 'true' &&
+          (github.event_name == 'workflow_run' || inputs.push)
         run: |
           docker push "$REGISTRY/base:${{ matrix.arch }}"
           docker push "$REGISTRY/builder:${{ matrix.arch }}"
@@ -126,10 +145,18 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Built from whichever architecture tags exist, so :latest is correct
+      # with one architecture and becomes multi-arch the moment the second
+      # bootstrap lands -- rather than failing until then.
       - run: |
           set -euo pipefail
           for img in base builder; do
-            docker buildx imagetools create -t "$REGISTRY/$img:latest" \
-              "$REGISTRY/$img:x86_64" "$REGISTRY/$img:aarch64"
+            tags=()
+            for a in x86_64 aarch64; do
+              docker manifest inspect "$REGISTRY/$img:$a" >/dev/null 2>&1 && tags+=("$REGISTRY/$img:$a")
+            done
+            [ ${#tags[@]} -gt 0 ] || { echo "::error::no architecture tags for $img"; exit 1; }
+            echo "$img: ${tags[*]}"
+            docker buildx imagetools create -t "$REGISTRY/$img:latest" "${tags[@]}"
             docker buildx imagetools inspect "$REGISTRY/$img:latest"
           done

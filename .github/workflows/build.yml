@@ -41,6 +41,7 @@ jobs:
     outputs:
       packages: ${{ steps.pick.outputs.packages }}
       any_packages: ${{ steps.pick.outputs.any_packages }}
+      arches: ${{ steps.arches.outputs.arches }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -77,6 +78,26 @@ jobs:
           echo "any_packages=$(jq -cRn '[inputs|select(length>0)]' <<<"$any_pkgs")" >>"$GITHUB_OUTPUT"
           echo "selected: $(tr '\n' ' ' <<<"$sel")"
 
+      # Which architectures can actually be built, discovered rather than
+      # assumed: an architecture exists once its bootstrap has published a
+      # builder image, and a matrix entry for one that has not would fail on a
+      # missing manifest. This picks up a new architecture the moment its
+      # bootstrap lands, with no edit here.
+      - id: arches
+        run: |
+          set -euo pipefail
+          found=()
+          for a in x86_64 aarch64; do
+            if docker manifest inspect "ghcr.io/duct-linux/builder:$a" >/dev/null 2>&1; then
+              found+=("$a")
+            else
+              echo "::notice::no builder image for $a yet; skipping that architecture"
+            fi
+          done
+          [ ${#found[@]} -gt 0 ] || { echo "::error::no builder image for any architecture"; exit 1; }
+          printf 'arches=%s\n' "$(printf '%s\n' "${found[@]}" | jq -cRn '[inputs]')" >>"$GITHUB_OUTPUT"
+          echo "building for: ${found[*]}"
+
   build:
     needs: select
     if: needs.select.outputs.packages != '[]'
@@ -84,10 +105,8 @@ jobs:
       fail-fast: false
       matrix:
         package: ${{ fromJSON(needs.select.outputs.packages) }}
-        include:
-          - { runner: ubuntu-latest,    arch: x86_64 }
-          - { runner: ubuntu-24.04-arm, arch: aarch64 }
-    runs-on: ${{ matrix.runner }}
+        arch: ${{ fromJSON(needs.select.outputs.arches) }}
+    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
