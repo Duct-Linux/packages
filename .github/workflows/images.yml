@@ -1,0 +1,135 @@
+name: assemble images
+
+# Builds duct/base and duct/builder from the *published* repository and pushes
+# them to GHCR.
+#
+# This lives in the packages repo, and runs right after a publish, because the
+# images are a product of the packages: a new package set means new images. It
+# is fast -- assembly is downloading and unpacking, not compiling -- so there is
+# no reason to decouple them.
+#
+# The bootstrap chain that creates the toolchain in the first place is a
+# different thing entirely and lives in Duct-Linux/images. It is only needed to
+# bring up a new architecture or to rebuild from nothing.
+
+on:
+  workflow_run:
+    workflows: ["publish repository"]
+    types: [completed]
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      push:
+        description: 'Push to GHCR'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io/duct-linux
+  REPO_URL: https://repo.duct.dss-net.de
+
+  # What each image is. tape resolves dependencies itself, so these could be
+  # shorter -- but listing them makes the contents of each image a reviewable
+  # decision rather than a consequence of whatever some recipe happens to
+  # depend on.
+  BASE_PACKAGES: >-
+    duct-filesystem linux-headers glibc zlib gmp mpfr mpc
+    binutils gcc ncurses bash uutils-coreutils tape
+  BUILDER_EXTRA: >-
+    m4 bison flex make gawk sed grep findutils diffutils
+    tar gzip xz bzip2 patch file pkgconf perl texinfo
+
+jobs:
+  assemble:
+    if: >
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest,    arch: x86_64  }
+          - { runner: ubuntu-24.04-arm, arch: aarch64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Fail early and legibly if the repository is not actually serving. The
+      # image build would fail anyway, but twenty lines into a daemon log.
+      - name: Check the repository is reachable
+        run: |
+          set -euo pipefail
+          curl -fsS -o /dev/null "$REPO_URL/repo.db"
+          curl -fsS -o /dev/null "$REPO_URL/repo.db.sig"
+          echo "repository is serving an index and a signature"
+
+      - name: Assemble duct/base
+        run: |
+          docker build -f images/Dockerfile \
+            --build-arg BOOTSTRAP="$REGISTRY/bootstrap:${{ matrix.arch }}" \
+            --build-arg REPO_URL="$REPO_URL" \
+            --build-arg PACKAGES="$BASE_PACKAGES" \
+            --build-arg IMAGE_TITLE="Duct base" \
+            -t "$REGISTRY/base:${{ matrix.arch }}" .
+
+      - name: Assemble duct/builder
+        run: |
+          docker build -f images/Dockerfile \
+            --build-arg BOOTSTRAP="$REGISTRY/bootstrap:${{ matrix.arch }}" \
+            --build-arg REPO_URL="$REPO_URL" \
+            --build-arg PACKAGES="$BASE_PACKAGES $BUILDER_EXTRA" \
+            --build-arg IMAGE_TITLE="Duct builder" \
+            --build-arg IMAGE_DESCRIPTION="Duct system with a full build toolchain, for building Duct packages" \
+            -t "$REGISTRY/builder:${{ matrix.arch }}" .
+
+      # Both images have a shell and a compiler, so unlike a minimal rootfs they
+      # can simply be asked whether they work.
+      - name: Test
+        run: |
+          set -euo pipefail
+          docker run --rm "$REGISTRY/base:${{ matrix.arch }}" /usr/bin/bash -c '
+            gcc --version | head -1
+            echo "int main(void){return 0;}" >/tmp/t.c && gcc /tmp/t.c -o /tmp/t && /tmp/t
+            ls --version | head -1'
+          docker run --rm "$REGISTRY/builder:${{ matrix.arch }}" /usr/bin/make --version | head -1
+          # The image can see the repository it came from -- that is what makes
+          # it able to update itself.
+          docker run --rm "$REGISTRY/builder:${{ matrix.arch }}" /usr/bin/bash -c '
+            taped & sleep 2; tape refresh-repos' 2>&1 | tail -2
+
+      - name: Push
+        if: github.event_name == 'workflow_run' || inputs.push
+        run: |
+          docker push "$REGISTRY/base:${{ matrix.arch }}"
+          docker push "$REGISTRY/builder:${{ matrix.arch }}"
+
+  # Stitches the per-architecture tags into one multi-arch :latest. Separate
+  # because each architecture is built natively on its own runner.
+  manifest:
+    needs: assemble
+    if: github.event_name == 'workflow_run' || inputs.push
+    runs-on: ubuntu-latest
+    permissions: { packages: write }
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          set -euo pipefail
+          for img in base builder; do
+            docker buildx imagetools create -t "$REGISTRY/$img:latest" \
+              "$REGISTRY/$img:x86_64" "$REGISTRY/$img:aarch64"
+            docker buildx imagetools inspect "$REGISTRY/$img:latest"
+          done

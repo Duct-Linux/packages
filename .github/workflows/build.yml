@@ -100,14 +100,24 @@ jobs:
       - name: Build
         run: |
           set -euo pipefail
-          mkdir -p out
+          mkdir -p out sources
+
+          # uutils-coreutils is Rust, and duct/builder has no cargo -- it needs
+          # the one image that does. Everything else builds in duct/builder,
+          # where its dependencies are already installed.
+          image=$BUILDER
+          case '${{ matrix.package }}' in
+            uutils-coreutils) image=$RUST_BUILDER ;;
+          esac
+          echo "building in $image"
+
           docker run --rm \
             -v "$PWD/pkgs":/pkgs:ro \
             -v "$PWD/out":/out \
             -v "$PWD/sources":/cache:ro \
             -e DUCT_SRC_CACHE=/cache \
             -e DUCT_JOBS="$(nproc)" \
-            "$BUILDER" \
+            "$image" \
             bash -c 'cp -R /pkgs /tmp/pkgs && exec tape-builder build /tmp/pkgs/${{ matrix.package }} -t ${{ matrix.arch }}-linux-gnu -o /out'
           ls -l out
 
