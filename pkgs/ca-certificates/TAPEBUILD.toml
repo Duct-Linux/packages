@@ -1,0 +1,19 @@
+[package]
+name = "ca-certificates"
+description = "Mozilla's CA root certificate bundle, in PEM form"
+version = "2026.7.16"
+subversion = "1"
+authors = ["Mozilla", "curl"]
+packagers = ["ItzYanick"]
+
+# Nothing is compiled: the source is a single PEM file, so there is no prepare
+# and no build stage.
+[source]
+script = "source.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+
+[dependencies.build]

@@ -68,11 +68,21 @@ jobs:
             fi
           fi
 
-          # duct-filesystem is stamped "any" and is byte-identical on every
-          # architecture. Building it per-arch would produce duplicates that
-          # add-to-repo rejects, so it gets its own single-lane job.
-          arch_pkgs=$(grep -v '^duct-filesystem$' <<<"$sel" | grep -v '^$' || true)
-          any_pkgs=$(grep  '^duct-filesystem$' <<<"$sel" || true)
+          # Packages stamped "any" are byte-identical on every architecture.
+          # Building one per-arch would produce duplicates that add-to-repo
+          # rejects, so they get their own single-lane job.
+          #
+          # Read from each recipe's pkg.env rather than listed here: the name
+          # was hardcoded when duct-filesystem was the only such package, which
+          # silently mis-routes the next one added.
+          arch_pkgs=""; any_pkgs=""
+          for p in $sel; do
+            if grep -qxE 'PKG_ARCH=any' "pkgs/$p/pkg.env" 2>/dev/null; then
+              any_pkgs="${any_pkgs}${p}"$'\n'
+            else
+              arch_pkgs="${arch_pkgs}${p}"$'\n'
+            fi
+          done
 
           echo "packages=$(jq -cRn '[inputs|select(length>0)]' <<<"$arch_pkgs")" >>"$GITHUB_OUTPUT"
           echo "any_packages=$(jq -cRn '[inputs|select(length>0)]' <<<"$any_pkgs")" >>"$GITHUB_OUTPUT"

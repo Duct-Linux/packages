@@ -151,7 +151,34 @@ jobs:
           set -euo pipefail
           curl -fsS -o /dev/null "$REPO_URL/repo.db"
           curl -fsS -o /dev/null "$REPO_URL/repo.db.sig"
+
+          # Seed the trust store from the runner, which has one. A TLS client
+          # with no CA bundle cannot fetch the CA bundle -- and duct/base does
+          # not ship one yet, so tape inside it fails every handshake with
+          # "certificate signed by unknown authority".
+          #
+          # This is the chicken-and-egg every distro has at first contact, and
+          # the answer is always the same: trust arrives out of band, not over
+          # the channel it is needed to establish. Here that is the runner's
+          # own store, used once to unpack the ca-certificates package that
+          # duct/base will ship itself once it is rebuilt against this
+          # repository, at which point these three lines can go.
+          mkdir -p seed
+          # repo/packages/ holds only what this run built, so on a run that did
+          # not rebuild ca-certificates it is not there -- the name comes from
+          # the checked-out recipe and the file from the server.
+          ver=$(sed -n 's/^version *= *"\(.*\)"/\1/p'    pkgs/ca-certificates/TAPEBUILD.toml)
+          sub=$(sed -n 's/^subversion *= *"\(.*\)"/\1/p' pkgs/ca-certificates/TAPEBUILD.toml)
+          ca=ca-certificates-$ver-$sub.any.tape.tar.gz
+          if [ -f "repo/packages/$ca" ]; then
+            tar xzf "repo/packages/$ca" -C seed
+          else
+            curl -fsSL -o "seed/$ca" "$REPO_URL/packages/$ca"
+            tar xzf "seed/$ca" -C seed
+          fi
+
           docker run --rm \
+            -v "$PWD/seed/install/etc/ssl":/etc/ssl:ro \
             -v "$PWD/server/duct.toml":/etc/tape/repos/duct.toml:ro \
             -v "$PWD/server/duct.key.pub":/etc/tape/keys/b52682f595163139.pub:ro \
             ghcr.io/duct-linux/base:aarch64 \
