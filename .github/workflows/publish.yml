@@ -26,13 +26,25 @@ jobs:
     if: >
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
-    runs-on: ubuntu-latest
+    # Pinned to arm64 because that is the only architecture with Duct images
+    # today, and this job needs tape-repo, which ships only inside them. Signing
+    # an index and uploading files is arch-independent; the runner is dictated
+    # by the registry.
+    #
+    # Revert to ubuntu-latest with the :latest tags once the x86_64 bootstrap
+    # has published, at which point :latest is a real multi-arch manifest and
+    # none of this needs saying.
+    #
+    # Third place this same mistake appeared -- a job on ubuntu-latest pulling
+    # an arm64-only image, failing with "no matching manifest for linux/amd64".
+    # Fixed in the build matrix and in build-any without checking for others.
+    runs-on: ubuntu-24.04-arm
     environment: release
     env:
       REPO_NAME: duct
       REPO_URL: https://repo.duct.dss-net.de
       REMOTE_DIR: /srv/duct/repo
-      BUILDER: ghcr.io/duct-linux/builder:latest
+      BUILDER: ghcr.io/duct-linux/builder:aarch64
 
     steps:
       - uses: actions/checkout@v4
@@ -132,5 +144,5 @@ jobs:
           docker run --rm \
             -v "$PWD/server/duct.toml":/etc/tape/repos/duct.toml:ro \
             -v "$PWD/server/duct.key.pub":/etc/tape/keys/b52682f595163139.pub:ro \
-            ghcr.io/duct-linux/base:latest \
+            ghcr.io/duct-linux/base:aarch64 \
             /usr/bin/bash -c 'taped & sleep 2; tape install -y m4 && echo "install from the published repository succeeded"'
