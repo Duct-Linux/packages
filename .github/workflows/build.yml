@@ -196,10 +196,56 @@ jobs:
       - name: Fetch source
         run: DUCT_SRC_CACHE="$PWD/sources" ./tools/fetch-source.sh '${{ matrix.package }}'
 
+      # A bootstrapping architecture builds in duct/chroot, which carries the
+      # LFS chapter 7 temporary tools and nothing else -- not the Duct package
+      # set. duct/builder does carry it, which is why the per-package matrix
+      # normally needs no dependency handling at all: everything a recipe needs
+      # is already installed.
+      #
+      # In chroot it is not, and the failures are exactly what that predicts --
+      # binutils wanting zlib.h, mpfr and mpc wanting gmp.h, gcc wanting all
+      # three. So the already-published packages for this architecture are
+      # unpacked over the image first, which is the same "everything built so
+      # far" step the local Makefile performs for a from-scratch bootstrap.
+      #
+      # This is inherently iterative: a package can only be seeded once it has
+      # been published, so a bootstrap takes as many rounds as its dependency
+      # chain is deep (zlib and gmp, then mpfr and mpc, then gcc).
+      - name: Seed published dependencies
+        if: contains(matrix.image, '/chroot:')
+        env:
+          REPO_URL: https://repo.duct.dss-net.de
+        run: |
+          set -euo pipefail
+          mkdir -p deps
+          if ! curl -fsSL -o repo.db "$REPO_URL/repo.db"; then
+            echo "::notice::no published index yet; building against the bare chroot"
+            exit 0
+          fi
+          files=$(sqlite3 repo.db \
+            "select name||'-'||version||'-'||subversion||'.'||arch||'.tape.tar.gz' \
+             from packages where arch in ('${{ matrix.arch }}','any') and deleted_at is null;")
+          [ -n "$files" ] || { echo "::notice::nothing published for ${{ matrix.arch }} yet"; exit 0; }
+          n=0
+          for f in $files; do
+            # The package being built is deliberately not seeded: it would be
+            # the previous build of the very thing under test.
+            case $f in ${{ matrix.package }}-*) continue ;; esac
+            curl -fsSL -o pkg.tar.gz "$REPO_URL/packages/$f"
+            rm -rf one && mkdir one
+            tar xzf pkg.tar.gz -C one
+            # Merge rather than replace: each package owns a disjoint set of
+            # paths, so the union is the installed system.
+            cp -a one/install/. deps/
+            n=$((n+1))
+          done
+          rm -rf pkg.tar.gz one
+          echo "seeded $n published packages"
+
       - name: Build
         run: |
           set -euo pipefail
-          mkdir -p out sources
+          mkdir -p out sources deps
 
           # "any" is a target tape understands; every other value is a triple.
           target='${{ matrix.arch }}'
@@ -210,10 +256,11 @@ jobs:
             -v "$PWD/pkgs":/pkgs:ro \
             -v "$PWD/out":/out \
             -v "$PWD/sources":/cache:ro \
+            -v "$PWD/deps":/deps:ro \
             -e DUCT_SRC_CACHE=/cache \
             -e DUCT_JOBS="$(nproc)" \
             '${{ matrix.image }}' \
-            bash -c "cp -R /pkgs /tmp/pkgs && exec tape-builder build /tmp/pkgs/${{ matrix.package }} -t $target -o /out"
+            bash -c "[ -d /deps/usr ] && cp -a /deps/. / ; cp -R /pkgs /tmp/pkgs && exec tape-builder build /tmp/pkgs/${{ matrix.package }} -t $target -o /out"
           ls -l out
 
       - uses: actions/upload-artifact@v4
