@@ -10,6 +10,10 @@ on:
     types: [completed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Build run to publish artifacts from (required for a manual run)'
+        required: false
 
 permissions:
   contents: read
@@ -56,7 +60,9 @@ jobs:
           merge-multiple: true
           path: incoming
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          run-id: ${{ github.event.workflow_run.id || github.run_id }}
+          # A manual run has no artifacts of its own -- github.run_id is this
+          # publish run, which contains nothing. The build run has to be named.
+          run-id: ${{ github.event.workflow_run.id || inputs.run_id || github.run_id }}
 
       - name: Fetch the current index
         run: |
