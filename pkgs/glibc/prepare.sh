@@ -3,21 +3,20 @@
 
 . "$(dirname "$0")/../_scripts/common.sh"
 
-[ -n "${PATCH_URL:-}" ] || die "PATCH_URL is not set"
+[ -n "${EXTRA_URL:-}" ] || die "EXTRA_URL is not set"
 
-patchfile=$SRC_CACHE/$(basename "$PATCH_URL")
-mkdir -p "$SRC_CACHE"
-if [ ! -f "$patchfile" ] || ! verify_sha256 "$patchfile" "$PATCH_SHA256" 2>/dev/null; then
-	rm -f "$patchfile"
-	log "fetching $(basename "$PATCH_URL")"
-	if command -v curl >/dev/null 2>&1; then
-		curl -fsSL --retry 3 -o "$patchfile.part" "$PATCH_URL" || die "cannot fetch the FHS patch"
-	else
-		wget -q -O "$patchfile.part" "$PATCH_URL" || die "cannot fetch the FHS patch"
-	fi
-	verify_sha256 "$patchfile.part" "$PATCH_SHA256" || die "patch digest mismatch"
-	mv "$patchfile.part" "$patchfile"
-fi
+# No network here, by design. duct/builder ships without curl and wget so a
+# package build cannot reach out, and the patch arrives the same way the tarball
+# does: fetched and verified on the build machine (tools/fetch-source.sh in CI,
+# tools/pin-versions.sh locally) and mounted read-only at $SRC_CACHE.
+#
+# The previous version fetched it here and fell back to wget. That worked on
+# every local run -- pin-versions.sh had already put the patch in the cache, so
+# the download was skipped -- and failed in CI the moment the cache did not have
+# it, which is the one place the code path actually ran.
+patchfile=$SRC_CACHE/$(basename "$EXTRA_URL")
+[ -f "$patchfile" ] || die "$(basename "$EXTRA_URL") is not in $SRC_CACHE; run tools/fetch-source.sh glibc"
+verify_sha256 "$patchfile" "$EXTRA_SHA256" || die "patch digest mismatch: $patchfile"
 
 log "applying $(basename "$patchfile")"
 patch -d "$SRC_PATH" -Np1 -i "$patchfile"

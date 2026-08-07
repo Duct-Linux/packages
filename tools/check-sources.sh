@@ -20,16 +20,27 @@ for d in "$DISTRO"/pkgs/*/; do
     [ -f "$d/pkg.env" ] || continue
 
     # pkg.env refers to $FOO_URL from versions.env, so it has to be evaluated
-    # rather than grepped.
-    url=$( set +u; . "$d/pkg.env" >/dev/null 2>&1; printf "%s" "${SRC_FILE:-$(basename "${SRC_URL:-}")}" )
-    [ -n "$url" ] && [ "$url" != "." ] || continue
+    # rather than grepped. Both the tarball and any extra pinned input (glibc's
+    # FHS patch) are checked -- the patch is as much a build input as the
+    # tarball, and missing it fails the same way, just later.
+    # The trailing `if` rather than `[ ... ] && printf`: a false test as the
+    # last command in a substitution exits the subshell 1, which under `set -e`
+    # aborts the assignment and the whole script -- silently, on the first
+    # recipe with no extra input.
+    files=$( set +u; . "$d/pkg.env" >/dev/null 2>&1
+             printf "%s\n" "${SRC_FILE:-$(basename "${SRC_URL:-}")}"
+             if [ -n "${EXTRA_URL:-}" ]; then
+                 printf "%s\n" "${EXTRA_FILE:-$(basename "$EXTRA_URL")}"
+             fi )
 
-    checked=$((checked+1))
-    f=$CACHE/$url
-    if [ ! -f "$f" ]; then
-        echo "  MISSING  $name -> $url"
-        missing=$((missing+1))
-    fi
+    while read -r url; do
+        [ -n "$url" ] && [ "$url" != "." ] || continue
+        checked=$((checked+1))
+        if [ ! -f "$CACHE/$url" ]; then
+            echo "  MISSING  $name -> $url"
+            missing=$((missing+1))
+        fi
+    done <<<"$files"
 done
 
 echo "$checked recipes with sources; $missing missing"

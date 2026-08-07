@@ -36,42 +36,58 @@ if [ -z "${SRC_URL:-}" ]; then
 fi
 [ -n "${SRC_SHA256:-}" ] || { echo "$PKG has SRC_URL but no SRC_SHA256" >&2; exit 1; }
 
-# SRC_FILE exists because a URL's last path element is not always a usable file
-# name -- GitHub archive URLs end in the bare tag.
-file=$DEST/${SRC_FILE:-$(basename "$SRC_URL")}
 mkdir -p "$DEST"
 
 sha_of() { sha256sum "$1" 2>/dev/null | cut -d' ' -f1 || shasum -a 256 "$1" | cut -d' ' -f1; }
 
-if [ -f "$file" ] && [ "$(sha_of "$file")" = "$SRC_SHA256" ]; then
-    echo "  cached  $(basename "$file")"
-    exit 0
-fi
-rm -f "$file"
+# fetch <url> <sha256> [filename]
+fetch() {
+    _url=$1 _want=$2
+    # The third argument exists because a URL's last path element is not always
+    # a usable file name -- GitHub archive URLs end in the bare tag.
+    _file=$DEST/${3:-$(basename "$_url")}
 
-# Upstream hosting is not reliable enough to trust one URL: the GNU redirector
-# returns 502 whenever a mirror behind it is unhealthy. Content is verified
-# afterwards, so it does not matter which mirror answers.
-urls=$SRC_URL
-case $SRC_URL in
-    *ftpmirror.gnu.org/*)
-        rest=${SRC_URL#https://ftpmirror.gnu.org/}
-        urls="$urls https://ftp.gnu.org/gnu/$rest https://mirrors.kernel.org/gnu/$rest" ;;
-esac
-
-for u in $urls; do
-    echo "  fetching $u"
-    if curl -fsSL --retry 3 --connect-timeout 20 --max-time 900 -o "$file.part" "$u"; then
-        got=$(sha_of "$file.part")
-        if [ "$got" = "$SRC_SHA256" ]; then
-            mv "$file.part" "$file"
-            echo "  ok      $(basename "$file")"
-            exit 0
-        fi
-        echo "  sha256 mismatch from $u (want $SRC_SHA256, got $got)" >&2
+    if [ -f "$_file" ] && [ "$(sha_of "$_file")" = "$_want" ]; then
+        echo "  cached  $(basename "$_file")"
+        return 0
     fi
-    rm -f "$file.part"
-done
+    rm -f "$_file"
 
-echo "error: could not fetch a verified $PKG source" >&2
-exit 1
+    # Upstream hosting is not reliable enough to trust one URL: the GNU
+    # redirector returns 502 whenever a mirror behind it is unhealthy. Content
+    # is verified afterwards, so it does not matter which mirror answers.
+    _urls=$_url
+    case $_url in
+        *ftpmirror.gnu.org/*)
+            _rest=${_url#https://ftpmirror.gnu.org/}
+            _urls="$_urls https://ftp.gnu.org/gnu/$_rest https://mirrors.kernel.org/gnu/$_rest" ;;
+    esac
+
+    for u in $_urls; do
+        echo "  fetching $u"
+        if curl -fsSL --retry 3 --connect-timeout 20 --max-time 900 -o "$_file.part" "$u"; then
+            _got=$(sha_of "$_file.part")
+            if [ "$_got" = "$_want" ]; then
+                mv "$_file.part" "$_file"
+                echo "  ok      $(basename "$_file")"
+                return 0
+            fi
+            echo "  sha256 mismatch from $u (want $_want, got $_got)" >&2
+        fi
+        rm -f "$_file.part"
+    done
+
+    echo "error: could not fetch a verified $(basename "$_file")" >&2
+    return 1
+}
+
+fetch "$SRC_URL" "$SRC_SHA256" "${SRC_FILE:-}"
+
+# A recipe may declare one additional pinned input -- glibc's FHS patch is the
+# only one today. It is fetched here rather than by the recipe because the
+# build container has no curl and no wget on purpose; prepare.sh only ever
+# reads it out of the cache.
+if [ -n "${EXTRA_URL:-}" ]; then
+    [ -n "${EXTRA_SHA256:-}" ] || { echo "$PKG has EXTRA_URL but no EXTRA_SHA256" >&2; exit 1; }
+    fetch "$EXTRA_URL" "$EXTRA_SHA256" "${EXTRA_FILE:-}"
+fi
