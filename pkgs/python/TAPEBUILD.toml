@@ -1,0 +1,31 @@
+[package]
+name = "python"
+description = "The Python programming language interpreter"
+version = "3.13.7"
+subversion = "1"
+authors = ["upstream"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "install.sh"
+
+# The optional-module dependencies are real: without zlib, bzip2 and xz the
+# interpreter builds but cannot read the archive formats that half of Python's
+# ecosystem assumes, and the failure appears at import time rather than here.
+[dependencies]
+glibc = ">=2.42.0"
+zlib = ">=1.3.1"
+bzip2 = ">=1.0.8"
+xz = ">=5.8.1"
+ncurses = ">=6.5.0"
+
+[dependencies.build]
