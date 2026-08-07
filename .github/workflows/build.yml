@@ -24,6 +24,11 @@ on:
       packages:
         description: 'Space-separated package names, or "all"'
         default: 'all'
+      arch:
+        description: 'Architecture to build, or "all". Use this to avoid rebuilding an architecture whose packages are already published.'
+        default: 'all'
+        type: choice
+        options: ['all', 'x86_64', 'aarch64']
   release:
     types: [published]
 
@@ -90,6 +95,10 @@ jobs:
           # Parallel arrays rather than an associative one: `declare -A` needs
           # bash 4, which the runners have but macOS does not, and this block is
           # worth being able to run locally before pushing it.
+          # Empty on a push, which means every architecture.
+          want='${{ inputs.arch }}'; want=${want:-all}
+          [ "$want" = all ] || echo "restricted to $want"
+
           found=() imgs=()
           image_for() {
             i=0
@@ -99,6 +108,7 @@ jobs:
             done
           }
           for a in x86_64 aarch64; do
+            [ "$want" = all ] || [ "$want" = "$a" ] || continue
             if docker manifest inspect "ghcr.io/duct-linux/builder:$a" >/dev/null 2>&1; then
               found+=("$a"); imgs+=("ghcr.io/duct-linux/builder:$a")
             elif docker manifest inspect "ghcr.io/duct-linux/chroot:$a" >/dev/null 2>&1; then
