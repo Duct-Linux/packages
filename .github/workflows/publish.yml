@@ -98,13 +98,44 @@ jobs:
             exit 0
           fi
           echo "count=${#new[@]}" >>"$GITHUB_OUTPUT"
+
+          # add-to-repo skips a package already indexed under the same
+          # (name, version, subversion, arch) -- it logs an error but exits 0
+          # and leaves the existing row alone. That is fine for an identical
+          # rebuild, and dangerous for a changed one: the upload would replace
+          # the bytes on the server while the index kept the old sha256, and
+          # every client would fail its digest check against a file it is also
+          # told to cache for a year as immutable.
+          #
+          # So the digest is compared here, before anything is uploaded.
+          # Matching means a no-op rebuild; differing means the subversion
+          # needed bumping and did not get bumped.
+          conflict=0
+          for f in "${new[@]}"; do
+            b=$(basename "$f")
+            name=${b%-*-*.*.tape.tar.gz}
+            rest=${b#"$name"-}; ver=${rest%%-*}
+            rest=${rest#"$ver"-}; sub=${rest%%.*}
+            arch=${b%.tape.tar.gz}; arch=${arch##*.}
+            have=$(sqlite3 repo/repo.db \
+              "select sha256 from packages where name='$name' and version='$ver' \
+               and subversion='$sub' and arch='$arch' and deleted_at is null;" 2>/dev/null || true)
+            [ -n "$have" ] || continue
+            got=$(sha256sum "$f" | cut -d' ' -f1)
+            if [ "$have" = "$got" ]; then
+              echo "    unchanged, already published: $b"
+            else
+              echo "::error::$b is already published with different content." \
+                   "Bump subversion in pkgs/$name/TAPEBUILD.toml -- clients cache" \
+                   "this filename as immutable and would fail its digest check."
+              conflict=1
+            fi
+          done
+          [ "$conflict" -eq 0 ] || exit 1
+
           cp "${new[@]}" repo/packages/
           for f in "${new[@]}"; do
             echo "==> $(basename "$f")"
-            # add-to-repo refuses a duplicate (name, version, subversion, arch).
-            # That is the subversion-bump rule enforcing itself: republishing
-            # different bytes under a name clients have cached as immutable
-            # would break them.
             docker run --rm -v "$PWD/repo":/repo -v "$PWD/incoming":/in:ro \
               "$BUILDER" tape-repo add-to-repo /repo "/in/$(basename "$f")"
           done

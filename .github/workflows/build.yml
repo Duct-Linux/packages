@@ -1,10 +1,14 @@
 name: build packages
 
-# Every package is built inside duct/builder, which already contains the whole
+# Packages are built inside duct/builder, which already contains the whole
 # package set -- so unlike a from-scratch bootstrap, each package's dependencies
 # are simply present and the builds are independent. That is what makes a
 # per-package matrix possible here where the local Makefile needs an ordered
 # loop.
+#
+# A newly bootstrapped architecture has no builder image yet (builder is
+# assembled from published packages, and it has none), so its first pass runs
+# in duct/chroot instead. See the select job.
 
 on:
   push:
@@ -64,18 +68,37 @@ jobs:
 
           echo "selected: $(tr '\n' ' ' <<<"$sel")"
 
-          # Which architectures exist, discovered rather than assumed: an
-          # architecture is real once its bootstrap has published a builder
-          # image. This picks up a new one the moment its bootstrap lands.
-          found=()
+          # Which architectures exist, discovered rather than assumed. This
+          # picks up a new one the moment its bootstrap lands.
+          #
+          # duct/builder is preferred, but a freshly bootstrapped architecture
+          # cannot have one: builder is assembled from published packages, and
+          # there are no packages for it yet. duct/chroot breaks that circle --
+          # it is the self-hosted LFS chapter 7 image the bootstrap produces,
+          # it carries tape-builder and a full toolchain, and it is what built
+          # the first architecture's packages before any builder existed.
+          # Parallel arrays rather than an associative one: `declare -A` needs
+          # bash 4, which the runners have but macOS does not, and this block is
+          # worth being able to run locally before pushing it.
+          found=() imgs=()
+          image_for() {
+            i=0
+            for a in "${found[@]}"; do
+              [ "$a" = "$1" ] && { echo "${imgs[$i]}"; return; }
+              i=$((i+1))
+            done
+          }
           for a in x86_64 aarch64; do
             if docker manifest inspect "ghcr.io/duct-linux/builder:$a" >/dev/null 2>&1; then
-              found+=("$a")
+              found+=("$a"); imgs+=("ghcr.io/duct-linux/builder:$a")
+            elif docker manifest inspect "ghcr.io/duct-linux/chroot:$a" >/dev/null 2>&1; then
+              found+=("$a"); imgs+=("ghcr.io/duct-linux/chroot:$a")
+              echo "::notice::$a has no builder image yet; bootstrapping its packages in duct/chroot"
             else
-              echo "::notice::no builder image for $a yet; skipping that architecture"
+              echo "::notice::no builder or chroot image for $a yet; skipping that architecture"
             fi
           done
-          [ ${#found[@]} -gt 0 ] || { echo "::error::no builder image for any architecture"; exit 1; }
+          [ ${#found[@]} -gt 0 ] || { echo "::error::no build image for any architecture"; exit 1; }
           echo "architectures: ${found[*]}"
 
           runner_for() { [ "$1" = x86_64 ] && echo ubuntu-latest || echo ubuntu-24.04-arm; }
@@ -104,7 +127,7 @@ jobs:
               # runner and an image that exist. Prefer x86_64 when available.
               a=${found[0]}
               for c in "${found[@]}"; do [ "$c" = x86_64 ] && a=x86_64; done
-              add "$p" any "$(runner_for "$a")" "ghcr.io/duct-linux/builder:$a"
+              add "$p" any "$(runner_for "$a")" "$(image_for "$a")"
               continue
             fi
 
@@ -114,7 +137,7 @@ jobs:
               # and may not exist for every architecture.
               case $p in
                 uutils-coreutils) image=ghcr.io/duct-linux/rust:$a ;;
-                *)                image=ghcr.io/duct-linux/builder:$a ;;
+                *)                image=$(image_for "$a") ;;
               esac
               if ! docker manifest inspect "$image" >/dev/null 2>&1; then
                 echo "::warning::$image does not exist; not building $p for $a"
