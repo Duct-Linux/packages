@@ -17,4 +17,7 @@ rm -f "$DESTDIR/usr/share/info/dir"
 find "$DESTDIR" -name '*.la' -type f -delete 2>/dev/null || true
 strip_payload
 
-log "installed $(./python3 --version 2>&1 || echo python)"
+# Deliberately not running the staged binary to report its version: it cannot
+# find libpython in a staging root, and the resulting loader error looks like a
+# broken build when nothing is wrong.
+log "installed python $PYTHON_VERSION"
