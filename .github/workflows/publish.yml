@@ -97,20 +97,21 @@ jobs:
             echo "count=0" >>"$GITHUB_OUTPUT"
             exit 0
           fi
-          echo "count=${#new[@]}" >>"$GITHUB_OUTPUT"
 
           # add-to-repo skips a package already indexed under the same
-          # (name, version, subversion, arch) -- it logs an error but exits 0
-          # and leaves the existing row alone. That is fine for an identical
-          # rebuild, and dangerous for a changed one: the upload would replace
-          # the bytes on the server while the index kept the old sha256, and
-          # every client would fail its digest check against a file it is also
-          # told to cache for a year as immutable.
+          # (name, version, subversion, arch): it logs an error, exits 0 and
+          # leaves the existing row alone. So it cannot be relied on to catch a
+          # changed rebuild -- without the check below, the new bytes would be
+          # uploaded while the index kept the old sha256, and every client would
+          # fail its digest check against a file it is also told to cache for a
+          # year as immutable.
           #
-          # So the digest is compared here, before anything is uploaded.
-          # Matching means a no-op rebuild; differing means the subversion
-          # needed bumping and did not get bumped.
-          conflict=0
+          # A published filename means one set of bytes, forever -- that is what
+          # lets the server serve it as immutable for a year. So anything
+          # already in the index is left exactly as published and is not
+          # re-uploaded, which also keeps a rebuild from pushing 187 MB of
+          # identical files back over FTP.
+          fresh=()
           for f in "${new[@]}"; do
             b=$(basename "$f")
             name=${b%-*-*.*.tape.tar.gz}
@@ -120,21 +121,33 @@ jobs:
             have=$(sqlite3 repo/repo.db \
               "select sha256 from packages where name='$name' and version='$ver' \
                and subversion='$sub' and arch='$arch' and deleted_at is null;" 2>/dev/null || true)
-            [ -n "$have" ] || continue
+            if [ -z "$have" ]; then
+              fresh+=("$f")
+              continue
+            fi
             got=$(sha256sum "$f" | cut -d' ' -f1)
             if [ "$have" = "$got" ]; then
-              echo "    unchanged, already published: $b"
+              echo "    unchanged: $b"
             else
-              echo "::error::$b is already published with different content." \
-                   "Bump subversion in pkgs/$name/TAPEBUILD.toml -- clients cache" \
-                   "this filename as immutable and would fail its digest check."
-              conflict=1
+              # Either the recipe changed without a subversion bump, or the
+              # package is not reproducible. Both are worth knowing about and
+              # neither is worth overwriting a published file for: the bytes
+              # clients already cached stay authoritative, and a real change
+              # reaches them by bumping subversion.
+              echo "::warning::$b rebuilt with different content; keeping the published bytes." \
+                   "If the change is intended, bump subversion in pkgs/$name/TAPEBUILD.toml."
             fi
           done
-          [ "$conflict" -eq 0 ] || exit 1
 
-          cp "${new[@]}" repo/packages/
-          for f in "${new[@]}"; do
+          if [ ${#fresh[@]} -eq 0 ]; then
+            echo "::notice::every built package is already published; nothing to do"
+            echo "count=0" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "count=${#fresh[@]}" >>"$GITHUB_OUTPUT"
+
+          cp "${fresh[@]}" repo/packages/
+          for f in "${fresh[@]}"; do
             echo "==> $(basename "$f")"
             docker run --rm -v "$PWD/repo":/repo -v "$PWD/incoming":/in:ro \
               "$BUILDER" tape-repo add-to-repo /repo "/in/$(basename "$f")"

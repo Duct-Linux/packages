@@ -29,6 +29,10 @@ on:
 
 permissions:
   contents: read
+  # duct/chroot is private, unlike the other images. A new architecture's first
+  # build reads it, so both jobs authenticate rather than depending on someone
+  # remembering to flip a visibility switch after each bootstrap.
+  packages: read
 
 jobs:
   # Which packages to build, as a JSON matrix.
@@ -41,6 +45,12 @@ jobs:
     outputs:
       jobs: ${{ steps.pick.outputs.jobs }}
     steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
@@ -162,6 +172,12 @@ jobs:
         include: ${{ fromJSON(needs.select.outputs.jobs) }}
     runs-on: ${{ matrix.runner }}
     steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - uses: actions/checkout@v4
 
       # Fetched here, not in the container: the build images have no curl or
