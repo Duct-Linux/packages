@@ -47,7 +47,11 @@ jobs:
     env:
       REPO_NAME: duct
       REPO_URL: https://repo.duct.dss-net.de
-      REMOTE_DIR: /srv/duct/repo
+      # The FTP account is chrooted, so login already lands in the directory
+      # Caddy serves as /srv/duct/repo. Paths are relative to that -- an
+      # absolute /srv/duct/repo here would resolve to
+      # /srv/duct/repo/srv/duct/repo inside the jail.
+      REMOTE_DIR: .
       BUILDER: ghcr.io/duct-linux/builder:aarch64
 
     steps:
