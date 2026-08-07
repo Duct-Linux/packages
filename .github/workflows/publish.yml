@@ -83,14 +83,21 @@ jobs:
           fi
 
       - name: Index the new packages
+        id: index
         run: |
           set -euo pipefail
           shopt -s nullglob
           new=(incoming/*.tape.tar.gz)
+          # Not an error. A push that touches only a workflow selects no
+          # packages, so there is genuinely nothing to publish -- failing there
+          # would paint the run red for correct behaviour, and a publish that
+          # cries wolf is one nobody reads.
           if [ ${#new[@]} -eq 0 ]; then
-            echo "no packages were built; nothing to publish"
-            exit 1
+            echo "::notice::no packages were built; nothing to publish"
+            echo "count=0" >>"$GITHUB_OUTPUT"
+            exit 0
           fi
+          echo "count=${#new[@]}" >>"$GITHUB_OUTPUT"
           cp "${new[@]}" repo/packages/
           for f in "${new[@]}"; do
             echo "==> $(basename "$f")"
@@ -103,6 +110,7 @@ jobs:
           done
 
       - name: Sign the index
+        if: steps.index.outputs.count != '0'
         run: |
           set -euo pipefail
           umask 077
@@ -114,6 +122,7 @@ jobs:
           test -s repo/repo.db.sig
 
       - name: Upload
+        if: steps.index.outputs.count != '0'
         env:
           FTP_HOST: ${{ secrets.FTP_HOST }}
           FTP_USER: ${{ secrets.FTP_USER }}
@@ -147,6 +156,7 @@ jobs:
       # Proves the published repository actually works, from the outside, using
       # nothing but the public image and the committed client config.
       - name: Verify the published repository
+        if: steps.index.outputs.count != '0'
         run: |
           set -euo pipefail
           curl -fsS -o /dev/null "$REPO_URL/repo.db"

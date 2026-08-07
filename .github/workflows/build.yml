@@ -26,10 +26,6 @@ on:
 permissions:
   contents: read
 
-env:
-  BUILDER: ghcr.io/duct-linux/builder:latest
-  RUST_BUILDER: ghcr.io/duct-linux/rust:latest
-
 jobs:
   # Which packages to build, as a JSON matrix.
   #
@@ -39,9 +35,7 @@ jobs:
   select:
     runs-on: ubuntu-latest
     outputs:
-      packages: ${{ steps.pick.outputs.packages }}
-      any_packages: ${{ steps.pick.outputs.any_packages }}
-      arches: ${{ steps.arches.outputs.arches }}
+      jobs: ${{ steps.pick.outputs.jobs }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,34 +62,11 @@ jobs:
             fi
           fi
 
-          # Packages stamped "any" are byte-identical on every architecture.
-          # Building one per-arch would produce duplicates that add-to-repo
-          # rejects, so they get their own single-lane job.
-          #
-          # Read from each recipe's pkg.env rather than listed here: the name
-          # was hardcoded when duct-filesystem was the only such package, which
-          # silently mis-routes the next one added.
-          arch_pkgs=""; any_pkgs=""
-          for p in $sel; do
-            if grep -qxE 'PKG_ARCH=any' "pkgs/$p/pkg.env" 2>/dev/null; then
-              any_pkgs="${any_pkgs}${p}"$'\n'
-            else
-              arch_pkgs="${arch_pkgs}${p}"$'\n'
-            fi
-          done
-
-          echo "packages=$(jq -cRn '[inputs|select(length>0)]' <<<"$arch_pkgs")" >>"$GITHUB_OUTPUT"
-          echo "any_packages=$(jq -cRn '[inputs|select(length>0)]' <<<"$any_pkgs")" >>"$GITHUB_OUTPUT"
           echo "selected: $(tr '\n' ' ' <<<"$sel")"
 
-      # Which architectures can actually be built, discovered rather than
-      # assumed: an architecture exists once its bootstrap has published a
-      # builder image, and a matrix entry for one that has not would fail on a
-      # missing manifest. This picks up a new architecture the moment its
-      # bootstrap lands, with no edit here.
-      - id: arches
-        run: |
-          set -euo pipefail
+          # Which architectures exist, discovered rather than assumed: an
+          # architecture is real once its bootstrap has published a builder
+          # image. This picks up a new one the moment its bootstrap lands.
           found=()
           for a in x86_64 aarch64; do
             if docker manifest inspect "ghcr.io/duct-linux/builder:$a" >/dev/null 2>&1; then
@@ -105,24 +76,74 @@ jobs:
             fi
           done
           [ ${#found[@]} -gt 0 ] || { echo "::error::no builder image for any architecture"; exit 1; }
-          printf 'arches=%s\n' "$(printf '%s\n' "${found[@]}" | jq -cRn '[inputs]')" >>"$GITHUB_OUTPUT"
-          echo "building for: ${found[*]}"
+          echo "architectures: ${found[*]}"
+
+          runner_for() { [ "$1" = x86_64 ] && echo ubuntu-latest || echo ubuntu-24.04-arm; }
+
+          # Each matrix entry names its own image by architecture tag, never
+          # :latest. A job runs on an arch-specific runner, and :latest is a
+          # manifest that only covers an architecture once that architecture has
+          # been published -- pulling it on the other one fails with "no
+          # matching manifest for linux/amd64". That exact failure has already
+          # appeared three times here, in the build matrix, in build-any and in
+          # publish. Naming the tag makes it unrepresentable.
+          entries='[]'
+          add() {
+            entries=$(jq -c \
+              --arg package "$1" --arg arch "$2" --arg runner "$3" --arg image "$4" \
+              '. + [{package:$package, arch:$arch, runner:$runner, image:$image}]' <<<"$entries")
+          }
+
+          for p in $sel; do
+            # Packages stamped "any" are byte-identical everywhere, so they are
+            # built once; building per-arch would produce duplicates that
+            # add-to-repo rejects. Read from pkg.env rather than a hardcoded
+            # name, which silently mis-routed the next package added.
+            if grep -qxE 'PKG_ARCH=any' "pkgs/$p/pkg.env" 2>/dev/null; then
+              # "any" describes the package, not the machine: it still needs a
+              # runner and an image that exist. Prefer x86_64 when available.
+              a=${found[0]}
+              for c in "${found[@]}"; do [ "$c" = x86_64 ] && a=x86_64; done
+              add "$p" any "$(runner_for "$a")" "ghcr.io/duct-linux/builder:$a"
+              continue
+            fi
+
+            for a in "${found[@]}"; do
+              # uutils-coreutils is Rust, and duct/builder has no cargo -- it
+              # needs the one image that does, which is bootstrapped separately
+              # and may not exist for every architecture.
+              case $p in
+                uutils-coreutils) image=ghcr.io/duct-linux/rust:$a ;;
+                *)                image=ghcr.io/duct-linux/builder:$a ;;
+              esac
+              if ! docker manifest inspect "$image" >/dev/null 2>&1; then
+                echo "::warning::$image does not exist; not building $p for $a"
+                continue
+              fi
+              add "$p" "$a" "$(runner_for "$a")" "$image"
+            done
+          done
+
+          echo "jobs=$entries" >>"$GITHUB_OUTPUT"
+          jq -r '.[] | "  \(.package) [\(.arch)] in \(.image)"' <<<"$entries"
 
   build:
     needs: select
-    if: needs.select.outputs.packages != '[]'
+    if: needs.select.outputs.jobs != '[]'
     strategy:
       fail-fast: false
+      # Fully resolved by the select job: package, architecture, runner and the
+      # exact image tag, each already checked to exist. One job shape covers
+      # both per-architecture and "any" packages.
       matrix:
-        package: ${{ fromJSON(needs.select.outputs.packages) }}
-        arch: ${{ fromJSON(needs.select.outputs.arches) }}
-    runs-on: ${{ matrix.arch == 'aarch64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+        include: ${{ fromJSON(needs.select.outputs.jobs) }}
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v4
 
-      # Fetched here, not in the container: duct/builder has no curl or wget,
-      # on purpose. Verified against the sha256 in versions.env before it is
-      # ever mounted.
+      # Fetched here, not in the container: the build images have no curl or
+      # wget, on purpose. Verified against the pinned sha256 before it is ever
+      # mounted.
       - name: Fetch source
         run: DUCT_SRC_CACHE="$PWD/sources" ./tools/fetch-source.sh '${{ matrix.package }}'
 
@@ -131,14 +152,10 @@ jobs:
           set -euo pipefail
           mkdir -p out sources
 
-          # uutils-coreutils is Rust, and duct/builder has no cargo -- it needs
-          # the one image that does. Everything else builds in duct/builder,
-          # where its dependencies are already installed.
-          image=$BUILDER
-          case '${{ matrix.package }}' in
-            uutils-coreutils) image=$RUST_BUILDER ;;
-          esac
-          echo "building in $image"
+          # "any" is a target tape understands; every other value is a triple.
+          target='${{ matrix.arch }}'
+          [ "$target" = any ] || target="$target-linux-gnu"
+          echo "building ${{ matrix.package }} for $target in ${{ matrix.image }}"
 
           docker run --rm \
             -v "$PWD/pkgs":/pkgs:ro \
@@ -146,47 +163,13 @@ jobs:
             -v "$PWD/sources":/cache:ro \
             -e DUCT_SRC_CACHE=/cache \
             -e DUCT_JOBS="$(nproc)" \
-            "$image" \
-            bash -c 'cp -R /pkgs /tmp/pkgs && exec tape-builder build /tmp/pkgs/${{ matrix.package }} -t ${{ matrix.arch }}-linux-gnu -o /out'
+            '${{ matrix.image }}' \
+            bash -c "cp -R /pkgs /tmp/pkgs && exec tape-builder build /tmp/pkgs/${{ matrix.package }} -t $target -o /out"
           ls -l out
 
       - uses: actions/upload-artifact@v4
         with:
           name: pkg-${{ matrix.package }}-${{ matrix.arch }}
-          path: out/*.tape.tar.gz
-          if-no-files-found: error
-          retention-days: 7
-
-  # Architecture-independent packages, built once.
-  #
-  # The runner still has to match an architecture that has a builder image:
-  # "any" describes the package, not the machine that builds it, and pulling an
-  # arm64-only builder onto an amd64 runner fails on a missing manifest. Prefer
-  # x86_64 when it exists, otherwise use whatever does.
-  build-any:
-    needs: select
-    if: needs.select.outputs.any_packages != '[]'
-    strategy:
-      fail-fast: false
-      matrix:
-        package: ${{ fromJSON(needs.select.outputs.any_packages) }}
-    runs-on: ${{ contains(fromJSON(needs.select.outputs.arches), 'x86_64') && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
-    steps:
-      - uses: actions/checkout@v4
-      - name: Fetch source
-        run: DUCT_SRC_CACHE="$PWD/sources" ./tools/fetch-source.sh '${{ matrix.package }}'
-      - name: Build
-        run: |
-          set -euo pipefail
-          mkdir -p out sources
-          docker run --rm \
-            -v "$PWD/pkgs":/pkgs:ro -v "$PWD/out":/out -v "$PWD/sources":/cache:ro \
-            -e DUCT_SRC_CACHE=/cache -e DUCT_JOBS="$(nproc)" \
-            "$BUILDER" \
-            bash -c 'cp -R /pkgs /tmp/pkgs && exec tape-builder build /tmp/pkgs/${{ matrix.package }} -t any -o /out'
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pkg-${{ matrix.package }}-any
           path: out/*.tape.tar.gz
           if-no-files-found: error
           retention-days: 7
