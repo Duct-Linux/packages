@@ -148,6 +148,11 @@ jobs:
           retention-days: 7
 
   # Architecture-independent packages, built once.
+  #
+  # The runner still has to match an architecture that has a builder image:
+  # "any" describes the package, not the machine that builds it, and pulling an
+  # arm64-only builder onto an amd64 runner fails on a missing manifest. Prefer
+  # x86_64 when it exists, otherwise use whatever does.
   build-any:
     needs: select
     if: needs.select.outputs.any_packages != '[]'
@@ -155,7 +160,7 @@ jobs:
       fail-fast: false
       matrix:
         package: ${{ fromJSON(needs.select.outputs.any_packages) }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ contains(fromJSON(needs.select.outputs.arches), 'x86_64') && 'ubuntu-latest' || 'ubuntu-24.04-arm' }}
     steps:
       - uses: actions/checkout@v4
       - name: Fetch source
