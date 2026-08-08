@@ -24,8 +24,20 @@ linker_var=CARGO_TARGET_$(echo "$host" | tr 'a-z-' 'A-Z_')_LINKER
 export "$linker_var=gcc"
 log "linking with gcc for $host"
 
-# Crates come from crates.io and are not vendored upstream. Cargo.lock pins each
-# one to an exact version and sha256, so what arrives is fixed even though the
-# fetch itself is the one network access in the whole pipeline.
+# Crates come from crates.io and are not vendored upstream: this is the one
+# network access in the whole pipeline, where every other package builds from a
+# tarball whose sha256 is pinned in versions.env and verified before it is
+# unpacked.
+#
+# --locked is what makes the difference between "pinned" and "pinned in
+# principle". Cargo.lock names an exact version and sha256 for all 512 crates
+# and cargo verifies each one, but without --locked cargo is free to *rewrite*
+# the lock file whenever it considers it out of date, silently resolving to
+# different versions than the ones shipped in the tarball. With it, that is an
+# error instead.
+#
+# What this still does not give is an offline build. Closing that means
+# vendoring the crates into a tarball pinned like every other source, which is
+# tracked separately -- the network dependency is narrowed here, not removed.
 log "building with cargo"
-make PROFILE=release MULTICALL=y -j"$JOBS" || die "build failed"
+make PROFILE=release MULTICALL=y CARGOFLAGS=--locked -j"$JOBS" || die "build failed"

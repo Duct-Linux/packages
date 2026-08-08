@@ -5,7 +5,7 @@
 
 cd "$SRC_PATH"
 
-make PROFILE=release MULTICALL=y PREFIX=/usr DESTDIR="$DESTDIR" install \
+make PROFILE=release MULTICALL=y CARGOFLAGS=--locked PREFIX=/usr DESTDIR="$DESTDIR" install \
 	|| die "make install failed"
 
 multicall=$DESTDIR/usr/bin/coreutils
