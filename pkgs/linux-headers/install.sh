@@ -20,8 +20,12 @@ make headers >/dev/null
 # The headers target leaves behind a few non-header artefacts that must not ship.
 find usr/include -type f ! -name '*.h' -delete
 
+# The destination mode is set here rather than inherited: cp -r takes the mode
+# from the source directory, which the kernel's own build created under
+# whatever umask was in effect.
 install -d "$DESTDIR/usr"
-cp -r usr/include "$DESTDIR/usr/"
+install -d -m 0755 "$DESTDIR/usr/include"
+cp -r usr/include/. "$DESTDIR/usr/include/"
 
 [ -f "$DESTDIR/usr/include/linux/version.h" ] || die "headers were not produced"
 log "installed $(find "$DESTDIR/usr/include" -name '*.h' | wc -l) headers"

@@ -18,6 +18,13 @@
 
 set -eu
 
+# A fixed umask, so directory modes in a package do not depend on the
+# environment that happened to build it. linux-headers reproduced everywhere
+# except in one directory mode -- usr/include arrived 0775 in one environment
+# and 0755 in another, purely because the umask differed, which is enough to
+# change the archive bytes and nothing else.
+umask 022
+
 log() { printf '  [%s] %s\n' "${TAPE_PACKAGE_NAME:-?}" "$*" >&2; }
 die() { printf 'error: [%s] %s\n' "${TAPE_PACKAGE_NAME:-?}" "$*" >&2; exit 1; }
 
