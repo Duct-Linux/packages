@@ -1,0 +1,22 @@
+[package]
+name = "cmake"
+description = "Cross-platform build system generator"
+version = "4.4.2"
+subversion = "1"
+authors = ["Kitware"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+gcc = ">=15.2.0"
+
+[dependencies.build]

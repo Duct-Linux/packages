@@ -1,0 +1,22 @@
+[package]
+name = "ninja"
+description = "Small build system with a focus on speed"
+version = "1.13.2"
+subversion = "1"
+authors = ["Google"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+gcc = ">=15.2.0"
+
+[dependencies.build]
