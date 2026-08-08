@@ -160,9 +160,12 @@ jobs:
               # pinned Go. Both images are produced separately and may not
               # exist for every architecture yet.
               case $p in
-                uutils-coreutils) image=ghcr.io/duct-linux/rust:$a ;;
-                go)               image=ghcr.io/duct-linux/go:$a ;;
-                *)                image=$(image_for "$a") ;;
+                # uutils is Rust, and rustc builds with rustc: both need the
+                # image carrying a Rust toolchain, not duct/builder.
+                uutils-coreutils|rust) image=ghcr.io/duct-linux/rust:$a ;;
+                # Likewise Go, which bootstraps from Go.
+                go)                    image=ghcr.io/duct-linux/go:$a ;;
+                *)                     image=$(image_for "$a") ;;
               esac
               if ! docker manifest inspect "$image" >/dev/null 2>&1; then
                 echo "::warning::$image does not exist; not building $p for $a"
