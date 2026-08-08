@@ -101,7 +101,7 @@ jobs:
           # already in the index is left exactly as published and is not
           # re-uploaded, which also keeps a rebuild from pushing 187 MB of
           # identical files back over FTP.
-          fresh=()
+          fresh=() repair=()
           for f in "${new[@]}"; do
             b=$(basename "$f")
             name=${b%-*-*.*.tape.tar.gz}
@@ -117,7 +117,22 @@ jobs:
             fi
             got=$(sha256sum "$f" | cut -d' ' -f1)
             if [ "$have" = "$got" ]; then
-              echo "    unchanged: $b"
+              # Already indexed and identical -- but "indexed" is not "correctly
+              # on the server". A truncated upload leaves a file the index
+              # describes and nobody can install, and skipping it here means
+              # nothing ever repairs it. Caught exactly that: findutils arrived
+              # as 65536 bytes against an index that said 365768.
+              want=$(sqlite3 repo/repo.db \
+                "select size from packages where name='$name' and version='$ver' \
+                 and subversion='$sub' and arch='$arch' and deleted_at is null;" 2>/dev/null || true)
+              served=$(curl -fsSI "$REPO_URL/packages/$b" 2>/dev/null \
+                       | awk -F': ' 'tolower($1)=="content-length"{print $2}' | tr -d '\r')
+              if [ -n "$want" ] && [ "$served" != "$want" ]; then
+                echo "::warning::$b on the server is $served bytes, index says $want; re-uploading"
+                repair+=("$f")
+              else
+                echo "    unchanged: $b"
+              fi
             else
               # Either the recipe changed without a subversion bump, or the
               # package is not reproducible. Both are worth knowing about and
@@ -129,11 +144,24 @@ jobs:
             fi
           done
 
+          # Repairs are uploaded even when there is nothing new to index.
+          if [ ${#repair[@]} -gt 0 ]; then
+            cp "${repair[@]}" repo/packages/
+            echo "repaired=${#repair[@]}" >>"$GITHUB_OUTPUT"
+          fi
+
           if [ ${#fresh[@]} -eq 0 ]; then
+            if [ ${#repair[@]} -gt 0 ]; then
+              echo "::notice::nothing new to index, but ${#repair[@]} damaged upload(s) to repair"
+              echo "count=${#repair[@]}" >>"$GITHUB_OUTPUT"
+              echo "index_changed=0" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
             echo "::notice::every built package is already published; nothing to do"
             echo "count=0" >>"$GITHUB_OUTPUT"
             exit 0
           fi
+          echo "index_changed=1" >>"$GITHUB_OUTPUT"
           echo "count=${#fresh[@]}" >>"$GITHUB_OUTPUT"
 
           cp "${fresh[@]}" repo/packages/
@@ -182,6 +210,30 @@ jobs:
             mv $REMOTE_DIR/repo.db.new     $REMOTE_DIR/repo.db;
             mv $REMOTE_DIR/repo.db.sig.new $REMOTE_DIR/repo.db.sig;
           "
+
+      # The index is a promise about what the server holds. Nothing checked that
+      # the promise was kept, so a truncated upload sat there advertised at its
+      # full size until an install failed on it. Every entry is checked here,
+      # not just the ones this run touched.
+      - name: Verify the server matches the index
+        if: steps.index.outputs.count != '0'
+        run: |
+          set -euo pipefail
+          bad=0 n=0
+          while IFS='|' read -r f want; do
+            [ -n "$f" ] || continue
+            n=$((n+1))
+            got=$(curl -fsSI "$REPO_URL/packages/$f" 2>/dev/null \
+                  | awk -F': ' 'tolower($1)=="content-length"{print $2}' | tr -d '\r')
+            if [ "$got" != "$want" ]; then
+              echo "::error::$f is $got bytes on the server, index says $want"
+              bad=$((bad+1))
+            fi
+          done < <(sqlite3 repo/repo.db \
+            "select name||'-'||version||'-'||subversion||'.'||arch||'.tape.tar.gz'||'|'||size \
+             from packages where deleted_at is null;")
+          echo "checked $n packages against the index; $bad wrong"
+          [ "$bad" -eq 0 ]
 
       - name: Always remove the key
         if: always()
