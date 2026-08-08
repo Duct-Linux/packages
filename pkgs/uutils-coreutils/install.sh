@@ -5,34 +5,40 @@
 
 cd "$SRC_PATH"
 
-make PROFILE=release MULTICALL=y CARGOFLAGS=--locked PREFIX=/usr DESTDIR="$DESTDIR" install \
+# LN='ln -sf' is the whole fix for what used to be a 643 MB package.
+#
+# MULTICALL=y installs one 14 MB binary and 107 links to it. Upstream's default
+# is LN ?= ln -f, so those are *hard* links -- correct and compact on disk, one
+# inode for the lot. tape's archiver has no hard-link support: it walks the tree
+# and writes each path as a regular file, so all 108 were stored in full.
+#
+# The earlier workaround deleted the duplicates afterwards and replaced them
+# with symlinks, comparing digests to be sure. That worked, but it was repairing
+# something that never needed to happen: LN is ?=, so asking for symlinks in the
+# first place costs nothing and leaves nothing to undo.
+#
+# Worth knowing: any other package that installs hard links will still be
+# stored expanded. That is a limitation in tape's archiver, not in the package.
+make PROFILE=release MULTICALL=y CARGOFLAGS=--locked LN='ln -sf' \
+	PREFIX=/usr DESTDIR="$DESTDIR" install \
 	|| die "make install failed"
 
 multicall=$DESTDIR/usr/bin/coreutils
 [ -x "$multicall" ] || die "the multicall binary was not installed"
 
-# Strip before deduplicating, so the digests compared below are of the final
-# bytes rather than of debug symbols that are about to be removed.
 strip_payload
 
-# MULTICALL=y is supposed to give one binary and a symlink per applet. It does
-# not -- upstream's install copies the whole 14 MB binary once per applet, which
-# packages at 643 MB for what is really 6 MB of program. Anything byte-identical
-# to the multicall binary therefore becomes a symlink to it.
-#
-# Compared by digest rather than assumed by name: an applet that is genuinely a
-# separate program must not be replaced by a link to something else.
-want=$(sha256sum "$multicall" | cut -d' ' -f1)
-linked=0
+# Verify the links really are links. If upstream ever changes how MULTICALL
+# installs, the package silently grows by two orders of magnitude, and the only
+# symptom is a slow download.
+regular=0
 for f in "$DESTDIR"/usr/bin/*; do
 	[ -f "$f" ] || continue
-	[ "$f" = "$multicall" ] && continue
 	[ -L "$f" ] && continue
-	[ "$(sha256sum "$f" | cut -d' ' -f1)" = "$want" ] || continue
-	rm -f "$f"
-	ln -s coreutils "$f"
-	linked=$((linked + 1))
+	[ "$f" = "$multicall" ] && continue
+	regular=$((regular + 1))
 done
+[ "$regular" -eq 0 ] || die "$regular applets installed as regular files, not links to coreutils"
 
 # The applets a system cannot function without. The old distro scripts
 # symlinked five by hand and left a "ToDo: fix this"; this checks rather than
@@ -41,4 +47,4 @@ for applet in ls cat cp mv rm mkdir chmod chown ln; do
 	[ -e "$DESTDIR/usr/bin/$applet" ] || die "applet $applet is missing"
 done
 
-log "installed the multicall binary and $linked applet symlinks"
+log "installed the multicall binary and $(find "$DESTDIR/usr/bin" -maxdepth 1 -type l | wc -l) applet symlinks"
