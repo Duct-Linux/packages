@@ -2,7 +2,7 @@
 name = "pkgconf"
 description = "Compiler and linker flag database"
 version = "2.5.1"
-subversion = "2"
+subversion = "3"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 
@@ -16,7 +16,7 @@ script = "../_scripts/prepare.sh"
 script = "../_scripts/build.sh"
 
 [install]
-script = "../_scripts/install.sh"
+script = "install.sh"
 
 [dependencies]
 glibc = ">=2.42.0"
