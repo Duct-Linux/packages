@@ -2,7 +2,7 @@
 name = "pkgconf"
 description = "Compiler and linker flag database"
 version = "2.5.1"
-subversion = "1"
+subversion = "2"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 

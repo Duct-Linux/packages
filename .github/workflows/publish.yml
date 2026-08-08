@@ -30,19 +30,7 @@ jobs:
     if: >
       github.event_name == 'workflow_dispatch' ||
       github.event.workflow_run.conclusion == 'success'
-    # Pinned to arm64 because that is the only architecture with Duct images
-    # today, and this job needs tape-repo, which ships only inside them. Signing
-    # an index and uploading files is arch-independent; the runner is dictated
-    # by the registry.
-    #
-    # Revert to ubuntu-latest with the :latest tags once the x86_64 bootstrap
-    # has published, at which point :latest is a real multi-arch manifest and
-    # none of this needs saying.
-    #
-    # Third place this same mistake appeared -- a job on ubuntu-latest pulling
-    # an arm64-only image, failing with "no matching manifest for linux/amd64".
-    # Fixed in the build matrix and in build-any without checking for others.
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-latest
     environment: release
     env:
       REPO_NAME: duct
@@ -52,7 +40,9 @@ jobs:
       # absolute /srv/duct/repo here would resolve to
       # /srv/duct/repo/srv/duct/repo inside the jail.
       REMOTE_DIR: .
-      BUILDER: ghcr.io/duct-linux/builder:aarch64
+      # A real multi-arch manifest now, so the runner architecture no longer
+      # dictates the tag.
+      BUILDER: ghcr.io/duct-linux/builder:latest
 
     steps:
       - uses: actions/checkout@v4
@@ -206,34 +196,10 @@ jobs:
           curl -fsS -o /dev/null "$REPO_URL/repo.db"
           curl -fsS -o /dev/null "$REPO_URL/repo.db.sig"
 
-          # Seed the trust store from the runner, which has one. A TLS client
-          # with no CA bundle cannot fetch the CA bundle -- and duct/base does
-          # not ship one yet, so tape inside it fails every handshake with
-          # "certificate signed by unknown authority".
-          #
-          # This is the chicken-and-egg every distro has at first contact, and
-          # the answer is always the same: trust arrives out of band, not over
-          # the channel it is needed to establish. Here that is the runner's
-          # own store, used once to unpack the ca-certificates package that
-          # duct/base will ship itself once it is rebuilt against this
-          # repository, at which point these three lines can go.
-          mkdir -p seed
-          # repo/packages/ holds only what this run built, so on a run that did
-          # not rebuild ca-certificates it is not there -- the name comes from
-          # the checked-out recipe and the file from the server.
-          ver=$(sed -n 's/^version *= *"\(.*\)"/\1/p'    pkgs/ca-certificates/TAPEBUILD.toml)
-          sub=$(sed -n 's/^subversion *= *"\(.*\)"/\1/p' pkgs/ca-certificates/TAPEBUILD.toml)
-          ca=ca-certificates-$ver-$sub.any.tape.tar.gz
-          if [ -f "repo/packages/$ca" ]; then
-            tar xzf "repo/packages/$ca" -C seed
-          else
-            curl -fsSL -o "seed/$ca" "$REPO_URL/packages/$ca"
-            tar xzf "seed/$ca" -C seed
-          fi
-
+          # No trust store seeding any more: duct/base ships ca-certificates, so
+          # this exercises the same path a user's machine would.
           docker run --rm \
-            -v "$PWD/seed/install/etc/ssl":/etc/ssl:ro \
             -v "$PWD/server/duct.toml":/etc/tape/repos/duct.toml:ro \
             -v "$PWD/server/duct.key.pub":/etc/tape/keys/b52682f595163139.pub:ro \
-            ghcr.io/duct-linux/base:aarch64 \
+            ghcr.io/duct-linux/base:latest \
             /usr/bin/bash -c 'taped & sleep 2; tape install -y m4 && echo "install from the published repository succeeded"'

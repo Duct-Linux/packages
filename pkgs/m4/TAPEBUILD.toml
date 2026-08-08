@@ -2,7 +2,7 @@
 name = "m4"
 description = "GNU macro processor"
 version = "1.4.20"
-subversion = "1"
+subversion = "2"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 

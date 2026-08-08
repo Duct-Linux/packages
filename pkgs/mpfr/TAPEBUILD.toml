@@ -2,7 +2,7 @@
 name = "mpfr"
 description = "Multiple-precision floating-point library"
 version = "4.2.2"
-subversion = "1"
+subversion = "2"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 

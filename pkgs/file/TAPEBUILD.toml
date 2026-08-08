@@ -2,7 +2,7 @@
 name = "file"
 description = "File type identification utility"
 version = "5.46.0"
-subversion = "1"
+subversion = "2"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 

@@ -2,7 +2,7 @@
 name = "gmp"
 description = "GNU multiple precision arithmetic library"
 version = "6.3.0"
-subversion = "1"
+subversion = "2"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 

@@ -2,7 +2,7 @@
 name = "sed"
 description = "GNU stream editor"
 version = "4.9.0"
-subversion = "1"
+subversion = "2"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 

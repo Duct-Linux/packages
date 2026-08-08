@@ -2,7 +2,7 @@
 name = "ncurses"
 description = "Terminal handling library"
 version = "6.5.0"
-subversion = "1"
+subversion = "2"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 

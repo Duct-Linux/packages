@@ -2,7 +2,7 @@
 name = "flex"
 description = "Fast lexical analyser generator"
 version = "2.6.4"
-subversion = "1"
+subversion = "2"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 

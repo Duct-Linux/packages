@@ -2,7 +2,7 @@
 name = "bzip2"
 description = "Block-sorting file compressor"
 version = "1.0.8"
-subversion = "1"
+subversion = "2"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 

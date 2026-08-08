@@ -2,7 +2,7 @@
 name = "make"
 description = "GNU make"
 version = "4.4.1"
-subversion = "1"
+subversion = "2"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 
