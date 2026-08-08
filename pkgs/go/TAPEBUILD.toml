@@ -1,0 +1,21 @@
+[package]
+name = "go"
+description = "The Go programming language toolchain"
+version = "1.26.5"
+subversion = "1"
+authors = ["The Go Authors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]

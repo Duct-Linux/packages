@@ -155,8 +155,13 @@ jobs:
               # uutils-coreutils is Rust, and duct/builder has no cargo -- it
               # needs the one image that does, which is bootstrapped separately
               # and may not exist for every architecture.
+              # Two packages need a language Duct does not build itself, each
+              # in its own image: uutils is Rust, and go bootstraps from a
+              # pinned Go. Both images are produced separately and may not
+              # exist for every architecture yet.
               case $p in
                 uutils-coreutils) image=ghcr.io/duct-linux/rust:$a ;;
+                go)               image=ghcr.io/duct-linux/go:$a ;;
                 *)                image=$(image_for "$a") ;;
               esac
               if ! docker manifest inspect "$image" >/dev/null 2>&1; then
