@@ -165,6 +165,10 @@ jobs:
                 uutils-coreutils|rust) image=ghcr.io/duct-linux/rust:$a ;;
                 # Likewise Go, which bootstraps from Go.
                 go)                    image=ghcr.io/duct-linux/go:$a ;;
+                # tape is compiled in duct/bootstrap. Built anywhere else the
+                # recipe would copy that image's own /usr/bin/tape, republishing
+                # the previous package as though it were a new build.
+                tape)                  image=ghcr.io/duct-linux/bootstrap:$a ;;
                 *)                     image=$(image_for "$a") ;;
               esac
               if ! docker manifest inspect "$image" >/dev/null 2>&1; then

@@ -8,6 +8,23 @@
 
 [ -d "$TAPE_BIN_DIR" ] || die "TAPE_BIN_DIR=$TAPE_BIN_DIR does not exist"
 
+# duct/bootstrap compiles tape and sets this; every assembled Duct image has a
+# /usr/bin/tape as well, from the last published package. Without the check,
+# building this recipe anywhere else quietly repackages that older binary and
+# publishes it under a new subversion -- which is precisely what happened to
+# tape-0.1.0-3, built in duct/builder and identical to the version it claimed
+# to supersede.
+# Two signals, because they became available at different times.
+#
+# duct/bootstrap sets DUCT_TAPE_FROM_SOURCE after it compiles tape. Older
+# bootstrap images do not, so the fallback asks the question the other way
+# round: an assembled Duct system has an installed database, and a
+# /usr/bin/tape recorded in it came from a package rather than a compiler.
+if [ "${DUCT_TAPE_FROM_SOURCE:-}" != "1" ] && [ -f /var/lib/tape/installed.db ]; then
+	die "refusing to repackage the tape installed in $TAPE_BIN_DIR: \
+this recipe must build in duct/bootstrap, where tape is compiled from source"
+fi
+
 install -d -m 0755 "$DESTDIR/usr/bin"
 for b in tape taped tape-builder tape-repo; do
 	src=$TAPE_BIN_DIR/$b
