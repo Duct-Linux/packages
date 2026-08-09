@@ -24,23 +24,9 @@ cd "$BUILD_DIR"
 # So the job counts come from available memory, not from the core count, and the
 # smaller of the two limits wins. Link jobs are separately and much more tightly
 # capped: linking is where the peak is.
-mem_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
-if [ "$mem_kb" -gt 0 ]; then
-	mem_gb=$((mem_kb / 1024 / 1024))
-	compile_jobs=$((mem_gb / 2))
-	link_jobs=$((mem_gb / 8))
-	[ "$compile_jobs" -lt 1 ] && compile_jobs=1
-	[ "$link_jobs" -lt 1 ] && link_jobs=1
-	[ "$compile_jobs" -gt "$JOBS" ] && compile_jobs=$JOBS
-	[ "$link_jobs" -gt "$JOBS" ] && link_jobs=$JOBS
-	log "${mem_gb} GB visible: $compile_jobs compile jobs, $link_jobs link jobs"
-else
-	# No /proc/meminfo to read. Being wrong in the cautious direction costs
-	# time; being wrong in the other direction costs the whole build.
-	compile_jobs=1
-	link_jobs=1
-	log "cannot read /proc/meminfo; building single-threaded"
-fi
+compile_jobs=$(memory_jobs 2)
+link_jobs=$(memory_jobs 8)
+log "building with $compile_jobs compile jobs and $link_jobs link jobs"
 
 # TARGETS_TO_BUILD is the single biggest lever on how long this takes and how
 # large it is. "host" is what llvmpipe needs -- it emits code for the machine it

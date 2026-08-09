@@ -152,6 +152,40 @@ finish_install() {
 	fi
 }
 
+# memory_jobs -- how many compilations this machine can run at once without
+# being killed, which for a few packages is a much smaller number than $JOBS.
+#
+# Most builds are bounded by cores. A handful are bounded by memory: LLVM's
+# larger translation units peak around 2 GB in cc1plus, and its link needs
+# several more. On a machine with a conventional amount of RAM per core,
+# -j$(nproc) on those does not build slowly, it gets OOM-killed -- and what it
+# leaves behind names neither memory nor the job count:
+#
+#   c++: fatal error: Killed signal terminated program cc1plus
+#
+# Both of the builds that compile LLVM have hit this: the llvm package, and
+# rust, whose x.py builds its own vendored copy. They are in different images
+# and were found days apart, which is the argument for one implementation here
+# rather than the arithmetic copied into each.
+#
+#   memory_jobs [<gb_per_job>]   -- default 2 GB per job
+#
+# Being wrong in the cautious direction costs time; being wrong the other way
+# costs the whole build.
+memory_jobs() {
+	_per=${1:-2}
+	_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+	if [ "${_kb:-0}" -le 0 ]; then
+		echo 1
+		return 0
+	fi
+	_gb=$((_kb / 1024 / 1024))
+	_n=$((_gb / _per))
+	[ "$_n" -lt 1 ] && _n=1
+	[ "$_n" -gt "$JOBS" ] && _n=$JOBS
+	echo "$_n"
+}
+
 # verify_sha256 <file> <expected>
 verify_sha256() {
 	_file=$1
