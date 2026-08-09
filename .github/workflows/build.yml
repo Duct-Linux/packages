@@ -66,6 +66,14 @@ jobs:
       level9: ${{ steps.pick.outputs.level9 }}
       level10: ${{ steps.pick.outputs.level10 }}
       level11: ${{ steps.pick.outputs.level11 }}
+      level12: ${{ steps.pick.outputs.level12 }}
+      level13: ${{ steps.pick.outputs.level13 }}
+      level14: ${{ steps.pick.outputs.level14 }}
+      level15: ${{ steps.pick.outputs.level15 }}
+      level16: ${{ steps.pick.outputs.level16 }}
+      level17: ${{ steps.pick.outputs.level17 }}
+      level18: ${{ steps.pick.outputs.level18 }}
+      level19: ${{ steps.pick.outputs.level19 }}
     steps:
       - uses: docker/login-action@v3
         with:
@@ -242,15 +250,25 @@ jobs:
           deepest=$(awk '{ if ($2 > m) m = $2 } END { print m + 0 }' <<<"$levels")
 
           # A fixed number of level jobs, because a workflow cannot generate
-          # jobs dynamically. MAX_LEVEL is 11 rather than the 7 the current
-          # recipe set actually reaches -- rust sits at 7, through
-          # cmake/ninja -> gcc -> binutils -> zlib -> glibc -- so a set that
-          # merely matched today's depth would break on the next package that
-          # deepened the graph by one.
+          # jobs dynamically. Twenty, and the history of this number is the
+          # argument for the headroom:
+          #
+          #   8  suggested, before anyone measured
+          #   12 chosen after measuring main at 7 (rust, through cmake/ninja
+          #      -> gcc -> binutils -> zlib -> glibc)
+          #   20 after the desktop set measured at 14, through
+          #      glibc -> gmp -> mpfr -> mpc -> gcc -> ninja -> meson
+          #      -> xorgproto -> libXau -> libxcb -> libX11 -> libXext
+          #      -> libXi -> libXtst
+          #
+          # Twice now the measured depth has exceeded the estimate, so this is
+          # sized well past the known graph rather than against it. Empty
+          # levels skip themselves through the `if` below, so unused headroom
+          # costs a skipped job and nothing else.
           #
           # Exceeding it is a loud failure telling you to add a level, never a
           # silently wrong build order.
-          max_level=11
+          max_level=19
           if [ "$deepest" -gt "$max_level" ]; then
             echo "::error::dependency graph is $deepest deep; build.yml only has $((max_level + 1)) levels. Add level jobs."
             exit 1
@@ -377,4 +395,60 @@ jobs:
     if: always() && needs.select.outputs.level11 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     uses: ./.github/workflows/build-level.yml
     with: { jobs: "${{ needs.select.outputs.level11 }}", level: '11' }
+    secrets: inherit
+
+  level12:
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7, level8, level9, level10, level11]
+    if: always() && needs.select.outputs.level12 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level12 }}", level: '12' }
+    secrets: inherit
+
+  level13:
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7, level8, level9, level10, level11, level12]
+    if: always() && needs.select.outputs.level13 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level13 }}", level: '13' }
+    secrets: inherit
+
+  level14:
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7, level8, level9, level10, level11, level12, level13]
+    if: always() && needs.select.outputs.level14 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level14 }}", level: '14' }
+    secrets: inherit
+
+  level15:
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7, level8, level9, level10, level11, level12, level13, level14]
+    if: always() && needs.select.outputs.level15 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level15 }}", level: '15' }
+    secrets: inherit
+
+  level16:
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7, level8, level9, level10, level11, level12, level13, level14, level15]
+    if: always() && needs.select.outputs.level16 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level16 }}", level: '16' }
+    secrets: inherit
+
+  level17:
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7, level8, level9, level10, level11, level12, level13, level14, level15, level16]
+    if: always() && needs.select.outputs.level17 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level17 }}", level: '17' }
+    secrets: inherit
+
+  level18:
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7, level8, level9, level10, level11, level12, level13, level14, level15, level16, level17]
+    if: always() && needs.select.outputs.level18 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level18 }}", level: '18' }
+    secrets: inherit
+
+  level19:
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7, level8, level9, level10, level11, level12, level13, level14, level15, level16, level17, level18]
+    if: always() && needs.select.outputs.level19 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level19 }}", level: '19' }
     secrets: inherit
