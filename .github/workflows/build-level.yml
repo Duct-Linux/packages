@@ -1,0 +1,167 @@
+name: build one level
+
+# One wave of the package build. Called by build.yml once per dependency level.
+#
+# This is a reusable workflow rather than twelve copies of the same job,
+# because that is exactly what it would otherwise be: the steps do not vary
+# between levels, only the matrix does.
+#
+# The ordering property that makes levels work lives in the caller -- each
+# level job `needs:` the one below it -- and the *sharing* property lives here,
+# in the artifact download: by the time a level runs, every lower level has
+# finished and uploaded its packages, so downloading every `pkg-*` artifact in
+# the run yields precisely "everything built so far". No per-package `needs:`
+# wiring, and nothing to keep in step with the recipes.
+
+on:
+  workflow_call:
+    inputs:
+      jobs:
+        description: 'JSON matrix for this level, from the select job'
+        required: true
+        type: string
+      level:
+        description: 'Level number, for log lines'
+        required: true
+        type: string
+      timeout-minutes:
+        description: >-
+          Per-job timeout. GitHub kills a job at 6 hours with no useful signal;
+          a deliberate limit below that fails loudly and early instead.
+        required: false
+        default: 300
+        type: number
+
+permissions:
+  contents: read
+  # duct/chroot is private, unlike the other images.
+  packages: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(inputs.jobs) }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/checkout@v4
+
+      # Fetched here, not in the container: the build images have no curl or
+      # wget, on purpose. Verified against the pinned sha256 before it is ever
+      # mounted.
+      - name: Fetch source
+        run: DUCT_SRC_CACHE="$PWD/sources" ./tools/fetch-source.sh '${{ matrix.package }}'
+
+      # Everything already published for this architecture, unpacked over the
+      # image before the build.
+      #
+      # This used to run only for duct/chroot, on the reasoning that duct/builder
+      # already carries the whole package set. It does -- the set as of the last
+      # time that image was *published*. A builder image that predates a
+      # dependency then fails to build against it for no reason the recipe can
+      # express, which is how `elfutils` came to fail on a missing pkg-config
+      # that this repository has packaged for months. Seeding costs a download
+      # and removes a whole class of stale-image failure.
+      - name: Seed published packages
+        env:
+          REPO_URL: https://repo.duct.dss-net.de
+        run: |
+          set -euo pipefail
+          mkdir -p deps
+          if ! curl -fsSL -o repo.db "$REPO_URL/repo.db"; then
+            echo "::notice::no published index yet; building against the bare image"
+            exit 0
+          fi
+          files=$(sqlite3 repo.db \
+            "select name||'-'||version||'-'||subversion||'.'||arch||'.tape.tar.gz' \
+             from packages where arch in ('${{ matrix.arch }}','any') and deleted_at is null;")
+          [ -n "$files" ] || { echo "::notice::nothing published for ${{ matrix.arch }} yet"; exit 0; }
+          n=0
+          for f in $files; do
+            # The package being built is deliberately not seeded: it would be
+            # the previous build of the very thing under test.
+            case $f in ${{ matrix.package }}-*) continue ;; esac
+            curl -fsSL -o pkg.tar.gz "$REPO_URL/packages/$f" || continue
+            rm -rf one && mkdir one
+            tar xzf pkg.tar.gz -C one
+            # Merge rather than replace: each package owns a disjoint set of
+            # paths, so the union is the installed system.
+            cp -a one/install/. deps/
+            n=$((n+1))
+          done
+          rm -rf pkg.tar.gz one
+          echo "seeded $n published packages"
+
+      # Everything built earlier in *this* run, unpacked on top of the published
+      # set so a package under review wins over its published predecessor.
+      #
+      # pattern + merge-multiple is the whole trick: it returns every artifact
+      # that exists in the run so far, and because this job only starts once
+      # every lower level has finished, that set is exactly the levels below.
+      # A level that needs nothing from this run simply finds nothing.
+      - name: Download packages built earlier in this run
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: pkg-*
+          path: dl
+          merge-multiple: true
+
+      - name: Seed packages from this run
+        run: |
+          set -euo pipefail
+          mkdir -p deps
+          n=0
+          for f in dl/*.tape.tar.gz; do
+            [ -e "$f" ] || continue
+            case $(basename "$f") in ${{ matrix.package }}-*) continue ;; esac
+            rm -rf one && mkdir one
+            tar xzf "$f" -C one
+            cp -a one/install/. deps/
+            n=$((n+1))
+          done
+          rm -rf one
+          echo "seeded $n packages from level(s) below this one"
+
+      - name: Build
+        run: |
+          set -euo pipefail
+          mkdir -p out sources deps
+          # duct/bootstrap drops to an unprivileged "builder" user for package
+          # builds, where every other build image runs as root. The mounted
+          # output directory belongs to the runner, so without this the build
+          # completes and then cannot write the package it just made.
+          chmod 0777 out deps
+
+          # "any" is a target tape understands; every other value is a triple.
+          target='${{ matrix.arch }}'
+          [ "$target" = any ] || target="$target-linux-gnu"
+          echo "level ${{ inputs.level }}: building ${{ matrix.package }} for $target in ${{ matrix.image }}"
+
+          # --entrypoint: duct/bootstrap runs tape-builder as its entrypoint, so
+          # "bash -c ..." arrives as arguments to it -- "unknown command bash
+          # for tape-builder". Every image here has /bin/bash; the Duct ones
+          # reach it through the /bin -> usr/bin symlink.
+          docker run --rm --entrypoint /bin/bash \
+            -v "$PWD/pkgs":/pkgs:ro \
+            -v "$PWD/out":/out \
+            -v "$PWD/sources":/cache:ro \
+            -v "$PWD/deps":/deps:ro \
+            -e DUCT_SRC_CACHE=/cache \
+            -e DUCT_JOBS="$(nproc)" \
+            '${{ matrix.image }}' \
+            -c "[ -d /deps/usr ] && cp -a /deps/. / ; cp -R /pkgs /tmp/pkgs && exec tape-builder build /tmp/pkgs/${{ matrix.package }} -t $target -o /out"
+          ls -l out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pkg-${{ matrix.package }}-${{ matrix.arch }}
+          path: out/*.tape.tar.gz
