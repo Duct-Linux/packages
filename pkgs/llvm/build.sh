@@ -13,6 +13,35 @@ command -v ninja >/dev/null 2>&1 || die "ninja is not installed"
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
+# LLVM is the one package here that is bounded by memory rather than by cores.
+# A single cc1plus on its larger translation units peaks around 2 GB, and the
+# link of libLLVM.so needs several more; -j$(nproc) on a machine with a
+# conventional amount of RAM per core does not run slowly, it gets OOM-killed.
+# That is exactly what happened here, and the message it leaves --
+# "c++: fatal error: Killed signal terminated program cc1plus" -- names neither
+# memory nor the job count, so it is worth not rediscovering.
+#
+# So the job counts come from available memory, not from the core count, and the
+# smaller of the two limits wins. Link jobs are separately and much more tightly
+# capped: linking is where the peak is.
+mem_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+if [ "$mem_kb" -gt 0 ]; then
+	mem_gb=$((mem_kb / 1024 / 1024))
+	compile_jobs=$((mem_gb / 2))
+	link_jobs=$((mem_gb / 8))
+	[ "$compile_jobs" -lt 1 ] && compile_jobs=1
+	[ "$link_jobs" -lt 1 ] && link_jobs=1
+	[ "$compile_jobs" -gt "$JOBS" ] && compile_jobs=$JOBS
+	[ "$link_jobs" -gt "$JOBS" ] && link_jobs=$JOBS
+	log "${mem_gb} GB visible: $compile_jobs compile jobs, $link_jobs link jobs"
+else
+	# No /proc/meminfo to read. Being wrong in the cautious direction costs
+	# time; being wrong in the other direction costs the whole build.
+	compile_jobs=1
+	link_jobs=1
+	log "cannot read /proc/meminfo; building single-threaded"
+fi
+
 # TARGETS_TO_BUILD is the single biggest lever on how long this takes and how
 # large it is. "host" is what llvmpipe needs -- it emits code for the machine it
 # is running on and nothing else. AMDGPU is added because radeonsi compiles its
@@ -51,7 +80,11 @@ cmake -G Ninja "$SRC_PATH/llvm" \
 	-DLLVM_INCLUDE_BENCHMARKS=OFF \
 	-DLLVM_INCLUDE_DOCS=OFF \
 	-DLLVM_INSTALL_UTILS=OFF \
+	-DLLVM_PARALLEL_COMPILE_JOBS="$compile_jobs" \
+	-DLLVM_PARALLEL_LINK_JOBS="$link_jobs" \
 	|| die "cmake failed"
 
-log "building with -j$JOBS"
-ninja -j"$JOBS" || die "ninja failed"
+# The job pools above are what ninja actually honours for LLVM's own targets;
+# -j here only bounds everything else.
+log "building"
+ninja -j"$compile_jobs" || die "ninja failed"

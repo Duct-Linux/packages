@@ -211,7 +211,7 @@ DOCKER_ARGS = --rm \
 DOCKER      = docker run $(DOCKER_ARGS) --entrypoint /bin/bash $(IMAGE) -c
 DOCKER_REPO = docker run $(DOCKER_ARGS) --entrypoint /bin/bash $(REPO_IMAGE) -c
 
-.PHONY: all packages packages-native packages-second-pass packages-rust repo key clean clean-repo dirs stage pin toolchain check-sources
+.PHONY: all packages packages-native packages-second-pass packages-rust repo key clean clean-repo dirs stage pin toolchain check-sources check-recipes
 
 all: repo
 
@@ -299,7 +299,7 @@ BUILD_IN_CONTAINER = \
 built = $(wildcard $(PKGS)/$(1)-[0-9]*.tape.tar.gz)
 skip_if_built = $(if $(REBUILD),,$(if $(call built,$(1)),true,))
 
-packages-native: stage check-sources
+packages-native: stage check-sources check-recipes
 	@set -e; $(foreach p,$(PRE_PKGS), \
 		if $(if $(call skip_if_built,$(p)),true,false); then \
 			echo "==> $(p) (already built)"; \
@@ -350,6 +350,13 @@ packages-rust: stage check-sources
 # a failed build, not a slow one -- so it is worth one second up front.
 check-sources:
 	@DUCT_SRC_CACHE=$(CACHE) ./tools/check-sources.sh
+
+# The recipe errors tape does not report. Chief among them: a version that does
+# not parse as semver makes the resolver skip the package *silently*, so it
+# builds, indexes, and then never resolves for anything depending on it. Two
+# recipes shipped in that state before this check existed.
+check-recipes:
+	@./tools/check-recipes.sh
 
 # Generated once and then reused. Losing it means every client that trusted the
 # old key has to be updated, so it is never regenerated implicitly.
