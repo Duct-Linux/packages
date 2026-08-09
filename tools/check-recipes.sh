@@ -342,6 +342,54 @@ def check_meson_options(recipes: dict[str, dict]) -> None:
             fail(name, f"meson options not offered by {tarball}: {', '.join(unknown)}")
 
 
+def check_arch_independence() -> None:
+    """A package stamped PKG_ARCH=any must contain no machine code.
+
+    An "any" package is built once, on whichever runner the matrix picked, and
+    installed on every architecture. If it contains an ELF object then one
+    architecture is silently seeded with the other one's binaries -- which is
+    indistinguishable, at the point it fails, from a CI bug that did exactly
+    that by downloading the wrong artifacts. That failure cost an afternoon
+    once; nothing enforced the invariant that would have made it impossible.
+
+    Checked against the built package rather than the recipe, because the
+    recipe cannot know what its build produced. Silently skipped when the
+    package has not been built -- this is an assertion about artifacts, and a
+    fresh checkout has none.
+    """
+    out = ROOT / "out" / "pkgs"
+    if not out.is_dir():
+        return
+
+    for toml in sorted(PKGS.glob("*/TAPEBUILD.toml")):
+        name = toml.parent.name
+        env = toml.parent / "pkg.env"
+        if not env.exists() or "PKG_ARCH=any" not in env.read_text():
+            continue
+
+        for archive in out.glob(f"{name}-[0-9]*.any.tape.tar.gz"):
+            try:
+                tf = tarfile.open(archive)
+            except (OSError, tarfile.TarError):
+                continue
+            with tf:
+                for member in tf:
+                    if not member.isfile():
+                        continue
+                    handle = tf.extractfile(member)
+                    if handle is None:
+                        continue
+                    # \x7fELF. Reading four bytes per file is cheaper than any
+                    # cleverness about which paths might hold a binary.
+                    if handle.read(4) == b"\x7fELF":
+                        fail(name, f"is stamped PKG_ARCH=any but {member.name} "
+                                   "is an ELF object. An arch-independent "
+                                   "package is built once and installed "
+                                   "everywhere, so this would seed one "
+                                   "architecture with another's machine code.")
+                        break
+
+
 def main() -> int:
     if not PKGS.is_dir():
         print(f"no pkgs directory at {PKGS}", file=sys.stderr)
@@ -352,6 +400,7 @@ def main() -> int:
     check_dependencies(recipes, versions)
     check_meson_options(recipes)
     check_declared_tools(recipes, versions)
+    check_arch_independence()
 
     if warnings:
         print(f"{len(warnings)} warning(s):", file=sys.stderr)
