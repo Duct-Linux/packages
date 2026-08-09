@@ -82,8 +82,14 @@ BUILDER_PKGS := \
 # mesa's code generator dying on "No module named '_ctypes'" three tiers later.
 # Built without openssl it has no ssl module and cannot fetch anything over
 # https.
+#
+# ca-certificates precedes openssl because openssl declares it: openssl's
+# install stage deliberately ships no certificate store of its own, since
+# ca-certificates owns that path. Found by tools/check-build-order.sh, which
+# derives the constraint from the recipe rather than from anyone remembering
+# it -- this file had them the other way round.
 TOOLS_PKGS := \
-	libffi openssl ca-certificates python \
+	ca-certificates openssl libffi python \
 	gettext ninja cmake meson gperf \
 	libxml2 libxslt itstool python-markupsafe python-jinja2 python-mako \
 	python-setuptools python-pyyaml python-pycparser

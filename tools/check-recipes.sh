@@ -25,6 +25,7 @@ Run by `make check-recipes`, which the package build depends on, and by CI.
 
 import pathlib
 import re
+import subprocess
 import sys
 import tarfile
 import tomllib
@@ -455,6 +456,35 @@ def check_arch_independence() -> None:
                         break
 
 
+def check_build_order() -> int:
+    """Run tools/check-build-order.sh, if it is there.
+
+    A separate script because it checks a different object: this file validates
+    the *recipes*, that one validates the *order* ALL_PKGS puts them in. It is
+    called from here so there is one entry point rather than two things to
+    remember -- `make packages-native` already depends on this script, so a bad
+    order now fails before a local build starts, which is exactly where that
+    failure happens. CI inherits it through the existing select step.
+
+    Guarded on existence, the same way build.yml guards its call to this
+    script, so neither has to care which order the two changes land in.
+
+    Worth knowing: CI's levelled scheduler derives its order from the
+    dependency graph and does not read ALL_PKGS at all, so in CI this is belt
+    and braces. It is the local build that depends on the order being right.
+    """
+    script = ROOT / "tools" / "check-build-order.sh"
+    if not script.exists():
+        return 0
+    result = subprocess.run([str(script)], capture_output=True, text=True)
+    output = (result.stdout + result.stderr).strip()
+    if result.returncode != 0:
+        print(output, file=sys.stderr)
+        return result.returncode
+    print(output)
+    return 0
+
+
 def main() -> int:
     if not PKGS.is_dir():
         print(f"no pkgs directory at {PKGS}", file=sys.stderr)
@@ -481,7 +511,7 @@ def main() -> int:
 
     print(f"{len(recipes)} recipes: versions, dependencies, meson options "
           "and declared build tools all check out")
-    return 0
+    return check_build_order()
 
 
 if __name__ == "__main__":
