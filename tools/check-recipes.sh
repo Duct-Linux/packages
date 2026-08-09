@@ -41,6 +41,12 @@ MESON_BUILTIN = {
     "cpp_std", "auto_features", "strip", "sharedstatedir",
 }
 
+# Import name to package name, where they differ. PyYAML is imported as `yaml`
+# and packaged, as every distribution packages it, under its project name.
+PYTHON_PACKAGE_NAMES = {
+    "yaml": "python-pyyaml",
+}
+
 problems: list[str] = []
 warnings: list[str] = []
 
@@ -204,6 +210,18 @@ def scan_tarball(archive: pathlib.Path, src_dir: str) -> dict:
                 # and a [^)]* that stops at the first ")" never reaches the
                 # modules list -- which is how the check missed the one package
                 # that motivated writing it.
+                # The imperative form. mesa does not ask find_installation for
+                # PyYAML -- it runs a run_command() that imports it and checks
+                # the exit status:
+                #   run_command(prog_python, '-c', 'import yaml', check: false)
+                # A declarative check cannot see that, and mesa stopped at
+                # configure with "Python (3.x) yaml module (PyYAML) required to
+                # build mesa" after the check had already been written for
+                # exactly this class of problem. So both forms are read.
+                for imp in re.finditer(
+                        r"""['"]import ([A-Za-z_][A-Za-z0-9_]*)['"]""", data):
+                    found["python_modules"].add(imp.group(1))
+
                 for call in re.finditer(r"find_installation\s*\(", data):
                     window = data[call.end():call.end() + 400]
                     mods = re.search(r"modules\s*:\s*\[([^\]]*)\]", window)
@@ -252,7 +270,8 @@ def check_declared_tools(recipes: dict[str, dict], versions: dict[str, str]) -> 
                 if module in ("python3", "python"):
                     continue
                 # setuptools is packaged as python-setuptools, and so on.
-                pkg = f"python-{module.lower()}"
+                pkg = PYTHON_PACKAGE_NAMES.get(
+                    module.lower(), f"python-{module.lower()}")
                 if pkg not in versions:
                     warn(name, f"build may need the Python module {module!r}, "
                                f"which no recipe provides (expected {pkg}). "

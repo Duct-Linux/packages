@@ -1,33 +1,26 @@
 #!/bin/sh
 # Configure and build glib.
 #
-# Its own build stage for one reason: glib and gobject-introspection depend on
-# each other. g-ir-scanner is a Python program that links glib to introspect a
-# library, and glib's own GIR data is produced by g-ir-scanner. Neither can be
-# first.
+# Its own build stage because glib and gobject-introspection depend on each
+# other and something has to break the cycle: g-ir-scanner links glib, and
+# glib's own typelibs are produced by g-ir-scanner, so neither can be first.
 #
-# The way out is to build glib twice. The first pass has no scanner available
-# and produces a glib with no typelibs; gobject-introspection then builds
-# against it; the second pass finds the scanner and produces Gio-2.0.typelib and
-# the rest -- which is not optional, because gjs cannot import Gio without them
-# and gnome-shell is written in JavaScript.
+# glib breaks it by never producing introspection data. What GNOME actually
+# needs -- GLib-2.0.typelib, GObject-2.0.typelib, Gio-2.0.typelib, without which
+# gjs cannot import Gio and gnome-shell is written in JavaScript -- is built by
+# the glib-introspection package, which compiles this same source a second time
+# once the scanner exists and installs nothing but the .gir and .typelib files.
 #
-# Rather than have the two passes differ by a flag someone has to remember to
-# pass, the recipe asks what is installed. First pass: no g-ir-scanner, so
-# introspection is off. Second pass: it is there, so introspection is on. The
-# Makefile's SECOND_PASS_PKGS is what runs the second one.
+# That is a deliberate change from doing it as a second pass over this recipe.
+# A second pass is invisible to anything reading the dependency graph: CI
+# schedules package builds in dependency waves derived from that graph, and
+# "build this one twice, in the middle" is not something a graph can say. As a
+# separate package it is an ordinary node that both the Makefile's order and
+# CI's levelling already understand.
 
 . "$(dirname "$0")/../_scripts/common.sh"
 
 command -v meson >/dev/null 2>&1 || die "meson is not installed"
-
-if command -v g-ir-scanner >/dev/null 2>&1; then
-	introspection=enabled
-	log "g-ir-scanner is present: building with introspection (second pass)"
-else
-	introspection=disabled
-	log "no g-ir-scanner: building without introspection (first pass)"
-fi
 
 rm -rf "$BUILD_DIR"
 
@@ -40,7 +33,7 @@ meson setup "$BUILD_DIR" "$SRC_PATH" \
 	--libdir=lib \
 	--buildtype=release \
 	--wrap-mode=nodownload \
-	-Dintrospection="$introspection" \
+	-Dintrospection=disabled \
 	-Dlibmount=enabled \
 	-Dselinux=disabled \
 	-Dsysprof=disabled \

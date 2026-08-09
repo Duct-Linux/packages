@@ -1,0 +1,18 @@
+[package]
+name = "python-pyyaml"
+description = "YAML parser and emitter for Python"
+version = "6.0.2"
+subversion = "1"
+authors = ["Ingy dot Net and Kirill Simonov"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+python = ">=3.13.0"
+
+[dependencies.build]

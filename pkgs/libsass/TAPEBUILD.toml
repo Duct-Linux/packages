@@ -1,0 +1,22 @@
+[package]
+name = "libsass"
+description = "Sass stylesheet compiler library"
+version = "3.6.6"
+subversion = "1"
+authors = ["The Sass team"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+gcc = ">=15.2.0"
+
+[dependencies.build]
