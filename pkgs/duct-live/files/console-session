@@ -31,6 +31,18 @@ export PATH
 # terminal -- which is the one busybox init opened for this inittab entry.
 for login in /usr/bin/login /usr/sbin/login; do
 	[ -x "$login" ] || continue
+	# Announced, and not only for the log.
+	#
+	# BOTH branches print, so a boot test can assert a positive fact about
+	# WHICH one was taken. Without this the only marker available on a system
+	# that has login(1) would be one printed before console-session runs at
+	# all -- and a marker that cannot distinguish "this worked" from "this was
+	# never installed" is the exact weakness that let an earlier ISO ship a
+	# duct-live with no console-session and still pass its boot test.
+	#
+	# Say what it provides rather than what it did, so the line is useful to
+	# someone reading a console as well as to a grep.
+	echo "duct-live: starting a PAM session via $login; pam_elogind creates /run/user/<uid>"
 	exec "$login" -f root
 done
 
