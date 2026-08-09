@@ -1,0 +1,46 @@
+#!/usr/bin/bash
+# What busybox init starts on each console.
+#
+# This is a wrapper around "give the user a shell" rather than the shell
+# itself, and the indirection is the whole point.
+#
+# The obvious inittab entry is `-/usr/bin/bash --login`, and on a system with
+# no accounts it appears to work perfectly. It also skips PAM -- and PAM is
+# what registers a login session. pam_elogind, in the session stack, is the
+# only thing that creates /run/user/<uid>: not the shell, not the kernel, not
+# elogind on its own. Without that directory there is nowhere for a Wayland
+# socket, a session D-Bus or any per-user runtime state to live, and the
+# failure does not appear until something graphical is started, at which point
+# it looks like a compositor bug.
+#
+# So: go through login(1) whenever there is one, and fall back to a bare shell
+# only when there is not. Today there is not -- shadow is not in the live
+# manifest and util-linux is built --disable-login -- so this takes the
+# fallback and the result is what it always was. The moment shadow and
+# linux-pam are added to ISO_EXTRA_PACKAGES, the same ISO starts registering
+# proper sessions with no change to this package.
+
+PATH=/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin
+export PATH
+
+# -f root: skip authentication rather than prompt for a password nobody set.
+# A live system with no accounts has no password to ask for, and a login prompt
+# that cannot be satisfied is worse than none.
+#
+# login is not exec'd through a shell, so it inherits this process's controlling
+# terminal -- which is the one busybox init opened for this inittab entry.
+for login in /usr/bin/login /usr/sbin/login; do
+	[ -x "$login" ] || continue
+	exec "$login" -f root
+done
+
+# No login(1). Announce it, because a session that is not registered is a real
+# difference in behaviour and not something to discover later from a puzzled
+# compositor.
+echo
+echo "duct-live: no login(1) available -- starting a shell without a PAM session."
+echo "duct-live: /run/user/\$UID will not exist; graphical sessions need shadow"
+echo "duct-live: and linux-pam in the ISO manifest."
+echo
+
+exec /usr/bin/bash --login

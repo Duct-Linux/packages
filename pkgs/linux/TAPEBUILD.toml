@@ -1,0 +1,40 @@
+[package]
+name = "linux"
+description = "The Linux kernel, its modules and its device trees"
+version = "6.16.1"
+subversion = "1"
+authors = ["upstream"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+# Nothing at runtime. The kernel is the thing everything else runs on top of;
+# it links against no library and calls no program. kmod is what reads the
+# modules this package installs, but the kernel does not need kmod to boot --
+# an initramfs that loads no modules never invokes it -- so it is a dependency
+# of the live system rather than of the kernel.
+[dependencies]
+
+[dependencies.build]
+bc = ">=1.08.2"
+elfutils = ">=0.193.0"
+perl = ">=5.42.0"
+# certs/extract-cert links against libcrypto. It is built whenever
+# CONFIG_SYSTEM_TRUSTED_KEYRING is set, which arm64's defconfig sets by way of
+# CONFIG_INTEGRITY -- so this is a dependency even though Duct signs no
+# modules.
+openssl = ">=4.0.1"
+flex = ">=2.6.4"
+bison = ">=3.8.2"
+kmod = ">=33.0.0"
+pkgconf = ">=2.5.1"

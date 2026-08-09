@@ -51,7 +51,7 @@ duct/chroot      FROM scratch. Self-contained: its own gcc, bash and libc.
       |          The cross toolchain is deleted, which is what proves it.
       |          make -C ../docker chroot && make -C ../docker chroot-test
       v
-  32 packages    Built natively inside duct/chroot by tape-builder.
+  41 packages    Built natively inside duct/chroot by tape-builder.
       |          make repo
       v
 duct/base        FROM scratch, assembled by tape from the signed repository.
@@ -100,6 +100,27 @@ the working directory.
 Everything a package installs goes under `$TAPE_INSTALL_DIR`, which maps 1:1
 onto `/`: `work/install/usr/bin/ls` becomes `/usr/bin/ls`.
 
+## Reproducing a CI step on a Mac
+
+CI runs on Linux with GNU tools. Two of them behave differently on macOS, and
+both fail in the direction of silence rather than error.
+
+**`tar` is BSD tar and does not support `--keep-directory-symlink`.** The
+dependency-seeding steps in `.github/workflows/build-level.yml` rely on it —
+Duct is merged-`/usr`, so `duct-filesystem` ships `/lib` as a symlink to
+`usr/lib` and other packages ship real paths beneath it; without the flag tar
+replaces the symlink with a directory and the tree splits in two. On macOS the
+flag is rejected outright, the extraction does nothing, and you are left with
+an **empty** directory that looks like a seeding bug in CI rather than a
+missing flag in your terminal. Use `gtar` from coreutils, or reproduce inside a
+Linux container.
+
+**`make` is not GNU make** and rejects `--eval`. `tools/check-build-order.sh`
+uses `make -pn` instead for exactly this reason, and `tools/dep-levels.sh` does
+its graph work in `awk` rather than with `declare -A`, since associative arrays
+need bash 4 and macOS ships 3.2. Both scripts are meant to run before you push;
+keep new ones that way.
+
 ## Constraints worth knowing before writing a recipe
 
 - `version` and `subversion` must both parse as semver, or the resolver skips
@@ -136,16 +157,38 @@ package from these recipes, and the result is byte-identical to the one built in
 |---|---|---|
 | `duct/base` | 626 MB | 13 packages: glibc, binutils, gcc, ncurses, bash, uutils-coreutils, tape, filesystem |
 | `duct/builder` | 781 MB | + m4, bison, flex, make, gawk, sed, grep, findutils, diffutils, tar, gzip, xz, bzip2, patch, file, pkgconf, perl, texinfo |
-
-32 packages, 187 MB of archives, all in a signed repository.
+| `duct-live.iso` | — | + linux, grub, busybox, kmod, util-linux, bc, elfutils, duct-live |
 
 `duct/base` has no `grep` and no `sed` -- those are `duct/builder`'s. The base
 image is libc, the toolchain, coreutils and a shell, and nothing else.
 
+## Booting
+
+Eight recipes exist for one reason: an image that a container runtime starts
+needs no kernel, no bootloader and no PID 1, and a machine that boots needs all
+three. They are built with everything else and assembled into a live ISO by
+`make -C ../images iso`.
+
+| | |
+|---|---|
+| `linux` | the kernel, its modules and its device trees. Built from the same pin as `linux-headers` -- the headers userspace compiles against and the kernel providing those interfaces should never be two versions. |
+| `grub` | the bootloader, EFI platform only. `--disable-multilib` in gcc means there is no way to build the 32-bit `i386-pc` target, so there is no BIOS boot path. |
+| `busybox` | one static binary, and the entire userland of the initramfs. Installs no applet symlinks, so it cannot collide with uutils-coreutils or util-linux. |
+| `duct-live` | PID 1 (busybox init plus an inittab), the boot script, and `duct-mkinitramfs`. |
+| `util-linux` | mount, blkid, losetup, fdisk, lsblk -- and libmount and libblkid, which everything above a shell expects. |
+| `kmod` | modprobe and depmod. The kernel ships most drivers as modules and nothing resolves their dependencies without this. |
+| `bc`, `elfutils` | build dependencies of `linux` and nothing else. The kernel generates `timeconst.h` with bc, and objtool links against libelf. |
+
+`python` is in the build list for the same kind of reason: grub's configure
+refuses to run without a Python interpreter, and relying on the chapter-7
+temporary one meant grub built in `duct/chroot` and failed in `duct/builder`.
+
+41 packages in the signed repository.
+
 ## Layout
 
 ```
-pkgs/            32 package recipes + the shared stage scripts
+pkgs/            41 package recipes + the shared stage scripts
 pkgs/versions.env  every upstream URL and sha256, generated
 toolchain/       the cross toolchain and temporary tools (LFS ch. 5 and 6)
 tools/           pin-versions.sh, gen-recipes.sh

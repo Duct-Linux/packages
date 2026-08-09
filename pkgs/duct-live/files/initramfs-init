@@ -1,0 +1,134 @@
+#!/bin/sh
+# /init -- the first program the kernel runs on a live Duct system.
+#
+# Its whole job is to turn "there is an ISO somewhere on this machine" into a
+# writable root filesystem, and then get out of the way. Four mounts do that:
+#
+#   the medium    the ISO9660 (or FAT, from a USB stick) filesystem
+#   the lower     a squashfs image inside it, read-only by construction
+#   the upper     a tmpfs, so the running system can be written to
+#   the overlay   the two stacked, which becomes /
+#
+# Everything here runs on a static busybox. There is no libc in the initramfs
+# and nothing from /usr is reachable yet -- /usr is inside the squashfs this
+# script has not mounted.
+
+PATH=/bin:/sbin:/usr/bin:/usr/sbin
+export PATH
+
+MEDIUM=/run/live/medium
+LOWER=/run/live/rootfs
+RW=/run/live/rw
+NEWROOT=/newroot
+
+msg() { echo "duct-live: $*"; }
+
+# A failure here is the end of the boot, so it ends in a shell rather than a
+# panic. Someone looking at a machine that did not come up needs to be able to
+# ask it why -- `dmesg`, `blkid`, `ls /run/live/medium` -- and a kernel panic
+# takes that away.
+panic() {
+	echo
+	msg "cannot continue: $*"
+	msg "dropping to a shell. The live medium is at $MEDIUM if it mounted."
+	echo
+	# /bin/busybox rather than sh: the very first thing this script does is
+	# create the applet symlinks, and if *that* is what failed then `sh` does
+	# not exist yet. Calling the binary by its real name works either way, and
+	# the difference is a usable shell versus "attempted to kill init".
+	exec /bin/busybox sh
+}
+
+# busybox is one binary pretending to be three hundred programs, and it decides
+# which one it is from argv[0]. Without the symlinks, every command below would
+# have to be spelled "busybox mount". /bin is a tmpfs-backed initramfs
+# directory that nothing else will ever own, so there is no conflict to avoid
+# here -- unlike in the package, which installs the binary and nothing else.
+/bin/busybox --install -s /bin || panic "busybox could not install its applets"
+
+mkdir -p /proc /sys /dev /run "$NEWROOT"
+mount -t proc     proc     /proc || panic "cannot mount /proc"
+mount -t sysfs    sysfs    /sys  || panic "cannot mount /sys"
+mount -t devtmpfs devtmpfs /dev  || panic "cannot mount /dev"
+
+# /run is a tmpfs in the initramfs and becomes the live system's /run: the
+# medium and the squashfs stay mounted underneath it across the switch. That is
+# why everything below lives under /run rather than at the top level -- the
+# whole tmpfs is moved into the new root in one step at the end, and a mount
+# outside it would be lost.
+mount -t tmpfs -o mode=0755 tmpfs /run || panic "cannot mount /run"
+mkdir -p "$MEDIUM" "$LOWER" "$RW"
+
+label=DUCT_LIVE
+device=
+image=/duct/rootfs.squashfs
+timeout=30
+debug=
+
+for arg in $(cat /proc/cmdline); do
+	case "$arg" in
+		duct.live.label=*)   label=${arg#*=}   ;;
+		duct.live.device=*)  device=${arg#*=}  ;;
+		duct.live.image=*)   image=${arg#*=}   ;;
+		duct.live.timeout=*) timeout=${arg#*=} ;;
+		duct.live.debug)     debug=1           ;;
+	esac
+done
+
+[ -n "$debug" ] && set -x
+
+# USB enumeration is not instant and the kernel does not wait for it, so the
+# device the ISO was written to may not exist for another few seconds. Polling
+# beats a fixed sleep in both directions: a virtual machine finds its disk on
+# the first pass, and a slow USB controller gets as long as it needs.
+if [ -z "$device" ]; then
+	msg "looking for a filesystem labelled $label"
+	i=0
+	while [ "$i" -lt "$timeout" ]; do
+		device=$(findfs "LABEL=$label" 2>/dev/null) && [ -n "$device" ] && break
+		device=
+		i=$((i + 1))
+		sleep 1
+	done
+fi
+
+[ -n "$device" ] || panic "no filesystem labelled $label appeared within ${timeout}s"
+msg "live medium is $device"
+
+# No -t: the medium is ISO9660 when it is a disc or a plain ISO image, and FAT
+# when the same bytes have been written to a stick and the firmware is reading
+# the EFI system partition instead. Letting the kernel work it out covers both.
+mount -o ro "$device" "$MEDIUM" || panic "cannot mount $device"
+
+[ -f "$MEDIUM$image" ] || panic "$device has no $image on it"
+
+# loop, because a squashfs is a file rather than a block device. The kernel's
+# loop driver is built in for exactly this reason.
+mount -t squashfs -o ro,loop "$MEDIUM$image" "$LOWER" || panic "cannot mount $image"
+
+mount -t tmpfs -o mode=0755 tmpfs "$RW" || panic "cannot mount the writable layer"
+mkdir -p "$RW/upper" "$RW/work"
+
+mount -t overlay overlay \
+	-o "lowerdir=$LOWER,upperdir=$RW/upper,workdir=$RW/work" \
+	"$NEWROOT" || panic "cannot stack the overlay"
+
+[ -x "$NEWROOT/usr/sbin/init" ] || panic "the squashfs has no /usr/sbin/init; is duct-live installed in it?"
+
+# Hand the kernel's filesystems over rather than mounting them again on the
+# other side. Moving keeps every open file descriptor valid, which matters for
+# /dev in particular: the console this script is writing to is one of them.
+#
+# /run takes the medium and the squashfs with it, because they are mounted
+# inside it. The overlay does not mind its lowerdir moving -- a mount is held
+# by reference, not by path.
+#
+# `-o move` rather than `--move`: busybox's mount spells it as an option, and
+# this script only ever runs under busybox.
+for fs in /dev /proc /sys /run; do
+	mkdir -p "$NEWROOT$fs"
+	mount -o move "$fs" "$NEWROOT$fs" || panic "cannot move $fs into the new root"
+done
+
+msg "handing over to /usr/sbin/init"
+exec switch_root "$NEWROOT" /usr/sbin/init || panic "switch_root failed"

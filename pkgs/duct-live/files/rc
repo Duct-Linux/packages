@@ -1,0 +1,81 @@
+#!/usr/bin/bash
+# The one script busybox init runs at boot, before it starts any shell.
+#
+# The initramfs has already handed over /proc, /sys, /dev and /run, and the
+# root is a writable overlay. What is left is the rest of the standard mount
+# set, a hostname, and the two things nothing else will do without a udev:
+# loading the drivers for hardware that is present, and refreshing the linker
+# cache.
+
+PATH=/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin
+export PATH
+
+msg() { echo "  * $*"; }
+
+# Guarded, every one of them. The initramfs moved these across rather than
+# leaving them for us, and mounting a fresh tmpfs over /run in particular would
+# hide the live medium and the squashfs the root filesystem is made of --
+# which does not fail here, it fails later and inexplicably.
+mountpoint -q /proc || mount -t proc     proc     /proc
+mountpoint -q /sys  || mount -t sysfs    sysfs    /sys
+mountpoint -q /dev  || mount -t devtmpfs devtmpfs /dev
+mountpoint -q /run  || mount -t tmpfs    tmpfs    /run -o mode=0755
+
+mkdir -p /dev/pts /dev/shm /run/lock /tmp
+mountpoint -q /dev/pts || mount -t devpts devpts /dev/pts -o gid=5,mode=620
+mountpoint -q /dev/shm || mount -t tmpfs  tmpfs  /dev/shm -o mode=1777
+chmod 1777 /tmp /var/tmp 2>/dev/null
+
+# Written rather than set with hostname(1): uutils' hostname does not implement
+# setting one, and this is what the syscall does anyway.
+echo duct >/proc/sys/kernel/hostname
+
+# The machine id, generated per boot rather than shipped.
+#
+# The ISO build leaves /etc/machine-id empty on purpose -- baking one in would
+# give every machine that ever boots this ISO the same identity, and D-Bus,
+# logging and anything keyed on "which machine is this" would be unable to tell
+# two of them apart on the same network.
+#
+# 16 random bytes as 32 hex digits is the whole format. od rather than a
+# dedicated tool because there is no uuidgen in the base set and this needs
+# nothing that is not already here.
+if [ ! -s /etc/machine-id ]; then
+	if id=$(od -An -tx1 -N16 /dev/urandom 2>/dev/null | tr -d ' \n') && [ -n "$id" ]; then
+		msg "generating a machine id"
+		# The file is 0444 in the squashfs; the overlay lets us replace it,
+		# but only after the read-only mode is out of the way.
+		rm -f /etc/machine-id
+		printf '%s\n' "$id" >/etc/machine-id
+		chmod 0444 /etc/machine-id
+	fi
+fi
+
+# There are no install hooks in tape, so the image build runs ldconfig once
+# after installing everything. Running it again here costs a second and covers
+# the case where something was installed into the overlay after boot.
+if [ -x /usr/sbin/ldconfig ]; then
+	/usr/sbin/ldconfig 2>/dev/null || true
+fi
+
+# Coldplug, without udev.
+#
+# Everything needed to reach this point is built into the kernel; everything
+# else -- the GPU, the network card, the sound device -- is a module, and with
+# no udev running there is nothing to notice they exist. Each device that needs
+# a driver advertises a modalias in sysfs, which is precisely the string
+# modprobe matches against, so feeding the whole set to modprobe loads exactly
+# the drivers this machine has hardware for.
+#
+# -a takes many aliases at once, -b honours the blacklist, -q keeps the console
+# clear of one "module not found" line per device that has no driver -- which
+# is most of them, and is not an error.
+if [ -x /usr/bin/modprobe ] && [ -d /usr/lib/modules/"$(uname -r)" ]; then
+	msg "loading drivers for detected hardware"
+	find /sys/devices -name modalias -type f -print0 2>/dev/null |
+		xargs -0 -r cat 2>/dev/null |
+		sort -u |
+		xargs -r /usr/bin/modprobe -abq 2>/dev/null || true
+fi
+
+msg "Duct live system ready"

@@ -1,0 +1,29 @@
+[package]
+name = "busybox"
+description = "A single static binary providing the early-boot userland"
+version = "1.37.0"
+subversion = "1"
+authors = ["upstream"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+# Nothing at runtime, deliberately: the binary is statically linked. An
+# initramfs that needed glibc would have to carry the dynamic loader and the
+# libraries it resolves, and get their paths right, before it could run its
+# first command.
+[dependencies]
+
+[dependencies.build]
+glibc = ">=2.42.0"
+linux-headers = ">=6.16.1"
