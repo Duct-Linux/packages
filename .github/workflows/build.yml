@@ -48,7 +48,24 @@ jobs:
   select:
     runs-on: ubuntu-latest
     outputs:
+      # The whole matrix, kept because it is what the log prints and what any
+      # future job wanting "everything selected" should read.
       jobs: ${{ steps.pick.outputs.jobs }}
+      # The same matrix partitioned by dependency level. Declared one by one
+      # because a workflow's outputs cannot be generated any more than its jobs
+      # can.
+      level0: ${{ steps.pick.outputs.level0 }}
+      level1: ${{ steps.pick.outputs.level1 }}
+      level2: ${{ steps.pick.outputs.level2 }}
+      level3: ${{ steps.pick.outputs.level3 }}
+      level4: ${{ steps.pick.outputs.level4 }}
+      level5: ${{ steps.pick.outputs.level5 }}
+      level6: ${{ steps.pick.outputs.level6 }}
+      level7: ${{ steps.pick.outputs.level7 }}
+      level8: ${{ steps.pick.outputs.level8 }}
+      level9: ${{ steps.pick.outputs.level9 }}
+      level10: ${{ steps.pick.outputs.level10 }}
+      level11: ${{ steps.pick.outputs.level11 }}
     steps:
       - uses: docker/login-action@v3
         with:
@@ -59,6 +76,19 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
+
+      # Validate the recipes before deciding what to build, so a malformed one
+      # fails in seconds rather than after an hour of compiling.
+      #
+      # Guarded on the script existing because it arrives in a different
+      # change; this file should not depend on the order those two land in.
+      - name: Check recipes
+        run: |
+          if [ -x tools/check-recipes.sh ]; then
+            ./tools/check-recipes.sh
+          else
+            echo "::notice::tools/check-recipes.sh is not present; skipping recipe validation"
+          fi
 
       - id: pick
         run: |
@@ -182,111 +212,159 @@ jobs:
           echo "jobs=$entries" >>"$GITHUB_OUTPUT"
           jq -r '.[] | "  \(.package) [\(.arch)] in \(.image)"' <<<"$entries"
 
-  build:
-    needs: select
-    if: needs.select.outputs.jobs != '[]'
-    strategy:
-      fail-fast: false
-      # Fully resolved by the select job: package, architecture, runner and the
-      # exact image tag, each already checked to exist. One job shape covers
-      # both per-architecture and "any" packages.
-      matrix:
-        include: ${{ fromJSON(needs.select.outputs.jobs) }}
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          # Partition the matrix into dependency levels.
+          #
+          # Each job builds in the published builder image, which contains the
+          # package set as of the last publish. That is enough until one change
+          # adds two packages where the second needs the first -- and then the
+          # second fails on something the first would have provided, and the
+          # only way through is to merge, publish, and run again. One publish
+          # round per layer of the graph, which a tiered package set makes
+          # unworkable.
+          #
+          # Levels remove that: level 0 needs nothing else in this run, level N
+          # needs only levels below it, and build.yml runs them in order. See
+          # tools/dep-levels.sh.
+          levels=$(./tools/dep-levels.sh $sel)
+          echo "levels:"
+          sort -k2 -n <<<"$levels" | sed 's/^/  /'
 
-      - uses: actions/checkout@v4
+          deepest=$(awk '{ if ($2 > m) m = $2 } END { print m + 0 }' <<<"$levels")
 
-      # Fetched here, not in the container: the build images have no curl or
-      # wget, on purpose. Verified against the pinned sha256 before it is ever
-      # mounted.
-      - name: Fetch source
-        run: DUCT_SRC_CACHE="$PWD/sources" ./tools/fetch-source.sh '${{ matrix.package }}'
-
-      # A bootstrapping architecture builds in duct/chroot, which carries the
-      # LFS chapter 7 temporary tools and nothing else -- not the Duct package
-      # set. duct/builder does carry it, which is why the per-package matrix
-      # normally needs no dependency handling at all: everything a recipe needs
-      # is already installed.
-      #
-      # In chroot it is not, and the failures are exactly what that predicts --
-      # binutils wanting zlib.h, mpfr and mpc wanting gmp.h, gcc wanting all
-      # three. So the already-published packages for this architecture are
-      # unpacked over the image first, which is the same "everything built so
-      # far" step the local Makefile performs for a from-scratch bootstrap.
-      #
-      # This is inherently iterative: a package can only be seeded once it has
-      # been published, so a bootstrap takes as many rounds as its dependency
-      # chain is deep (zlib and gmp, then mpfr and mpc, then gcc).
-      - name: Seed published dependencies
-        if: contains(matrix.image, '/chroot:')
-        env:
-          REPO_URL: https://repo.duct.dss-net.de
-        run: |
-          set -euo pipefail
-          mkdir -p deps
-          if ! curl -fsSL -o repo.db "$REPO_URL/repo.db"; then
-            echo "::notice::no published index yet; building against the bare chroot"
-            exit 0
+          # A fixed number of level jobs, because a workflow cannot generate
+          # jobs dynamically. MAX_LEVEL is 11 rather than the 7 the current
+          # recipe set actually reaches -- rust sits at 7, through
+          # cmake/ninja -> gcc -> binutils -> zlib -> glibc -- so a set that
+          # merely matched today's depth would break on the next package that
+          # deepened the graph by one.
+          #
+          # Exceeding it is a loud failure telling you to add a level, never a
+          # silently wrong build order.
+          max_level=11
+          if [ "$deepest" -gt "$max_level" ]; then
+            echo "::error::dependency graph is $deepest deep; build.yml only has $((max_level + 1)) levels. Add level jobs."
+            exit 1
           fi
-          files=$(sqlite3 repo.db \
-            "select name||'-'||version||'-'||subversion||'.'||arch||'.tape.tar.gz' \
-             from packages where arch in ('${{ matrix.arch }}','any') and deleted_at is null;")
-          [ -n "$files" ] || { echo "::notice::nothing published for ${{ matrix.arch }} yet"; exit 0; }
-          n=0
-          for f in $files; do
-            # The package being built is deliberately not seeded: it would be
-            # the previous build of the very thing under test.
-            case $f in ${{ matrix.package }}-*) continue ;; esac
-            curl -fsSL -o pkg.tar.gz "$REPO_URL/packages/$f"
-            rm -rf one && mkdir one
-            tar xzf pkg.tar.gz -C one
-            # Merge rather than replace: each package owns a disjoint set of
-            # paths, so the union is the installed system.
-            cp -a one/install/. deps/
-            n=$((n+1))
+          echo "deepest level: $deepest (of $max_level available)"
+
+          # jq builds each level's matrix from the entries already resolved
+          # above, so a level inherits the architecture, runner and image
+          # decisions rather than repeating them.
+          lvlmap=$(awk '{ printf "{\"%s\":%s}\n", $1, $2 }' <<<"$levels" | jq -s 'add // {}')
+          for L in $(seq 0 "$max_level"); do
+            sub=$(jq -c --argjson m "$lvlmap" --argjson L "$L" \
+              '[ .[] | select(($m[.package] // 0) == $L) ]' <<<"$entries")
+            echo "level$L=$sub" >>"$GITHUB_OUTPUT"
+            count=$(jq 'length' <<<"$sub")
+            [ "$count" -gt 0 ] && echo "  level $L: $count job(s)"
           done
-          rm -rf pkg.tar.gz one
-          echo "seeded $n published packages"
+          true
 
-      - name: Build
-        run: |
-          set -euo pipefail
-          mkdir -p out sources deps
-          # duct/bootstrap drops to an unprivileged "builder" user for package
-          # builds, where every other build image runs as root. The mounted
-          # output directory belongs to the runner, so without this the build
-          # completes and then cannot write the package it just made.
-          chmod 0777 out deps
+  # One job per level, each waiting on the one below it.
+  #
+  # Twelve near-identical blocks is not elegant, and it is the only way a
+  # GitHub workflow can express "N waves" -- jobs cannot be generated. The
+  # steps live in build-level.yml so they exist once; what repeats here is the
+  # wiring, and the wiring is the part that has to be explicit anyway.
+  #
+  # An empty level skips itself through the `if`, so a one-package change still
+  # runs exactly one job.
+  # One job per level, each waiting on EVERY level below it.
+  #
+  # `needs: [select, level0, level1, ... levelN-1]` rather than just the
+  # previous level, and the verbosity is the point. `needs.*.result` only sees
+  # DIRECT needs, so a chain of single needs propagates failure exactly one
+  # hop: level0 fails, level1 correctly skips -- and level2, whose only lower
+  # need is a level1 that is 'skipped' rather than 'failed', sees no failure
+  # and runs anyway, on top of a level that produced nothing.
+  #
+  # That turns one clear failure into a cascade of confusing ones at every
+  # level above it, which is precisely the "failures that look like recipe
+  # bugs" outcome this whole change exists to prevent.
+  #
+  # An empty level skips itself through the `if`, so a one-package change still
+  # runs exactly one job.
 
-          # "any" is a target tape understands; every other value is a triple.
-          target='${{ matrix.arch }}'
-          [ "$target" = any ] || target="$target-linux-gnu"
-          echo "building ${{ matrix.package }} for $target in ${{ matrix.image }}"
+  level0:
+    needs: [select]
+    if: needs.select.outputs.level0 != '[]'
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level0 }}", level: '0' }
+    secrets: inherit
 
-          # --entrypoint: duct/bootstrap runs tape-builder as its entrypoint, so
-          # "bash -c ..." arrives as arguments to it -- "unknown command bash
-          # for tape-builder". Every image here has /bin/bash; the Duct ones
-          # reach it through the /bin -> usr/bin symlink.
-          docker run --rm --entrypoint /bin/bash \
-            -v "$PWD/pkgs":/pkgs:ro \
-            -v "$PWD/out":/out \
-            -v "$PWD/sources":/cache:ro \
-            -v "$PWD/deps":/deps:ro \
-            -e DUCT_SRC_CACHE=/cache \
-            -e DUCT_JOBS="$(nproc)" \
-            '${{ matrix.image }}' \
-            -c "[ -d /deps/usr ] && cp -a /deps/. / ; cp -R /pkgs /tmp/pkgs && exec tape-builder build /tmp/pkgs/${{ matrix.package }} -t $target -o /out"
-          ls -l out
+  level1:
+    needs: [select, level0]
+    if: always() && needs.select.outputs.level1 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level1 }}", level: '1' }
+    secrets: inherit
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pkg-${{ matrix.package }}-${{ matrix.arch }}
-          path: out/*.tape.tar.gz
-          if-no-files-found: error
-          retention-days: 7
+  level2:
+    needs: [select, level0, level1]
+    if: always() && needs.select.outputs.level2 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level2 }}", level: '2' }
+    secrets: inherit
+
+  level3:
+    needs: [select, level0, level1, level2]
+    if: always() && needs.select.outputs.level3 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level3 }}", level: '3' }
+    secrets: inherit
+
+  level4:
+    needs: [select, level0, level1, level2, level3]
+    if: always() && needs.select.outputs.level4 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level4 }}", level: '4' }
+    secrets: inherit
+
+  level5:
+    needs: [select, level0, level1, level2, level3, level4]
+    if: always() && needs.select.outputs.level5 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level5 }}", level: '5' }
+    secrets: inherit
+
+  level6:
+    needs: [select, level0, level1, level2, level3, level4, level5]
+    if: always() && needs.select.outputs.level6 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level6 }}", level: '6' }
+    secrets: inherit
+
+  level7:
+    needs: [select, level0, level1, level2, level3, level4, level5, level6]
+    if: always() && needs.select.outputs.level7 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level7 }}", level: '7' }
+    secrets: inherit
+
+  level8:
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7]
+    if: always() && needs.select.outputs.level8 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level8 }}", level: '8' }
+    secrets: inherit
+
+  level9:
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7, level8]
+    if: always() && needs.select.outputs.level9 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level9 }}", level: '9' }
+    secrets: inherit
+
+  level10:
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7, level8, level9]
+    if: always() && needs.select.outputs.level10 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level10 }}", level: '10' }
+    secrets: inherit
+
+  level11:
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7, level8, level9, level10]
+    if: always() && needs.select.outputs.level11 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    uses: ./.github/workflows/build-level.yml
+    with: { jobs: "${{ needs.select.outputs.level11 }}", level: '11' }
+    secrets: inherit
