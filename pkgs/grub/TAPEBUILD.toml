@@ -29,3 +29,4 @@ bison = ">=3.8.2"
 # runs Python -- but the check is unconditional, and an unconditional check is
 # a dependency whatever its author intended.
 python = ">=3.13.7"
+pkgconf = ">=2.5.1"
