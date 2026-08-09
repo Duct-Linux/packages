@@ -100,6 +100,27 @@ the working directory.
 Everything a package installs goes under `$TAPE_INSTALL_DIR`, which maps 1:1
 onto `/`: `work/install/usr/bin/ls` becomes `/usr/bin/ls`.
 
+## Reproducing a CI step on a Mac
+
+CI runs on Linux with GNU tools. Two of them behave differently on macOS, and
+both fail in the direction of silence rather than error.
+
+**`tar` is BSD tar and does not support `--keep-directory-symlink`.** The
+dependency-seeding steps in `.github/workflows/build-level.yml` rely on it —
+Duct is merged-`/usr`, so `duct-filesystem` ships `/lib` as a symlink to
+`usr/lib` and other packages ship real paths beneath it; without the flag tar
+replaces the symlink with a directory and the tree splits in two. On macOS the
+flag is rejected outright, the extraction does nothing, and you are left with
+an **empty** directory that looks like a seeding bug in CI rather than a
+missing flag in your terminal. Use `gtar` from coreutils, or reproduce inside a
+Linux container.
+
+**`make` is not GNU make** and rejects `--eval`. `tools/check-build-order.sh`
+uses `make -pn` instead for exactly this reason, and `tools/dep-levels.sh` does
+its graph work in `awk` rather than with `declare -A`, since associative arrays
+need bash 4 and macOS ships 3.2. Both scripts are meant to run before you push;
+keep new ones that way.
+
 ## Constraints worth knowing before writing a recipe
 
 - `version` and `subversion` must both parse as semver, or the resolver skips
