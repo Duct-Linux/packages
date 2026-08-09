@@ -1,0 +1,24 @@
+[package]
+name = "fribidi"
+description = "Unicode bidirectional algorithm implementation"
+version = "1.0.16"
+subversion = "1"
+authors = ["The FriBidi project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]

@@ -1,0 +1,24 @@
+[package]
+name = "gsettings-desktop-schemas"
+description = "Shared GSettings schemas for the desktop"
+version = "48.0.0"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glib = ">=2.84.0"
+
+[dependencies.build]

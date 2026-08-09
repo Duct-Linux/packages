@@ -1,7 +1,7 @@
 [package]
 name = "kmod"
-description = "Kernel module loading and inspection tools"
-version = "34.0.0"
+description = "Kernel module loading and dependency tools"
+version = "33.0.0"
 subversion = "1"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
@@ -13,10 +13,10 @@ script = "../_scripts/fetch.sh"
 script = "../_scripts/prepare.sh"
 
 [build]
-script = "../_scripts/build-meson.sh"
+script = "../_scripts/build.sh"
 
 [install]
-script = "../_scripts/install-meson.sh"
+script = "../_scripts/install.sh"
 
 [dependencies]
 glibc = ">=2.42.0"

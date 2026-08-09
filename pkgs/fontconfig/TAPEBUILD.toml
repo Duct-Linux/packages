@@ -1,0 +1,27 @@
+[package]
+name = "fontconfig"
+description = "Font discovery and configuration library"
+version = "2.16.0"
+subversion = "1"
+authors = ["freedesktop.org"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+freetype = ">=2.13.3"
+expat = ">=2.7.1"
+util-linux = ">=2.41.1"
+
+[dependencies.build]

@@ -1,0 +1,25 @@
+[package]
+name = "libepoxy"
+description = "OpenGL function pointer management library"
+version = "1.5.10"
+subversion = "1"
+authors = ["The libepoxy authors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+mesa = ">=25.0.0"
+
+[dependencies.build]

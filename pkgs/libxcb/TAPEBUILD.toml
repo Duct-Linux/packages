@@ -1,0 +1,28 @@
+[package]
+name = "libxcb"
+description = "X protocol C-language binding"
+version = "1.17.0"
+subversion = "1"
+authors = ["The X.Org Foundation"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+libXau = ">=1.0.12"
+libXdmcp = ">=1.1.5"
+
+[dependencies.build]
+xcb-proto = ">=1.17.0"
+python = ">=3.13.0"

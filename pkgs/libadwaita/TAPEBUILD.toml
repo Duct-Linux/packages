@@ -1,0 +1,28 @@
+[package]
+name = "libadwaita"
+description = "GNOME building blocks for GTK 4"
+version = "1.7.2"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+gtk4 = ">=4.18.0"
+glib = ">=2.84.0"
+appstream = ">=1.0.4"
+pango = ">=1.56.3"
+
+[dependencies.build]

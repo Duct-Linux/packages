@@ -1,0 +1,27 @@
+[package]
+name = "curl"
+description = "URL transfer library and command-line tool"
+version = "8.13.0"
+subversion = "1"
+authors = ["Daniel Stenberg and contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+openssl = ">=4.0.0"
+zlib = ">=1.3.1"
+ca-certificates = ">=2026.7.16"
+
+[dependencies.build]

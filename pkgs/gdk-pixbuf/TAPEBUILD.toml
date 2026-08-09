@@ -1,0 +1,29 @@
+[package]
+name = "gdk-pixbuf"
+description = "Image loading library for GTK"
+version = "2.42.12"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+libpng = ">=1.6.47"
+libjpeg-turbo = ">=3.1.0"
+libtiff = ">=4.7.0"
+shared-mime-info = ">=2.4.0"
+
+[dependencies.build]

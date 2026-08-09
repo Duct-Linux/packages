@@ -1,0 +1,19 @@
+[package]
+name = "python-mako"
+description = "Templating engine for Python"
+version = "1.3.10"
+subversion = "1"
+authors = ["Michael Bayer"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+python = ">=3.13.0"
+python-markupsafe = ">=3.0.2"
+
+[dependencies.build]

@@ -1,0 +1,28 @@
+[package]
+name = "wayland"
+description = "Wayland core protocol library and scanner"
+version = "1.23.1"
+subversion = "1"
+authors = ["The Wayland project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+libffi = ">=3.4.8"
+expat = ">=2.7.1"
+libxml2 = ">=2.13.0"
+
+[dependencies.build]
+meson = ">=1.8.2"

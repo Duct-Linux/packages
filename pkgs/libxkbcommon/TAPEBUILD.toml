@@ -1,0 +1,28 @@
+[package]
+name = "libxkbcommon"
+description = "Keyboard keymap compiler and handling library"
+version = "1.8.1"
+subversion = "1"
+authors = ["freedesktop.org"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+xkeyboard-config = ">=2.44.0"
+libxml2 = ">=2.13.0"
+libxcb = ">=1.17.0"
+
+[dependencies.build]
+meson = ">=1.8.2"

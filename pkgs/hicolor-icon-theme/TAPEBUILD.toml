@@ -1,0 +1,23 @@
+[package]
+name = "hicolor-icon-theme"
+description = "The fallback icon theme"
+version = "0.18.0"
+subversion = "1"
+authors = ["freedesktop.org"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+
+[dependencies.build]

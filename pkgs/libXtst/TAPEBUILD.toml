@@ -1,0 +1,28 @@
+[package]
+name = "libXtst"
+description = "X Test extension library"
+version = "1.2.5"
+subversion = "1"
+authors = ["The X.Org Foundation"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+libX11 = "*"
+libXext = "*"
+libXi = "*"
+xorgproto = "*"
+
+[dependencies.build]

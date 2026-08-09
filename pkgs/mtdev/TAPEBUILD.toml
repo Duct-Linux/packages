@@ -1,0 +1,24 @@
+[package]
+name = "mtdev"
+description = "Multitouch protocol translation library"
+version = "1.1.7"
+subversion = "1"
+authors = ["Henrik Rydberg"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]

@@ -1,0 +1,27 @@
+[package]
+name = "libwebp"
+description = "WebP image codec"
+version = "1.5.0"
+subversion = "1"
+authors = ["Google"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+libjpeg-turbo = ">=3.1.0"
+libpng = ">=1.6.47"
+libtiff = ">=4.7.0"
+
+[dependencies.build]

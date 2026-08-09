@@ -76,25 +76,99 @@ BUILDER_PKGS := \
 # exists to prevent. ninja bootstraps with python3, meson *is* python, and
 # everything from tier 1 onwards is configured by one or the other.
 TOOLS_PKGS := \
-	python gettext ninja meson gperf \
-	libxml2 libxslt python-markupsafe python-jinja2
+	python gettext ninja cmake meson gperf \
+	libxml2 libxslt python-markupsafe python-jinja2 python-mako \
+	openssl ca-certificates
 
 # Tier 1: the system and session base a desktop sits on.
 #
 # Ordered by what configure looks for, not by subject: libxcrypt before anything
 # that hashes a password, util-linux before anything that reads a block device,
 # and elogind last because it wants nearly all of the rest.
+#
+# util-linux and kmod are also the live ISO's, and their recipes are that work's
+# rather than this one's. They are listed here because eudev and elogind link
+# libblkid, libmount and libkmod and so have to be built after them; a name
+# appearing twice in ALL_PKGS costs nothing, since the second pass skips a
+# package that is already built.
 SESSION_PKGS := \
 	libxcrypt attr acl libcap expat libffi pcre2 \
 	util-linux linux-pam shadow kmod eudev \
 	dbus duktape iso-codes xkeyboard-config hwdata elogind
+
+# Tier 2: everything between a GPU and a window.
+#
+# The X client libraries are here even though nothing runs an X server: several
+# GNOME components link them regardless of backend, and they are what an
+# Xwayland package would need first. mesa is built --without glx, so this is the
+# client side and nothing more.
+#
+# llvm is second to last and is by far the longest build in the set. It is here
+# for mesa's llvmpipe, which is what draws the desktop whenever the machine's
+# own driver did not load -- on a live ISO, most of the first boot.
+GRAPHICS_PKGS := \
+	xorg-util-macros xorgproto xtrans xcb-proto \
+	libXau libXdmcp libxcb libX11 \
+	libXext libXrender libXfixes libXdamage libXcomposite \
+	libXrandr libXi libXinerama libXcursor libXtst \
+	libpciaccess libdrm wayland wayland-protocols \
+	mtdev libevdev libinput libxkbcommon \
+	llvm mesa
+
+# Tier 3: text rendering, up to the point where glib is needed.
+#
+# The order is not by subject. harfbuzz, cairo and pango are *not* here beside
+# freetype: each only builds the GLib-aware version GNOME needs if glib is
+# already installed when it configures, and each degrades silently rather than
+# failing if it is not.
+FONT_PKGS := \
+	libpng brotli freetype fontconfig fribidi pixman
+
+# The introspection cycle. See SECOND_PASS_PKGS below -- glib is built once
+# here, then again immediately after gobject-introspection, before anything
+# tries to introspect against it.
+GLIB_PKGS := \
+	glib gobject-introspection
+
+# Tier 4: the GTK stack. Everything here is built after glib's second pass,
+# because everything here generates introspection data and g-ir-scanner cannot
+# produce a Pango-1.0.gir without a GObject-2.0.gir to resolve against.
+GTK_PKGS := \
+	harfbuzz cairo pango \
+	libjpeg-turbo libtiff libwebp \
+	shared-mime-info desktop-file-utils hicolor-icon-theme \
+	gdk-pixbuf graphene libepoxy \
+	libyaml curl libxmlb appstream \
+	gsettings-desktop-schemas \
+	gtk4 libadwaita adwaita-icon-theme cantarell-fonts
+
+# Packages whose dependency graph has a cycle in it, and which therefore have to
+# be built a second time once the far side of the cycle exists.
+#
+# glib is the only one. g-ir-scanner links glib, and glib's own typelibs are
+# produced by g-ir-scanner, so neither can be first: the first pass produces a
+# glib without typelibs, gobject-introspection builds against it, and the second
+# pass produces Gio-2.0.typelib and the rest. Those are not optional -- gjs
+# cannot import Gio without them, and gnome-shell is written in JavaScript.
+#
+# The recipe decides which pass it is in by looking for g-ir-scanner, so the two
+# runs differ only in what is installed when they happen.
+SECOND_PASS_PKGS := glib
 
 # Built in duct/rust rather than duct/chroot, because there is no Rust compiler
 # in the Duct package set. Cross-linked against Duct's own glibc, so the result
 # is bound to the libc that ships -- see docker/Dockerfile.rust.
 RUST_PKGS := uutils-coreutils
 
-ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(TOOLS_PKGS) $(SESSION_PKGS)
+# Split at the introspection cycle rather than concatenated, because glib's
+# second pass has to happen *between* the two halves. Anything in the second
+# half that generates a .gir needs GObject-2.0.gir to resolve against, and only
+# the second pass produces it.
+PRE_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(TOOLS_PKGS) $(SESSION_PKGS) \
+	$(GRAPHICS_PKGS) $(FONT_PKGS) $(GLIB_PKGS)
+POST_PKGS := $(GTK_PKGS)
+
+ALL_PKGS := $(PRE_PKGS) $(POST_PKGS)
 
 # Packages that are not machine-specific. Anything not listed is built for
 # $(TARGET); "any" installs on every architecture.
@@ -108,6 +182,15 @@ ARCH_python-markupsafe := any
 ARCH_iso-codes := any
 ARCH_xkeyboard-config := any
 ARCH_hwdata := any
+ARCH_python-mako := any
+ARCH_xorg-util-macros := any
+ARCH_xorgproto := any
+ARCH_xtrans := any
+ARCH_xcb-proto := any
+ARCH_wayland-protocols := any
+ARCH_hicolor-icon-theme := any
+ARCH_adwaita-icon-theme := any
+ARCH_cantarell-fonts := any
 
 pkg_target = $(if $(ARCH_$(1)),$(ARCH_$(1)),$(TARGET))
 
@@ -128,7 +211,7 @@ DOCKER_ARGS = --rm \
 DOCKER      = docker run $(DOCKER_ARGS) --entrypoint /bin/bash $(IMAGE) -c
 DOCKER_REPO = docker run $(DOCKER_ARGS) --entrypoint /bin/bash $(REPO_IMAGE) -c
 
-.PHONY: all packages packages-native packages-rust repo key clean clean-repo dirs stage pin toolchain check-sources
+.PHONY: all packages packages-native packages-second-pass packages-rust repo key clean clean-repo dirs stage pin toolchain check-sources
 
 all: repo
 
@@ -217,12 +300,40 @@ built = $(wildcard $(PKGS)/$(1)-[0-9]*.tape.tar.gz)
 skip_if_built = $(if $(REBUILD),,$(if $(call built,$(1)),true,))
 
 packages-native: stage check-sources
-	@set -e; $(foreach p,$(ALL_PKGS), \
+	@set -e; $(foreach p,$(PRE_PKGS), \
 		if $(if $(call skip_if_built,$(p)),true,false); then \
 			echo "==> $(p) (already built)"; \
 		else \
 			echo "==> $(p) ($(call pkg_target,$(p)))"; \
 			$(DOCKER) "$(call BUILD_IN_CONTAINER,$(p))"; \
+		fi; )
+	@$(MAKE) --no-print-directory packages-second-pass
+	@set -e; $(foreach p,$(POST_PKGS), \
+		if $(if $(call skip_if_built,$(p)),true,false); then \
+			echo "==> $(p) (already built)"; \
+		else \
+			echo "==> $(p) ($(call pkg_target,$(p)))"; \
+			$(DOCKER) "$(call BUILD_IN_CONTAINER,$(p))"; \
+		fi; )
+
+# The second pass over $(SECOND_PASS_PKGS), run between $(PRE_PKGS) and
+# $(POST_PKGS) rather than at the end.
+#
+# The artifact is deliberately *not* deleted first: the build container is
+# seeded by unpacking every package in $(PKGS), and glib's second pass needs
+# g-ir-scanner, which links the glib from the first one. tape-builder overwrites
+# the archive in place, so the new one simply replaces the old.
+#
+# A stamp rather than the artifact's existence, because the artifact exists
+# after the first pass too and is indistinguishable from the second.
+packages-second-pass: dirs
+	@set -e; $(foreach p,$(SECOND_PASS_PKGS), \
+		if [ -f $(OUT)/stamps/$(p).pass2 ] && [ -z "$(REBUILD)" ]; then \
+			echo "==> $(p) (second pass already done)"; \
+		else \
+			echo "==> $(p) (second pass, $(call pkg_target,$(p)))"; \
+			$(DOCKER) "$(call BUILD_IN_CONTAINER,$(p))"; \
+			mkdir -p $(OUT)/stamps && touch $(OUT)/stamps/$(p).pass2; \
 		fi; )
 
 # The Rust island. Kept as its own target so the 29 native packages do not wait
