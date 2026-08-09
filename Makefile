@@ -75,10 +75,16 @@ BUILDER_PKGS := \
 # they were only ever built by hand -- which is exactly the drift ALL_PKGS
 # exists to prevent. ninja bootstraps with python3, meson *is* python, and
 # everything from tier 1 onwards is configured by one or the other.
+# libffi comes *before* python, and the order is load-bearing rather than tidy.
+# Python builds the extension modules whose dependencies it can find at the time
+# and silently omits the rest: built without libffi it has no _ctypes, and so no
+# ctypes at all, which surfaced as mesa's code generator dying on "No module
+# named '_ctypes'" three tiers later.
 TOOLS_PKGS := \
-	python gettext ninja cmake meson gperf \
+	libffi python openssl ca-certificates \
+	gettext ninja cmake meson gperf \
 	libxml2 libxslt python-markupsafe python-jinja2 python-mako \
-	python-setuptools python-pyyaml python-pycparser openssl ca-certificates
+	python-setuptools python-pyyaml python-pycparser
 
 # Tier 1: the system and session base a desktop sits on.
 #
@@ -92,7 +98,7 @@ TOOLS_PKGS := \
 # appearing twice in ALL_PKGS costs nothing, since the second pass skips a
 # package that is already built.
 SESSION_PKGS := \
-	libxcrypt attr acl libcap expat libffi pcre2 \
+	libxcrypt attr acl libcap expat pcre2 \
 	util-linux linux-pam shadow kmod eudev \
 	dbus duktape iso-codes xkeyboard-config hwdata elogind
 
