@@ -10,7 +10,7 @@ packagers = ["ItzYanick"]
 script = "../_scripts/fetch.sh"
 
 [prepare]
-script = "../_scripts/prepare.sh"
+script = "prepare.sh"
 
 [build]
 script = "../_scripts/build-meson.sh"
