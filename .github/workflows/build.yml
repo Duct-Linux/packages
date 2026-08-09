@@ -161,10 +161,19 @@ jobs:
           # appeared three times here, in the build matrix, in build-any and in
           # publish. Naming the tag makes it unrepresentable.
           entries='[]'
+          # seed_arch is the fifth field and it is not a duplicate of arch.
+          #
+          # arch is what the PACKAGE is stamped for. seed_arch is what the
+          # MACHINE running the build is. They differ for exactly one case, and
+          # that case broke: an "any" package is architecture-independent in its
+          # output, but its build still runs on a real runner and still needs
+          # real dependencies for that runner's architecture. Seeding it with
+          # "any" artifacts alone gives it nothing at all.
           add() {
             entries=$(jq -c \
               --arg package "$1" --arg arch "$2" --arg runner "$3" --arg image "$4" \
-              '. + [{package:$package, arch:$arch, runner:$runner, image:$image}]' <<<"$entries")
+              --arg seed_arch "$5" \
+              '. + [{package:$package, arch:$arch, runner:$runner, image:$image, seed_arch:$seed_arch}]' <<<"$entries")
           }
 
           for p in $sel; do
@@ -177,7 +186,8 @@ jobs:
               # runner and an image that exist. Prefer x86_64 when available.
               a=${found[0]}
               for c in "${found[@]}"; do [ "$c" = x86_64 ] && a=x86_64; done
-              add "$p" any "$(runner_for "$a")" "$(image_for "$a")"
+              # Stamped "any", but built on $a's runner -- so it seeds $a.
+              add "$p" any "$(runner_for "$a")" "$(image_for "$a")" "$a"
               continue
             fi
 
@@ -205,7 +215,7 @@ jobs:
                 echo "::warning::$image does not exist; not building $p for $a"
                 continue
               fi
-              add "$p" "$a" "$(runner_for "$a")" "$image"
+              add "$p" "$a" "$(runner_for "$a")" "$image" "$a"
             done
           done
 

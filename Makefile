@@ -112,13 +112,24 @@ SUPPORT_PKGS := ca-certificates openssl python
 
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) $(BOOT_PKGS)
 
-# Packages that are not machine-specific. Anything not listed is built for
-# $(TARGET); "any" installs on every architecture.
-ARCH_duct-filesystem := any
-ARCH_duct-live       := any
-ARCH_ca-certificates := any
-
-pkg_target = $(if $(ARCH_$(1)),$(ARCH_$(1)),$(TARGET))
+# Packages that are not machine-specific: built once, installable everywhere.
+#
+# Read from the recipe's own pkg.env rather than listed here, because a list
+# here is a SECOND source of truth and the two silently disagreed. CI's select
+# job greps pkg.env for PKG_ARCH; this used to consult hardcoded ARCH_<name>
+# variables. A recipe declaring only one of the two was not an error -- it
+# produced a package stamped "any" locally and two arch-stamped packages in
+# CI, or the reverse, with nothing to say so.
+#
+# Both instances in the tree were half-declared and neither had been noticed:
+# duct-live had only the Makefile entry, ca-certificates only the pkg.env one.
+# Deriving from pkg.env makes the disagreement unrepresentable rather than
+# something to catch by inspection.
+#
+# One `grep` per package at expansion time, which is not measurable against a
+# build that compiles gcc.
+pkg_arch_any = $(shell grep -qxE 'PKG_ARCH=any' $(PKGROOT)/pkgs/$(1)/pkg.env 2>/dev/null && echo any)
+pkg_target = $(if $(call pkg_arch_any,$(1)),any,$(TARGET))
 
 JOBS ?= $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
 
@@ -243,7 +254,29 @@ BUILD_IN_CONTAINER = \
 # gcc first. REBUILD=1 forces the lot; deleting one artifact rebuilds just that
 # one.
 built = $(wildcard $(PKGS)/$(1)-[0-9]*.tape.tar.gz)
-skip_if_built = $(if $(REBUILD),,$(if $(call built,$(1)),true,))
+
+# ... but only if the artifact is newer than everything that went into it.
+#
+# "Already built" used to mean nothing more than "a file with that name
+# exists", so editing a recipe and re-running produced the OLD package with no
+# indication anything had been skipped. That is not hypothetical: an ISO was
+# built and booted carrying a duct-live from before its inittab changed, and
+# the only symptom was a boot test looking for a message that the shipped
+# package could not print.
+#
+# The inputs are the recipe directory, the shared stage scripts and the version
+# pins -- the same three things CI's select job treats as invalidating, so the
+# two agree about what a change is. `find -newer ... -print -quit` stops at the
+# first hit, so this is one stat-walk per package and not a scan of the tree.
+#
+# Timestamps rather than digests deliberately: a digest would be more rigorous
+# and needs somewhere to record it, and the failure being prevented here is
+# "someone edited a file and did not notice", which a timestamp catches.
+stale = $(shell [ -n "$(strip $(call built,$(1)))" ] && \
+	find $(PKGROOT)/pkgs/$(1) $(PKGROOT)/pkgs/_scripts $(PKGROOT)/pkgs/versions.env \
+	     -newer $(firstword $(call built,$(1))) -print -quit 2>/dev/null)
+
+skip_if_built = $(if $(REBUILD),,$(if $(call built,$(1)),$(if $(call stale,$(1)),,true),))
 
 packages-native: stage check-sources
 	@set -e; $(foreach p,$(ALL_PKGS), \
