@@ -132,11 +132,39 @@ jobs:
       # that exists in the run so far, and because this job only starts once
       # every lower level has finished, that set is exactly the levels below.
       # A level that needs nothing from this run simply finds nothing.
-      - name: Download packages built earlier in this run
+      # Scoped to this architecture, and to "any".
+      #
+      # `pattern: pkg-*` pulled every artifact in the run -- including the
+      # other architecture's, because the matrix builds both. The aarch64 job
+      # copied x86_64 binaries over its own and the kernel build died with
+      #
+      #   /usr/bin/bc: cannot execute binary file: Exec format error
+      #
+      # which is a far worse failure than the missing file it replaced: the
+      # file is present, the assertion passes, and only the loader objects.
+      #
+      # Two steps because download-artifact takes a single glob and the correct
+      # set is a union. It is the same union the published seeding above
+      # already expresses as `arch in (<arch>, any)`: packages stamped "any"
+      # are built once and needed by every architecture, so scoping to the
+      # architecture alone would drop them -- and they include the tools other
+      # packages cannot build without.
+      - name: Download this architecture's packages from earlier levels
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          pattern: pkg-*
+          pattern: pkg-*-${{ matrix.arch }}
+          path: dl
+          merge-multiple: true
+
+      # Skipped when the job is itself building an "any" package, because the
+      # pattern above already matched them.
+      - name: Download architecture-independent packages from earlier levels
+        if: matrix.arch != 'any'
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: pkg-*-any
           path: dl
           merge-multiple: true
 
@@ -145,26 +173,49 @@ jobs:
           set -euo pipefail
           mkdir -p deps
           n=0
+          downloaded=0
           for f in dl/*.tape.tar.gz; do
             [ -e "$f" ] || continue
-            case $(basename "$f") in ${{ matrix.package }}-*) continue ;; esac
+            downloaded=$((downloaded + 1))
+            base=$(basename "$f")
+            case $base in ${{ matrix.package }}-*) continue ;; esac
+
+            # Filter again, on the filename, and deliberately not instead of
+            # the download pattern.
+            #
+            # Package files are NAME-VERSION-SUBVERSION.ARCH.tape.tar.gz, so
+            # the architecture is right there and this cannot be got subtly
+            # wrong the way a remote glob can. Three separate bugs have now
+            # been found in this one code path -- no seeding, a copy that
+            # abandoned itself, and cross-architecture contamination -- so it
+            # gets a belt as well as braces.
+            arch=${base%.tape.tar.gz}
+            arch=${arch##*.}
+            if [ "$arch" != '${{ matrix.arch }}' ] && [ "$arch" != any ]; then
+              echo "::warning::skipping $base: built for $arch, this job is ${{ matrix.arch }}"
+              continue
+            fi
+
             tar xzf "$f" -C deps --strip-components=1 \
               --keep-directory-symlink --no-same-permissions --no-same-owner install
             n=$((n+1))
           done
-          echo "seeded $n packages from level(s) below this one"
+          echo "seeded $n packages from level(s) below this one ($downloaded downloaded)"
 
-          # Above level 0 there is always something to seed -- that is what
-          # being above level 0 means. Seeding nothing there means the download
-          # step failed rather than found nothing, and it is allowed to fail
-          # quietly because at level 0 finding nothing is correct.
+          # The check that remains useful once the seed is architecture-scoped.
           #
-          # Without this assertion the two are indistinguishable, and the
-          # dangerous outcome is not a confusing failure: it is a job that
-          # builds against the published packages instead, SUCCEEDS, and ships
-          # something built against stale versions of its own dependencies.
-          if [ '${{ inputs.level }}' != '0' ] && [ "$n" -eq 0 ]; then
-            echo "::error::level ${{ inputs.level }} seeded no packages from this run; the artifact download must have failed"
+          # It used to be "above level 0, seeding nothing means the download
+          # failed". That is no longer true: with scoping, a level can
+          # legitimately seed zero for one architecture -- everything below it
+          # might be "any" and already matched, or belong to the other
+          # architecture entirely.
+          #
+          # What is still a real signal is downloading nothing AT ALL above
+          # level 0, since every level below has uploaded something. That
+          # separates a broken download from a correctly empty selection, which
+          # is what the assertion was protecting against in the first place.
+          if [ '${{ inputs.level }}' != '0' ] && [ "$downloaded" -eq 0 ]; then
+            echo "::error::level ${{ inputs.level }} downloaded no artifacts at all; the download step must have failed"
             exit 1
           fi
 
