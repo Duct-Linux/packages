@@ -2,7 +2,7 @@
 name = "llvm"
 description = "Compiler infrastructure libraries"
 version = "20.1.8"
-subversion = "1"
+subversion = "2"
 authors = ["The LLVM Project"]
 packagers = ["ItzYanick"]
 
