@@ -82,8 +82,8 @@ jobs:
           fi
           files=$(sqlite3 repo.db \
             "select name||'-'||version||'-'||subversion||'.'||arch||'.tape.tar.gz' \
-             from packages where arch in ('${{ matrix.arch }}','any') and deleted_at is null;")
-          [ -n "$files" ] || { echo "::notice::nothing published for ${{ matrix.arch }} yet"; exit 0; }
+             from packages where arch in ('${{ matrix.seed_arch }}','any') and deleted_at is null;")
+          [ -n "$files" ] || { echo "::notice::nothing published for ${{ matrix.seed_arch }} yet"; exit 0; }
           n=0
           for f in $files; do
             # The package being built is deliberately not seeded: it would be
@@ -132,7 +132,24 @@ jobs:
       # that exists in the run so far, and because this job only starts once
       # every lower level has finished, that set is exactly the levels below.
       # A level that needs nothing from this run simply finds nothing.
-      # Scoped to this architecture, and to "any".
+      # Scoped to the architecture this job RUNS ON, and to "any".
+      #
+      # seed_arch, not arch. They are the same for every per-architecture
+      # package and differ for "any" ones, which are stamped architecture-
+      # independent but still compile on a real machine and still need that
+      # machine's dependencies.
+      #
+      # THE INVARIANT THIS RESTS ON: an "any" package is built against ONE
+      # architecture's dependencies and installed on every architecture. That
+      # is only safe while "any" packages are genuinely architecture-
+      # independent in their OUTPUT -- scripts, configuration, certificates.
+      # An "any" package that shipped an ELF object would be built for one
+      # machine and installed on another, and nothing here would notice.
+      #
+      # duct-3's check that an "any"-stamped package contains no ELF is what
+      # enforces that, so these two pieces depend on each other: this scoping
+      # is safe because that check exists, and that check matters because of
+      # this scoping. Neither should be removed without the other.
       #
       # `pattern: pkg-*` pulled every artifact in the run -- including the
       # other architecture's, because the matrix builds both. The aarch64 job
@@ -153,14 +170,19 @@ jobs:
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          pattern: pkg-*-${{ matrix.arch }}
+          pattern: pkg-*-${{ matrix.seed_arch }}
           path: dl
           merge-multiple: true
 
-      # Skipped when the job is itself building an "any" package, because the
-      # pattern above already matched them.
+      # Always, with no skip. seed_arch is a real architecture even for a job
+      # building an "any" package, so this never duplicates the step above.
+      #
+      # The earlier version skipped this whenever the job's own arch was "any",
+      # on the reasoning that the first pattern had already matched. It had --
+      # and the first pattern was pkg-*-any, which matches nothing when every
+      # package below is architecture-specific. The duct-live job downloaded
+      # zero artifacts and the assertion below caught it.
       - name: Download architecture-independent packages from earlier levels
-        if: matrix.arch != 'any'
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -191,8 +213,8 @@ jobs:
             # gets a belt as well as braces.
             arch=${base%.tape.tar.gz}
             arch=${arch##*.}
-            if [ "$arch" != '${{ matrix.arch }}' ] && [ "$arch" != any ]; then
-              echo "::warning::skipping $base: built for $arch, this job is ${{ matrix.arch }}"
+            if [ "$arch" != '${{ matrix.seed_arch }}' ] && [ "$arch" != any ]; then
+              echo "::warning::skipping $base: built for $arch, this job builds on ${{ matrix.seed_arch }}"
               continue
             fi
 
