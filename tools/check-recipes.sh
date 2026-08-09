@@ -342,6 +342,71 @@ def check_meson_options(recipes: dict[str, dict]) -> None:
             fail(name, f"meson options not offered by {tarball}: {', '.join(unknown)}")
 
 
+def version_forms(version: str) -> list[str]:
+    """The spellings of a version that might legitimately appear in a URL.
+
+    Three tolerances, each earned by a real recipe:
+      - trailing ".0" padding, because a version must be three-component semver
+        for tape's resolver but upstream ships "gperf-3.3" and "kmod-33";
+      - dashes for dots with zero-padded parts, for ca-certificates, whose
+        2026.7.16 arrives as cacert-2026-07-16.pem;
+      - the version as written.
+    """
+    forms = [version]
+    parts = version.split(".")
+    while len(parts) > 1 and parts[-1] == "0":
+        parts = parts[:-1]
+        forms.append(".".join(parts))
+    for form in list(forms):
+        bits = form.split(".")
+        forms.append("-".join(b.zfill(2) if i else b for i, b in enumerate(bits)))
+    return forms
+
+
+def check_version_matches_source(recipes: dict[str, dict]) -> None:
+    """The declared version must appear in the source the recipe fetches.
+
+    A package whose contents and label disagree passes every label-based check
+    in this script: the version parses, the constraints resolve against it, the
+    dependencies are all real. Only the bytes are wrong. It happened for real --
+    a partial cherry-pick took a recipe's pkg.env and not its TAPEBUILD.toml, so
+    it fetched openssl 3.5.7 while still declaring 4.0.1.
+
+    The interesting part is where that surfaces. tape-builder does no dependency
+    resolution at build time, so such a package builds perfectly and is not
+    caught until something tries to *install* against it -- rust asking for
+    openssl >=3.5.0 does not match a package stamped 4.0.1. The failure is
+    displaced from build time to install time, and by then it looks like a
+    dependency problem rather than a mislabelled package.
+    """
+    versions_env = {}
+    env_path = PKGS / "versions.env"
+    if env_path.exists():
+        for match in re.finditer(r"^([A-Z0-9_]+)=(.*)$", env_path.read_text(), re.M):
+            versions_env[match.group(1)] = match.group(2)
+
+    def expand(text: str) -> str:
+        # pkg.env refers to $GLIBC_SRCDIR and friends, so the literal has to be
+        # resolved before it can be compared against anything.
+        return re.sub(r"\$([A-Z0-9_]+)",
+                      lambda m: versions_env.get(m.group(1), m.group(0)), text)
+
+    for name, doc in recipes.items():
+        version = doc.get("package", {}).get("version")
+        env_file = PKGS / name / "pkg.env"
+        if not version or not env_file.exists():
+            continue
+        source = expand(" ".join(re.findall(
+            r"^(?:SRC_DIR|SRC_FILE|SRC_URL)=(.*)$", env_file.read_text(), re.M)))
+        if not source.strip():
+            continue  # a package with no upstream source, like duct-filesystem
+        if not any(form in source for form in version_forms(version)):
+            fail(name, f"declares version {version!r} but its source does not "
+                       f"mention it: {source.strip()}. A package whose label and "
+                       "contents disagree builds fine and fails to resolve at "
+                       "install time.")
+
+
 def check_arch_independence() -> None:
     """A package stamped PKG_ARCH=any must contain no machine code.
 
@@ -400,6 +465,7 @@ def main() -> int:
     check_dependencies(recipes, versions)
     check_meson_options(recipes)
     check_declared_tools(recipes, versions)
+    check_version_matches_source(recipes)
     check_arch_independence()
 
     if warnings:
