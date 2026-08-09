@@ -258,6 +258,11 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p out sources deps
+          # duct/bootstrap drops to an unprivileged "builder" user for package
+          # builds, where every other build image runs as root. The mounted
+          # output directory belongs to the runner, so without this the build
+          # completes and then cannot write the package it just made.
+          chmod 0777 out deps
 
           # "any" is a target tape understands; every other value is a triple.
           target='${{ matrix.arch }}'
