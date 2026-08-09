@@ -27,20 +27,15 @@ cd "$DESTDIR/usr/bin"
 # staged interpreter cannot find libpython from a staging root, and the loader
 # error that produces looks like a broken build when nothing is wrong.
 #
-# Three modules are deliberately absent from this list.
+# readline and sqlite3 are deliberately absent from this list: their libraries
+# are genuinely not packaged, and they are the two worth adding the moment
+# either is.
 #
-# readline and sqlite3, because their libraries are genuinely not packaged.
-# They are the two worth adding the moment either is.
-#
-# _ssl, because it cannot currently be built at all: Duct ships OpenSSL 4.0 and
-# Python 3.13's _ssl.c does not compile against it -- ASN1_OCTET_STRING and
-# ASN1_IA5STRING became opaque types, so the module's direct field accesses are
-# now "invalid use of incomplete typedef". That is an upstream version
-# incompatibility, not a packaging mistake, and the consequence is real and
-# worth stating plainly: this interpreter cannot open an https connection.
-# Nothing in the package set needs it to. Resolving it means a newer Python or
-# an older OpenSSL, and that is a distribution-wide decision.
-for mod in _ctypes zlib _bz2 _lzma _curses; do
+# _ssl was absent from it too, for a different reason worth remembering. Under
+# OpenSSL 4.0 the module could not be built at all -- 4.0 made ASN1_OCTET_STRING
+# and ASN1_IA5STRING opaque and _ssl reaches directly into them. The
+# distribution moved to 3.5 LTS, so it builds, and it is asserted here.
+for mod in _ctypes _ssl zlib _bz2 _lzma _curses; do
 	if [ -z "$(find "$DESTDIR/usr/lib" -name "$mod.*.so" -o -name "$mod.so" 2>/dev/null | head -1)" ]; then
 		die "the $mod extension was not built. Python omits a module whose
 	dependency was missing at configure time without saying so -- check that

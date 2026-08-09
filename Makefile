@@ -75,13 +75,15 @@ BUILDER_PKGS := \
 # they were only ever built by hand -- which is exactly the drift ALL_PKGS
 # exists to prevent. ninja bootstraps with python3, meson *is* python, and
 # everything from tier 1 onwards is configured by one or the other.
-# libffi comes *before* python, and the order is load-bearing rather than tidy.
-# Python builds the extension modules whose dependencies it can find at the time
-# and silently omits the rest: built without libffi it has no _ctypes, and so no
-# ctypes at all, which surfaced as mesa's code generator dying on "No module
-# named '_ctypes'" three tiers later.
+# libffi, openssl and ca-certificates come *before* python, and the order is
+# load-bearing rather than tidy. Python builds the extension modules whose
+# dependencies it can find at the time and silently omits the rest: built
+# without libffi it has no _ctypes, and so no ctypes at all, which surfaced as
+# mesa's code generator dying on "No module named '_ctypes'" three tiers later.
+# Built without openssl it has no ssl module and cannot fetch anything over
+# https.
 TOOLS_PKGS := \
-	libffi python openssl ca-certificates \
+	libffi openssl ca-certificates python \
 	gettext ninja cmake meson gperf \
 	libxml2 libxslt itstool python-markupsafe python-jinja2 python-mako \
 	python-setuptools python-pyyaml python-pycparser

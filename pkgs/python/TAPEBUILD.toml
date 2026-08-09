@@ -2,7 +2,7 @@
 name = "python"
 description = "The Python programming language interpreter"
 version = "3.13.7"
-subversion = "3"
+subversion = "4"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 
@@ -32,14 +32,10 @@ ncurses = ">=6.5.0"
 # is no _ctypes and therefore no ctypes -- a gap that appears far from here, as
 # a build script in another package dying on an import.
 #
-# openssl is deliberately NOT listed, and the ssl module is deliberately absent.
-# Duct ships OpenSSL 4.0, and Python 3.13's _ssl.c does not compile against it:
-# ASN1_OCTET_STRING and ASN1_IA5STRING became opaque, so every direct access to
-# their fields is now "invalid use of incomplete typedef". This is a genuine
-# upstream version incompatibility rather than a missing dependency, and the
-# fix is a newer Python or an older OpenSSL, neither of which is this package's
-# decision to make. See install.sh, which asserts what is present and says why
-# ssl is not.
+# openssl is here for the ssl module. It was absent for a while because Python
+# 3.13's _ssl does not compile against OpenSSL 4.0; the distribution moved to
+# 3.5 LTS and it does.
 libffi = ">=3.4.8"
+openssl = ">=3.5.0"
 
 [dependencies.build]
