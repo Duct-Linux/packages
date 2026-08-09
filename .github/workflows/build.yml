@@ -264,7 +264,11 @@ jobs:
           [ "$target" = any ] || target="$target-linux-gnu"
           echo "building ${{ matrix.package }} for $target in ${{ matrix.image }}"
 
-          docker run --rm \
+          # --entrypoint: duct/bootstrap runs tape-builder as its entrypoint, so
+          # "bash -c ..." arrives as arguments to it -- "unknown command bash
+          # for tape-builder". Every image here has /bin/bash; the Duct ones
+          # reach it through the /bin -> usr/bin symlink.
+          docker run --rm --entrypoint /bin/bash \
             -v "$PWD/pkgs":/pkgs:ro \
             -v "$PWD/out":/out \
             -v "$PWD/sources":/cache:ro \
@@ -272,7 +276,7 @@ jobs:
             -e DUCT_SRC_CACHE=/cache \
             -e DUCT_JOBS="$(nproc)" \
             '${{ matrix.image }}' \
-            bash -c "[ -d /deps/usr ] && cp -a /deps/. / ; cp -R /pkgs /tmp/pkgs && exec tape-builder build /tmp/pkgs/${{ matrix.package }} -t $target -o /out"
+            -c "[ -d /deps/usr ] && cp -a /deps/. / ; cp -R /pkgs /tmp/pkgs && exec tape-builder build /tmp/pkgs/${{ matrix.package }} -t $target -o /out"
           ls -l out
 
       - uses: actions/upload-artifact@v4
