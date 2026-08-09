@@ -2,7 +2,7 @@
 name = "curl"
 description = "URL transfer library and command-line tool"
 version = "8.13.0"
-subversion = "2"
+subversion = "3"
 authors = ["Daniel Stenberg and contributors"]
 packagers = ["ItzYanick"]
 
@@ -16,7 +16,7 @@ script = "../_scripts/prepare.sh"
 script = "../_scripts/build.sh"
 
 [install]
-script = "../_scripts/install.sh"
+script = "install.sh"
 
 [dependencies]
 glibc = ">=2.42.0"
