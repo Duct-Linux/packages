@@ -20,7 +20,7 @@ script = "../_scripts/install.sh"
 
 [dependencies]
 glibc = ">=2.42.0"
-kmod = ">=34.0.0"
+kmod = ">=33.0.0"
 util-linux = ">=2.41.1"
 
 [dependencies.build]

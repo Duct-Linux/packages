@@ -25,10 +25,16 @@ done
 # /root is the superuser's home; the rest of the world has no business in it.
 chmod 0750 "$DESTDIR/root"
 
-# /tmp and /var/tmp are conventionally 1777. tape strips the sticky bit on
-# install (untar.go sanitizeMode), so they land as 0777 and the image build
-# restores the bit. Recorded here so the intent is not lost.
-chmod 0777 "$DESTDIR/tmp" "$DESTDIR/var/tmp"
+# /tmp and /var/tmp are 1777: world-writable, but only the owner of a file may
+# remove it. Without the sticky bit any user can delete any other user's
+# temporary files, which is a real hole rather than an untidiness.
+#
+# This used to be 0777 with a comment saying tape strips the sticky bit on
+# install. That is no longer true and may never have been: the daemon's install
+# path sets PreserveSetuid, which carries setuid, setgid *and* sticky through
+# sanitizeMode, and the archive itself records the mode faithfully. The bit
+# survives packaging and installation, so it is set here where it belongs.
+chmod 1777 "$DESTDIR/tmp" "$DESTDIR/var/tmp"
 
 # Merged /usr. Relative targets so the links stay correct under any sysroot --
 # an absolute /usr/bin would resolve against the *host* while staging.

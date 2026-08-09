@@ -32,6 +32,16 @@ PAM
 cat >"$DESTDIR/etc/pam.d/system-session" <<'PAM'
 # Begin /etc/pam.d/system-session
 session   required    pam_unix.so
+# pam_elogind.so registers the login with logind, and creating the session is
+# what creates /run/user/<uid> -- the XDG_RUNTIME_DIR that Wayland's socket,
+# the session bus and every GNOME component's state live in. Without it a
+# graphical login succeeds and then has nowhere to put its socket.
+#
+# The leading "-" is why this can be named here at all: PAM reads it as "skip
+# this module silently if it is not installed", and elogind is built several
+# tiers after Linux-PAM. Without the "-" a system with PAM and no elogind --
+# which is every system between those two builds -- could not log in at all.
+-session  optional    pam_elogind.so
 # End /etc/pam.d/system-session
 PAM
 
