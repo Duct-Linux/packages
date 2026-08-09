@@ -2,7 +2,7 @@
 name = "rust"
 description = "The Rust programming language toolchain"
 version = "1.97.1"
-subversion = "3"
+subversion = "2"
 authors = ["The Rust Project Developers"]
 packagers = ["ItzYanick"]
 
@@ -20,16 +20,11 @@ glibc = ">=2.42.0"
 gcc = ">=15.2.0"
 zlib = ">=1.3.1"
 # cargo links against libssl and libcrypto. Without this the package installs
-# happily and then cargo cannot start: "libssl.so.3: cannot open shared object
+# happily and then cargo cannot start: "libssl.so.4: cannot open shared object
 # file". rustc itself is fine, which is what makes it easy to miss.
-#
-# The constraint has to move with the pin, not merely be loosened: tape reads
-# ">=3.5.0" as >=3.5.0, <3.6.0, so the old ">=4.0.0" would have admitted
-# nothing at all against a 3.5 package rather than quietly still matching.
-openssl = ">=3.5.0"
+openssl = ">=4.0.0"
 
 [dependencies.build]
 cmake = ">=4.0.0"
 ninja = ">=1.13.0"
 python = ">=3.13.0"
-pkgconf = ">=2.5.0"
