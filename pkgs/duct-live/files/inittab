@@ -1,0 +1,32 @@
+# /etc/inittab -- read by busybox init, which is PID 1 on a live Duct system.
+#
+# Format: <tty>:<ignored>:<action>:<command>. The second field is a runlevel in
+# sysvinit and is ignored here; busybox has no runlevels.
+
+# Run once, before anything else, and wait for it.
+::sysinit:/usr/libexec/duct-live/rc
+
+# A session on the console -- whatever the kernel decided that is. With no
+# console= on the command line it is the active virtual terminal; with
+# console=ttyS0 or console=ttyAMA0 it is the serial port, which is how an
+# automated boot test watches the machine come up.
+#
+# console-session rather than bash directly, and that is not a stylistic
+# choice: it goes through login(1) when there is one, so PAM runs and
+# pam_elogind creates /run/user/<uid>. A bare `bash --login` here works today
+# and silently gives a graphical session nowhere to put its Wayland socket
+# later. See files/console-session.
+::respawn:-/usr/libexec/duct-live/console-session
+
+# Two more virtual terminals, on tty2 and tty3.
+#
+# Not tty1: with no console= parameter /dev/console follows the active virtual
+# terminal, which at boot is tty1 -- so an entry for tty1 would put a second
+# shell on the same terminal as the console entry above, and the two would
+# fight over every keystroke.
+tty2::respawn:-/usr/libexec/duct-live/console-session
+tty3::respawn:-/usr/libexec/duct-live/console-session
+
+::ctrlaltdel:/usr/bin/busybox reboot
+::shutdown:/usr/libexec/duct-live/shutdown
+::restart:/usr/sbin/init

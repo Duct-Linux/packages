@@ -1,0 +1,103 @@
+# Changes applied on top of busybox's own defconfig.
+#
+# defconfig already enables nearly every applet the initramfs needs, so this
+# file is short on purpose: it says what must differ, and nothing else. Anything
+# not named here is whatever upstream considers sensible, which is a far better
+# default than a hand-written 1200-line .config that nobody dares touch.
+
+# The reason this package exists. A dynamically linked busybox in an initramfs
+# needs the dynamic loader and glibc alongside it, at exactly the paths it was
+# linked against -- which is the problem the initramfs was supposed to avoid.
+CONFIG_STATIC=y
+
+# The build does not run `make install`, so the applet symlink layout is never
+# used; leaving it enabled only invites someone to run it by accident and
+# scatter 300 symlinks over /usr/bin. The initramfs calls `busybox --install`
+# into its own /bin, where nothing else has a claim.
+# CONFIG_INSTALL_APPLET_SYMLINKS is not set
+CONFIG_INSTALL_APPLET_DONT=y
+
+# Login accounting. glibc's utmp interfaces are on their way out -- they cannot
+# represent a timestamp past 2038 and glibc has been shrinking them release by
+# release -- and a live system with a single root account has nothing to record
+# anyway.
+# CONFIG_FEATURE_UTMP is not set
+# CONFIG_FEATURE_WTMP is not set
+
+# Neither is packaged, and both would be linked against if found.
+# CONFIG_PAM is not set
+# CONFIG_SELINUX is not set
+
+# NFS mounting needs the RPC headers, which glibc stopped shipping when libtirpc
+# took them over. libtirpc is not packaged.
+# CONFIG_FEATURE_MOUNT_NFS is not set
+
+# tc does not compile against a current kernel. It uses the CBQ queueing
+# discipline's structures -- tc_cbq_lssopt, tc_cbq_wrropt and friends -- and
+# CBQ was removed from the kernel in 6.8, taking its definitions in
+# linux/pkt_sched.h with it. busybox 1.37.0 has not caught up, so every build
+# against 6.16 headers fails on networking/tc.c with two dozen "invalid use of
+# undefined type" errors.
+#
+# Nothing here wants tc: traffic shaping is not something an initramfs does.
+# CONFIG_TC is not set
+
+# The hardware-accelerated SHA implementations do not build on arm64.
+# libbb/hash_md5_sha.c dispatches to sha1_process_block64_shaNI whenever
+# CONFIG_SHA1_HWACCEL is set, but that function is defined only in the x86
+# assembly file -- so on any other architecture 1.37.0 fails to compile with
+# "'sha1_process_block64_shaNI' undeclared".
+#
+# Turned off on every architecture rather than only where it breaks. The
+# recipe would otherwise produce a busybox whose contents depend on the machine
+# that built it, and what is being given up is the speed of sha1sum in an
+# initramfs that never computes one.
+# CONFIG_SHA1_HWACCEL is not set
+# CONFIG_SHA256_HWACCEL is not set
+
+# What the initramfs actually calls. All of these are on in defconfig; naming
+# them means a future defconfig change cannot quietly take the boot path away.
+CONFIG_ASH=y
+CONFIG_SH_IS_ASH=y
+CONFIG_MOUNT=y
+CONFIG_FEATURE_MOUNT_LOOP=y
+CONFIG_FEATURE_MOUNT_LOOP_CREATE=y
+CONFIG_FEATURE_MOUNT_FLAGS=y
+CONFIG_FEATURE_MOUNT_OTHERTAB=y
+CONFIG_UMOUNT=y
+CONFIG_SWITCH_ROOT=y
+CONFIG_PIVOT_ROOT=y
+CONFIG_LOSETUP=y
+CONFIG_BLKID=y
+CONFIG_FEATURE_BLKID_TYPE=y
+CONFIG_FINDFS=y
+
+# The filesystems findfs has to recognise by label. ISO9660 is the one the
+# whole boot turns on -- the initramfs locates the live medium with
+# `findfs LABEL=DUCT_LIVE` and nothing else -- and FAT is the same medium seen
+# as a USB stick's EFI system partition. defconfig enables all of these today;
+# naming them means a future defconfig that does not cannot quietly turn the
+# ISO into one that boots to an initramfs shell.
+CONFIG_FEATURE_VOLUMEID_ISO9660=y
+CONFIG_FEATURE_VOLUMEID_UDF=y
+CONFIG_FEATURE_VOLUMEID_FAT=y
+CONFIG_FEATURE_VOLUMEID_EXT=y
+CONFIG_FEATURE_VOLUMEID_SQUASHFS=y
+CONFIG_CPIO=y
+# The initramfs is a cpio archive and duct-mkinitramfs writes it with this.
+# defconfig enables the extractor but not the creator.
+CONFIG_FEATURE_CPIO_O=y
+CONFIG_INIT=y
+CONFIG_FEATURE_USE_INITTAB=y
+CONFIG_HALT=y
+CONFIG_POWEROFF=y
+CONFIG_REBOOT=y
+CONFIG_MODPROBE=y
+CONFIG_DEPMOD=y
+CONFIG_INSMOD=y
+CONFIG_LSMOD=y
+CONFIG_MDEV=y
+CONFIG_MKNOD=y
+CONFIG_MOUNTPOINT=y
+CONFIG_SLEEP=y
+CONFIG_UNAME=y

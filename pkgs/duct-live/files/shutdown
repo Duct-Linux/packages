@@ -1,0 +1,27 @@
+#!/usr/bin/bash
+# Run by busybox init on halt, poweroff or reboot, before it kills everything.
+#
+# A live system has no state worth preserving -- the writable layer is a tmpfs
+# and vanishes with the power. What this is for is the medium: an ISO on a USB
+# stick that is still mounted when the machine cuts power leaves the stick
+# marked dirty, and the next operating system to look at it says so.
+
+PATH=/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin
+export PATH
+
+echo "  * shutting down"
+
+sync
+
+# Innermost first. /run/live/rootfs is the squashfs, /run/live/medium is the
+# ISO it lives inside, and unmounting them the other way round fails on "device
+# busy" and leaves both mounted.
+for mp in /run/live/rootfs /run/live/medium; do
+	mountpoint -q "$mp" && umount "$mp" 2>/dev/null
+done
+
+# Everything else, read-only where it cannot be unmounted -- which is most of
+# it, since / is the overlay this script is running from.
+umount -a -r 2>/dev/null
+
+sync

@@ -63,7 +63,7 @@ TARGET    ?= $(HOST_ARCH)-linux-gnu
 BASE_PKGS := \
 	duct-filesystem linux-headers glibc zlib \
 	gmp mpfr mpc binutils gcc \
-	ncurses bash tape
+	ncurses bash
 
 BUILDER_PKGS := \
 	m4 bison flex make gawk sed grep findutils diffutils \
@@ -74,11 +74,49 @@ BUILDER_PKGS := \
 # is bound to the libc that ships -- see docker/Dockerfile.rust.
 RUST_PKGS := uutils-coreutils
 
-ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS)
+# Everything the live ISO needs and a container image does not.
+#
+# The order is the dependency order, and two entries in it are not obvious.
+# bc and elfutils come before linux because the kernel build needs both: bc
+# generates kernel/time/timeconst.h, and objtool links against libelf. kmod
+# comes before linux too, because the kernel package runs depmod as its last
+# install step and an empty modules.dep is not a failure anything notices.
+#
+# duct-live is last: it is only configuration, but it depends on busybox,
+# util-linux and kmod being real packages rather than intentions.
+BOOT_PKGS := \
+	bc elfutils busybox kmod util-linux \
+	linux grub duct-live
+
+# Recipes that have existed for a while and were never in this list, so nothing
+# ever built them. Each is a build dependency of something in BOOT_PKGS, and
+# each failed in a way that only appeared once the kernel and the bootloader
+# were being built:
+#
+#   python   grub's configure ends with "no suitable Python interpreter found"
+#            and stops. duct/chroot has one as a chapter-7 temporary tool and
+#            duct/builder does not, so grub built in one image and failed in
+#            the other.
+#   openssl  the kernel builds certs/extract-cert against libcrypto whenever
+#            CONFIG_SYSTEM_TRUSTED_KEYRING is set, which arm64's defconfig sets
+#            through CONFIG_INTEGRITY. Turning the keyring off would work and
+#            would also give up module signing and IMA before anyone asked.
+#   ca-certificates
+#            openssl declares it as a runtime dependency. Publishing openssl
+#            without it would put a package in the repository that cannot be
+#            installed.
+#
+# Built, but not necessarily shipped: the ISO manifest in
+# images/Dockerfile.iso is a separate list.
+SUPPORT_PKGS := ca-certificates openssl python
+
+ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific. Anything not listed is built for
 # $(TARGET); "any" installs on every architecture.
 ARCH_duct-filesystem := any
+ARCH_duct-live       := any
+ARCH_ca-certificates := any
 
 pkg_target = $(if $(ARCH_$(1)),$(ARCH_$(1)),$(TARGET))
 
@@ -99,7 +137,7 @@ DOCKER_ARGS = --rm \
 DOCKER      = docker run $(DOCKER_ARGS) --entrypoint /bin/bash $(IMAGE) -c
 DOCKER_REPO = docker run $(DOCKER_ARGS) --entrypoint /bin/bash $(REPO_IMAGE) -c
 
-.PHONY: all packages packages-native packages-rust repo key clean clean-repo dirs stage pin toolchain check-sources
+.PHONY: all packages packages-native packages-tape packages-rust repo key clean clean-repo dirs stage pin toolchain check-sources
 
 all: repo
 
@@ -126,7 +164,7 @@ stage: dirs
 # foreach, not a shell loop: $(call pkg_target,...) is resolved by make, and a
 # shell variable would never match the ARCH_<name> variables -- every package
 # would silently be stamped for $(TARGET), including the arch-independent ones.
-packages: packages-native packages-rust
+packages: packages-native packages-tape packages-rust
 
 # Every package already built is unpacked into the container before the next one
 # is compiled.
@@ -194,6 +232,35 @@ packages-native: stage check-sources
 		else \
 			echo "==> $(p) ($(call pkg_target,$(p)))"; \
 			$(DOCKER) "$(call BUILD_IN_CONTAINER,$(p))"; \
+		fi; )
+
+# The tape island, and the reason it has to be one.
+#
+# tape's recipe copies the binaries out of the image it runs in rather than
+# compiling them, because no Go compiler is packaged. Its install.sh refuses to
+# run anywhere that has /var/lib/tape/installed.db -- an assembled Duct system,
+# where /usr/bin/tape came from a package -- so that the recipe cannot quietly
+# repackage a copy of itself. duct/builder and duct/chroot both trip that
+# guard, which meant `make repo` failed on tape whichever of them was used, and
+# nothing had noticed because the published repository's tape comes from CI.
+#
+# duct/bootstrap is where the binaries are compiled from source, so that is
+# where this builds. --user root because that image drops to uid 1000 for
+# package builds and BUILD_IN_CONTAINER writes to /inst and /.
+#
+# Exactly parallel to the Rust island below: two packages are not compiled from
+# an upstream tarball, and each needs its own image.
+TAPE_PKGS := tape
+
+packages-tape: stage check-sources
+	@set -e; $(foreach p,$(TAPE_PKGS), \
+		if $(if $(call skip_if_built,$(p)),true,false); then \
+			echo "==> $(p) (already built)"; \
+		else \
+			echo "==> $(p) ($(call pkg_target,$(p)), in $(REPO_IMAGE))"; \
+			docker run $(DOCKER_ARGS) --user root \
+				--entrypoint /bin/bash $(REPO_IMAGE) -c \
+				"$(call BUILD_IN_CONTAINER,$(p))"; \
 		fi; )
 
 # The Rust island. Kept as its own target so the 29 native packages do not wait

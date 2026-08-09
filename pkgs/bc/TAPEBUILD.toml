@@ -1,0 +1,26 @@
+[package]
+name = "bc"
+description = "GNU arbitrary precision calculator"
+version = "1.08.2"
+subversion = "1"
+authors = ["upstream"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]
+flex = ">=2.6.4"
+bison = ">=3.8.2"
