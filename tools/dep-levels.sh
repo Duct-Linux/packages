@@ -60,7 +60,14 @@ for p in "$@"; do
 	awk '
 		/^\[dependencies(\.build)?\]/ { in_deps = 1; next }
 		/^\[/                         { in_deps = 0; next }
-		in_deps && /^[A-Za-z0-9_-]+[ \t]*=/ { sub(/[ \t]*=.*/, ""); print }
+		# The character class is deliberately wider than every name in the
+		# tree today. A dependency this does not match is not reported, it is
+		# silently dropped -- and a silently dropped edge is a package
+		# scheduled before the thing it needs, which is the one failure mode
+		# this script must not have. Dots and pluses cost nothing to allow and
+		# appear in names like "gtk+" and "libstdc++" the moment anyone adds
+		# one.
+		in_deps && /^[A-Za-z0-9_.+-]+[ \t]*=/ { sub(/[ \t]*=.*/, ""); print }
 	' "$toml" | while read -r d; do
 		[ -n "$d" ] || continue
 		[ "$d" = "$p" ] && continue

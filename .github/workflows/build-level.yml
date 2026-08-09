@@ -90,14 +90,39 @@ jobs:
             # the previous build of the very thing under test.
             case $f in ${{ matrix.package }}-*) continue ;; esac
             curl -fsSL -o pkg.tar.gz "$REPO_URL/packages/$f" || continue
-            rm -rf one && mkdir one
-            tar xzf pkg.tar.gz -C one
-            # Merge rather than replace: each package owns a disjoint set of
-            # paths, so the union is the installed system.
-            cp -a one/install/. deps/
+            # tar straight into deps/, rather than unpacking to a scratch
+            # directory and `cp -a`-ing the result over.
+            #
+            # The `cp -a` is what this used to do, and the first time it ever
+            # ran against a real published repository it failed:
+            #
+            #   cp: cannot create regular file 'deps/./usr/bin/bashbug':
+            #       Permission denied
+            #
+            # `cp -a` preserves directory modes as it goes, so a package
+            # shipping a directory without a write bit makes every later
+            # package unable to write into it. tar sets directory permissions
+            # after extracting their contents, so the same set unpacks in any
+            # order.
+            #
+            # The three flags each disarm one way this can go wrong:
+            #   --keep-directory-symlink  Duct is merged-/usr, so
+            #     duct-filesystem ships /lib as a symlink to usr/lib and other
+            #     packages ship real paths beneath it. Without this, tar
+            #     replaces the symlink with a directory and the tree splits in
+            #     two.
+            #   --no-same-permissions     deps/ is a build-time seed, not a
+            #     shipped artifact. It has to be readable by the compiler; it
+            #     does not have to reproduce a package's exact modes, and
+            #     insisting on them is what caused the failure above.
+            #   --no-same-owner           the runner is not root and cannot
+            #     restore uid 0 anyway.
+            tar xzf pkg.tar.gz -C deps --strip-components=1 \
+              --keep-directory-symlink --no-same-permissions --no-same-owner install \
+              || { echo "::warning::could not unpack $f; skipping"; continue; }
             n=$((n+1))
           done
-          rm -rf pkg.tar.gz one
+          rm -f pkg.tar.gz
           echo "seeded $n published packages"
 
       # Everything built earlier in *this* run, unpacked on top of the published
@@ -123,13 +148,25 @@ jobs:
           for f in dl/*.tape.tar.gz; do
             [ -e "$f" ] || continue
             case $(basename "$f") in ${{ matrix.package }}-*) continue ;; esac
-            rm -rf one && mkdir one
-            tar xzf "$f" -C one
-            cp -a one/install/. deps/
+            tar xzf "$f" -C deps --strip-components=1 \
+              --keep-directory-symlink --no-same-permissions --no-same-owner install
             n=$((n+1))
           done
-          rm -rf one
           echo "seeded $n packages from level(s) below this one"
+
+          # Above level 0 there is always something to seed -- that is what
+          # being above level 0 means. Seeding nothing there means the download
+          # step failed rather than found nothing, and it is allowed to fail
+          # quietly because at level 0 finding nothing is correct.
+          #
+          # Without this assertion the two are indistinguishable, and the
+          # dangerous outcome is not a confusing failure: it is a job that
+          # builds against the published packages instead, SUCCEEDS, and ships
+          # something built against stale versions of its own dependencies.
+          if [ '${{ inputs.level }}' != '0' ] && [ "$n" -eq 0 ]; then
+            echo "::error::level ${{ inputs.level }} seeded no packages from this run; the artifact download must have failed"
+            exit 1
+          fi
 
       - name: Build
         run: |
@@ -161,7 +198,14 @@ jobs:
             -c "[ -d /deps/usr ] && cp -a /deps/. / ; cp -R /pkgs /tmp/pkgs && exec tape-builder build /tmp/pkgs/${{ matrix.package }} -t $target -o /out"
           ls -l out
 
+      # if-no-files-found: error is not optional here, and it is easy to lose
+      # in a refactor. Without it, a build that produced no package uploads an
+      # empty artifact and the job goes GREEN -- and then every level above it
+      # seeds nothing from that package and fails somewhere else entirely, for
+      # a reason that looks nothing like "the build made nothing".
       - uses: actions/upload-artifact@v4
         with:
           name: pkg-${{ matrix.package }}-${{ matrix.arch }}
           path: out/*.tape.tar.gz
+          if-no-files-found: error
+          retention-days: 7
