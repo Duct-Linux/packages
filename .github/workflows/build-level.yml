@@ -299,7 +299,32 @@ jobs:
             -c '
               set -euo pipefail
 
-              if [ -d /deps/usr ]; then
+              # An image that does not run as root cannot be seeded, and does
+              # not need to be.
+              #
+              # duct/bootstrap drops to uid 1000 for package builds, and it is
+              # the only unprivileged build image. `cp -a` into / then fails on
+              # the very first thing it does -- "cp: preserving times for '/.':
+              # Operation not permitted" -- regardless of what is in /deps, or
+              # whether /deps is empty.
+              #
+              # That copy has ALWAYS failed there. It went unnoticed because
+              # the old idiom ended the statement with a semicolon, which
+              # discarded the status, and because the one package built in that
+              # image is tape -- whose recipe compiles nothing and only copies
+              # binaries already present in the image. It needed no
+              # dependencies, so nothing was lost by the copy not happening.
+              #
+              # Making the copy fatal was right and is what surfaced this: a
+              # step that had been failing silently for as long as it existed
+              # started failing loudly. The fix is not to make it quiet again
+              # but to say plainly that an unprivileged image is not seeded.
+              if [ "$(id -u)" != 0 ]; then
+                echo "::notice::running as uid $(id -u), not root; not seeding dependencies into this image"
+                if [ -d /deps/usr ]; then
+                  echo "::warning::${DUCT_PKG} has dependencies staged in /deps that cannot be installed into an unprivileged image; it must not need them"
+                fi
+              elif [ -d /deps/usr ]; then
                 # --remove-destination unlinks each destination before opening
                 # it. Without it, copying over a *running* binary fails with
                 # ETXTBSY -- and /usr/bin/bash is running this very script.
