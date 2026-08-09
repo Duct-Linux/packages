@@ -168,6 +168,26 @@ jobs:
             exit 1
           fi
 
+      # Paths that belong to the container runtime rather than to any package.
+      #
+      # duct-filesystem ships /dev, /proc, /sys and /etc/hosts, because a root
+      # filesystem has them. Docker also bind-mounts /etc/hosts,
+      # /etc/hostname and /etc/resolv.conf, and mounts /proc and /sys itself --
+      # and a bind-mount target cannot be unlinked. Copying over them fails
+      # with EBUSY ("Device or resource busy") or, for /sys, EROFS.
+      #
+      # Pruned here on the runner rather than in the container: deps/ is the
+      # runner's directory and is mounted read-only on the other side.
+      #
+      # The local Makefile has done exactly this for as long as it has had a
+      # dependency-unpacking step. CI never needed it until seeding started
+      # running for builder images.
+      - name: Prune runtime-owned paths from the seed
+        run: |
+          set -euo pipefail
+          rm -rf deps/dev deps/proc deps/sys
+          rm -f deps/etc/hosts deps/etc/hostname deps/etc/resolv.conf
+
       - name: Build
         run: |
           set -euo pipefail
@@ -187,6 +207,12 @@ jobs:
           # "bash -c ..." arrives as arguments to it -- "unknown command bash
           # for tape-builder". Every image here has /bin/bash; the Duct ones
           # reach it through the /bin -> usr/bin symlink.
+          #
+          # The container script is SINGLE-quoted and its inputs arrive as
+          # environment variables. Double quotes would let the runner's shell
+          # expand $f and $(basename ...) before the container ever saw them --
+          # the same trap packages/Makefile documents at length after it handed
+          # tar an empty filename.
           docker run --rm --entrypoint /bin/bash \
             -v "$PWD/pkgs":/pkgs:ro \
             -v "$PWD/out":/out \
@@ -194,8 +220,60 @@ jobs:
             -v "$PWD/deps":/deps:ro \
             -e DUCT_SRC_CACHE=/cache \
             -e DUCT_JOBS="$(nproc)" \
+            -e DUCT_PKG='${{ matrix.package }}' \
+            -e DUCT_TARGET="$target" \
             '${{ matrix.image }}' \
-            -c "[ -d /deps/usr ] && cp -a /deps/. / ; cp -R /pkgs /tmp/pkgs && exec tape-builder build /tmp/pkgs/${{ matrix.package }} -t $target -o /out"
+            -c '
+              set -euo pipefail
+
+              if [ -d /deps/usr ]; then
+                # --remove-destination unlinks each destination before opening
+                # it. Without it, copying over a *running* binary fails with
+                # ETXTBSY -- and /usr/bin/bash is running this very script.
+                #
+                # That is not a warning: the cp in these images is uutils cp,
+                # which STOPS at the first error rather than carrying on like
+                # GNU cp. One busy file therefore silently abandons the rest of
+                # the copy, which is how a level that had correctly downloaded
+                # and unpacked bc went on to fail with "bc: command not found"
+                # several minutes later, pointing nowhere near the cause.
+                #
+                # packages/Makefile has carried the same flag, and the same
+                # reasoning, since someone hit this locally:
+                #
+                #   overwriting a *running* binary in place fails with ETXTBSY,
+                #   while cp --remove-destination unlinks the old inode and
+                #   leaves running processes attached to it. That is what makes
+                #   it safe to replace glibc and bash underneath the shell doing
+                #   the replacing.
+                cp -a --remove-destination /deps/. /
+
+                # Assert the copy actually completed. set -e catches a cp that
+                # reports failure; this catches one that half-succeeds, which is
+                # the failure mode that cost the most time to find.
+                missing=0
+                for f in /deps/usr/bin/*; do
+                  [ -e "$f" ] || continue
+                  if [ ! -e "/usr/bin/$(basename "$f")" ]; then
+                    echo "not copied: $f" >&2
+                    missing=$((missing + 1))
+                  fi
+                done
+                if [ "$missing" -ne 0 ]; then
+                  echo "the dependency copy did not complete: $missing file(s) missing" >&2
+                  exit 1
+                fi
+
+                # Nothing runs install hooks, so the cache is stale the moment
+                # a library lands. Non-fatal: the loader falls back to searching
+                # the directories in /etc/ld.so.conf, and not every image has
+                # ldconfig at all.
+                ldconfig 2>/dev/null || true
+              fi
+
+              cp -R /pkgs /tmp/pkgs
+              exec tape-builder build "/tmp/pkgs/$DUCT_PKG" -t "$DUCT_TARGET" -o /out
+            '
           ls -l out
 
       # if-no-files-found: error is not optional here, and it is easy to lose
