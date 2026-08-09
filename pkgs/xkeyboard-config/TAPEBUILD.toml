@@ -1,0 +1,23 @@
+[package]
+name = "xkeyboard-config"
+description = "Keyboard configuration database for X and Wayland"
+version = "2.44.0"
+subversion = "1"
+authors = ["The X.Org Foundation"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+
+[dependencies.build]

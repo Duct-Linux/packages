@@ -111,6 +111,47 @@ strip_payload() {
 	done
 }
 
+# finish_install -- everything that happens after `make install`, whatever ran
+# it. Autotools and meson stage the same tree and have the same things wrong
+# with it, so the tail of the two install stages was identical; it is shared
+# here rather than kept in step by hand.
+finish_install() {
+	# The GNU info directory index. Every GNU package wants to write it, and
+	# tape treats two packages claiming one path as a hard error with no
+	# override (daemon/utils/install.go). Nothing regenerates it here anyway,
+	# since tape has no install hooks -- so it is dropped rather than fought
+	# over.
+	rm -f "$DESTDIR/usr/share/info/dir"
+
+	# libtool archives point at build-time paths and break anything that later
+	# reads them from a different prefix. Distributions drop them; nothing in
+	# Duct links with libtool.
+	if [ "${KEEP_LA_FILES:-0}" != "1" ]; then
+		find "$DESTDIR" -name '*.la' -type f -delete 2>/dev/null || true
+	fi
+
+	if [ "${KEEP_DOCS:-0}" != "1" ]; then
+		rm -rf "$DESTDIR/usr/share/doc" "$DESTDIR/usr/share/gtk-doc"
+	fi
+
+	# A recipe can do its own final touch-ups -- splitting, moving, generating a
+	# config file -- without having to replace the whole install stage.
+	if [ -x "$RECIPE_DIR/post-install.sh" ]; then
+		log "running post-install.sh"
+		"$RECIPE_DIR/post-install.sh" || die "post-install.sh failed"
+	fi
+
+	strip_payload
+
+	# An empty payload is almost always a recipe bug -- a wrong DESTDIR, a
+	# configure that installed to /usr/local, a make install that quietly did
+	# nothing. tape would happily package the emptiness and the mistake would
+	# surface much later.
+	if [ -z "$(find "$DESTDIR" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+		die "staging root is empty; nothing would be packaged"
+	fi
+}
+
 # verify_sha256 <file> <expected>
 verify_sha256() {
 	_file=$1

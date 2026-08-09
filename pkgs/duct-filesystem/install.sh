@@ -56,14 +56,46 @@ EOF
 # Only the accounts the base system genuinely needs. Package builds run as root
 # in the image, and nothing here is setuid -- tape cannot represent setuid bits
 # at all, so an account model that depended on them would be a lie.
+#
+# The service accounts below are here rather than in the packages that use them
+# because /etc/passwd can only be owned once: two packages claiming one path is
+# a hard install error in tape, with no override. A daemon whose account is
+# missing does not warn, it refuses to start -- dbus-daemon exits with "Failed
+# to drop privileges", and everything downstream of the bus fails with it.
+#
+# The uids are fixed rather than allocated at install time, because a live ISO
+# and an installed system have to agree on them for a home directory or a
+# runtime directory created under one to be readable under the other.
 cat >"$DESTDIR/etc/passwd" <<'EOF'
 root:x:0:0:root:/root:/bin/bash
+messagebus:x:18:18:D-Bus Message Daemon User:/run/dbus:/usr/bin/false
+polkitd:x:27:27:PolicyKit Daemon Owner:/var/lib/polkit-1:/usr/bin/false
+gdm:x:21:21:GDM Daemon Owner:/var/lib/gdm:/usr/bin/false
+colord:x:71:71:Color Daemon Owner:/var/lib/colord:/usr/bin/false
 nobody:x:65534:65534:Nobody:/nonexistent:/usr/bin/false
 EOF
 
+# The device groups are what seat management hands out: elogind puts the
+# logged-in user's ACL on the DRM node and the input devices, but the groups
+# still have to exist for udev's own rules to chgrp them at all.
 cat >"$DESTDIR/etc/group" <<'EOF'
 root:x:0:
 tty:x:5:
+disk:x:6:
+lp:x:7:
+kmem:x:9:
+wheel:x:10:
+cdrom:x:11:
+messagebus:x:18:
+gdm:x:21:
+polkitd:x:27:
+audio:x:63:
+video:x:64:
+kvm:x:65:
+render:x:66:
+input:x:67:
+colord:x:71:
+users:x:999:
 nogroup:x:65534:
 EOF
 

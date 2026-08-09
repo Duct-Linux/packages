@@ -1,0 +1,26 @@
+[package]
+name = "eudev"
+description = "Device manager for the Linux kernel"
+version = "3.2.14"
+subversion = "1"
+authors = ["The eudev project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+kmod = ">=34.0.0"
+util-linux = ">=2.41.1"
+
+[dependencies.build]

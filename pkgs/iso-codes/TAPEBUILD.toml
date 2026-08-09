@@ -1,0 +1,23 @@
+[package]
+name = "iso-codes"
+description = "ISO country, language, script and currency name lists"
+version = "4.18.0"
+subversion = "1"
+authors = ["The iso-codes maintainers"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+
+[dependencies.build]

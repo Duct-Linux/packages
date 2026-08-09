@@ -1,0 +1,22 @@
+[package]
+name = "meson"
+description = "High productivity build system"
+version = "1.8.2"
+subversion = "1"
+authors = ["The Meson development team"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[install]
+script = "install.sh"
+
+# Pure Python: there is nothing to compile, so there is no build stage and the
+# only runtime dependency is the interpreter. ninja is not listed as a runtime
+# dependency because meson can drive other backends -- but every recipe here
+# uses the ninja one, so _scripts/build-meson.sh checks for it explicitly.
+[dependencies]
+python = ">=3.13.0"
+
+[dependencies.build]

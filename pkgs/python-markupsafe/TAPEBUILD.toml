@@ -1,0 +1,18 @@
+[package]
+name = "python-markupsafe"
+description = "String handling for Python that escapes characters safely for HTML and XML"
+version = "3.0.2"
+subversion = "1"
+authors = ["Pallets"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+python = ">=3.13.0"
+
+[dependencies.build]

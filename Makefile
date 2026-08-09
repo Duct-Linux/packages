@@ -69,16 +69,45 @@ BUILDER_PKGS := \
 	m4 bison flex make gawk sed grep findutils diffutils \
 	tar gzip xz bzip2 patch file pkgconf perl texinfo
 
+# The build tooling the desktop stack needs before any of it can be configured.
+#
+# python and gettext were already recipes but had never been listed here, so
+# they were only ever built by hand -- which is exactly the drift ALL_PKGS
+# exists to prevent. ninja bootstraps with python3, meson *is* python, and
+# everything from tier 1 onwards is configured by one or the other.
+TOOLS_PKGS := \
+	python gettext ninja meson gperf \
+	libxml2 libxslt python-markupsafe python-jinja2
+
+# Tier 1: the system and session base a desktop sits on.
+#
+# Ordered by what configure looks for, not by subject: libxcrypt before anything
+# that hashes a password, util-linux before anything that reads a block device,
+# and elogind last because it wants nearly all of the rest.
+SESSION_PKGS := \
+	libxcrypt attr acl libcap expat libffi pcre2 \
+	util-linux linux-pam shadow kmod eudev \
+	dbus duktape iso-codes xkeyboard-config hwdata elogind
+
 # Built in duct/rust rather than duct/chroot, because there is no Rust compiler
 # in the Duct package set. Cross-linked against Duct's own glibc, so the result
 # is bound to the libc that ships -- see docker/Dockerfile.rust.
 RUST_PKGS := uutils-coreutils
 
-ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS)
+ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(TOOLS_PKGS) $(SESSION_PKGS)
 
 # Packages that are not machine-specific. Anything not listed is built for
 # $(TARGET); "any" installs on every architecture.
+#
+# Kept in step with PKG_ARCH=any in the recipe's pkg.env, which is what CI reads
+# -- the Makefile cannot see into pkg.env, and CI does not read the Makefile.
 ARCH_duct-filesystem := any
+ARCH_meson := any
+ARCH_python-jinja2 := any
+ARCH_python-markupsafe := any
+ARCH_iso-codes := any
+ARCH_xkeyboard-config := any
+ARCH_hwdata := any
 
 pkg_target = $(if $(ARCH_$(1)),$(ARCH_$(1)),$(TARGET))
 

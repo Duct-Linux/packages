@@ -1,0 +1,25 @@
+[package]
+name = "linux-pam"
+description = "Pluggable authentication modules"
+version = "1.7.0"
+subversion = "1"
+authors = ["upstream"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+libxcrypt = ">=4.4.38"
+
+[dependencies.build]
