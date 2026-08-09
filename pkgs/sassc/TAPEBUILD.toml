@@ -20,4 +20,3 @@ glibc = ">=2.42.0"
 libsass = ">=3.6.6"
 
 [dependencies.build]
-pkgconf = ">=2.5.0"

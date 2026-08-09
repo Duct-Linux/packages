@@ -5,7 +5,7 @@
 
 cd "$SRC_PATH"
 install -d "$DESTDIR/usr/bin"
-install -m 0755 bin/sassc "$DESTDIR/usr/bin/sassc"
+install -m 0755 sassc "$DESTDIR/usr/bin/sassc"
 
 finish_install
 log "installed /usr/bin/sassc"
