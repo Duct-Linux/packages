@@ -82,8 +82,8 @@ jobs:
           fi
           files=$(sqlite3 repo.db \
             "select name||'-'||version||'-'||subversion||'.'||arch||'.tape.tar.gz' \
-             from packages where arch in ('${{ matrix.arch }}','any') and deleted_at is null;")
-          [ -n "$files" ] || { echo "::notice::nothing published for ${{ matrix.arch }} yet"; exit 0; }
+             from packages where arch in ('${{ matrix.seed_arch }}','any') and deleted_at is null;")
+          [ -n "$files" ] || { echo "::notice::nothing published for ${{ matrix.seed_arch }} yet"; exit 0; }
           n=0
           for f in $files; do
             # The package being built is deliberately not seeded: it would be
@@ -132,11 +132,61 @@ jobs:
       # that exists in the run so far, and because this job only starts once
       # every lower level has finished, that set is exactly the levels below.
       # A level that needs nothing from this run simply finds nothing.
-      - name: Download packages built earlier in this run
+      # Scoped to the architecture this job RUNS ON, and to "any".
+      #
+      # seed_arch, not arch. They are the same for every per-architecture
+      # package and differ for "any" ones, which are stamped architecture-
+      # independent but still compile on a real machine and still need that
+      # machine's dependencies.
+      #
+      # THE INVARIANT THIS RESTS ON: an "any" package is built against ONE
+      # architecture's dependencies and installed on every architecture. That
+      # is only safe while "any" packages are genuinely architecture-
+      # independent in their OUTPUT -- scripts, configuration, certificates.
+      # An "any" package that shipped an ELF object would be built for one
+      # machine and installed on another, and nothing here would notice.
+      #
+      # duct-3's check that an "any"-stamped package contains no ELF is what
+      # enforces that, so these two pieces depend on each other: this scoping
+      # is safe because that check exists, and that check matters because of
+      # this scoping. Neither should be removed without the other.
+      #
+      # `pattern: pkg-*` pulled every artifact in the run -- including the
+      # other architecture's, because the matrix builds both. The aarch64 job
+      # copied x86_64 binaries over its own and the kernel build died with
+      #
+      #   /usr/bin/bc: cannot execute binary file: Exec format error
+      #
+      # which is a far worse failure than the missing file it replaced: the
+      # file is present, the assertion passes, and only the loader objects.
+      #
+      # Two steps because download-artifact takes a single glob and the correct
+      # set is a union. It is the same union the published seeding above
+      # already expresses as `arch in (<arch>, any)`: packages stamped "any"
+      # are built once and needed by every architecture, so scoping to the
+      # architecture alone would drop them -- and they include the tools other
+      # packages cannot build without.
+      - name: Download this architecture's packages from earlier levels
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
-          pattern: pkg-*
+          pattern: pkg-*-${{ matrix.seed_arch }}
+          path: dl
+          merge-multiple: true
+
+      # Always, with no skip. seed_arch is a real architecture even for a job
+      # building an "any" package, so this never duplicates the step above.
+      #
+      # The earlier version skipped this whenever the job's own arch was "any",
+      # on the reasoning that the first pattern had already matched. It had --
+      # and the first pattern was pkg-*-any, which matches nothing when every
+      # package below is architecture-specific. The duct-live job downloaded
+      # zero artifacts and the assertion below caught it.
+      - name: Download architecture-independent packages from earlier levels
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: pkg-*-any
           path: dl
           merge-multiple: true
 
@@ -145,28 +195,71 @@ jobs:
           set -euo pipefail
           mkdir -p deps
           n=0
+          downloaded=0
           for f in dl/*.tape.tar.gz; do
             [ -e "$f" ] || continue
-            case $(basename "$f") in ${{ matrix.package }}-*) continue ;; esac
+            downloaded=$((downloaded + 1))
+            base=$(basename "$f")
+            case $base in ${{ matrix.package }}-*) continue ;; esac
+
+            # Filter again, on the filename, and deliberately not instead of
+            # the download pattern.
+            #
+            # Package files are NAME-VERSION-SUBVERSION.ARCH.tape.tar.gz, so
+            # the architecture is right there and this cannot be got subtly
+            # wrong the way a remote glob can. Three separate bugs have now
+            # been found in this one code path -- no seeding, a copy that
+            # abandoned itself, and cross-architecture contamination -- so it
+            # gets a belt as well as braces.
+            arch=${base%.tape.tar.gz}
+            arch=${arch##*.}
+            if [ "$arch" != '${{ matrix.seed_arch }}' ] && [ "$arch" != any ]; then
+              echo "::warning::skipping $base: built for $arch, this job builds on ${{ matrix.seed_arch }}"
+              continue
+            fi
+
             tar xzf "$f" -C deps --strip-components=1 \
               --keep-directory-symlink --no-same-permissions --no-same-owner install
             n=$((n+1))
           done
-          echo "seeded $n packages from level(s) below this one"
+          echo "seeded $n packages from level(s) below this one ($downloaded downloaded)"
 
-          # Above level 0 there is always something to seed -- that is what
-          # being above level 0 means. Seeding nothing there means the download
-          # step failed rather than found nothing, and it is allowed to fail
-          # quietly because at level 0 finding nothing is correct.
+          # The check that remains useful once the seed is architecture-scoped.
           #
-          # Without this assertion the two are indistinguishable, and the
-          # dangerous outcome is not a confusing failure: it is a job that
-          # builds against the published packages instead, SUCCEEDS, and ships
-          # something built against stale versions of its own dependencies.
-          if [ '${{ inputs.level }}' != '0' ] && [ "$n" -eq 0 ]; then
-            echo "::error::level ${{ inputs.level }} seeded no packages from this run; the artifact download must have failed"
+          # It used to be "above level 0, seeding nothing means the download
+          # failed". That is no longer true: with scoping, a level can
+          # legitimately seed zero for one architecture -- everything below it
+          # might be "any" and already matched, or belong to the other
+          # architecture entirely.
+          #
+          # What is still a real signal is downloading nothing AT ALL above
+          # level 0, since every level below has uploaded something. That
+          # separates a broken download from a correctly empty selection, which
+          # is what the assertion was protecting against in the first place.
+          if [ '${{ inputs.level }}' != '0' ] && [ "$downloaded" -eq 0 ]; then
+            echo "::error::level ${{ inputs.level }} downloaded no artifacts at all; the download step must have failed"
             exit 1
           fi
+
+      # Paths that belong to the container runtime rather than to any package.
+      #
+      # duct-filesystem ships /dev, /proc, /sys and /etc/hosts, because a root
+      # filesystem has them. Docker also bind-mounts /etc/hosts,
+      # /etc/hostname and /etc/resolv.conf, and mounts /proc and /sys itself --
+      # and a bind-mount target cannot be unlinked. Copying over them fails
+      # with EBUSY ("Device or resource busy") or, for /sys, EROFS.
+      #
+      # Pruned here on the runner rather than in the container: deps/ is the
+      # runner's directory and is mounted read-only on the other side.
+      #
+      # The local Makefile has done exactly this for as long as it has had a
+      # dependency-unpacking step. CI never needed it until seeding started
+      # running for builder images.
+      - name: Prune runtime-owned paths from the seed
+        run: |
+          set -euo pipefail
+          rm -rf deps/dev deps/proc deps/sys
+          rm -f deps/etc/hosts deps/etc/hostname deps/etc/resolv.conf
 
       - name: Build
         run: |
@@ -187,6 +280,12 @@ jobs:
           # "bash -c ..." arrives as arguments to it -- "unknown command bash
           # for tape-builder". Every image here has /bin/bash; the Duct ones
           # reach it through the /bin -> usr/bin symlink.
+          #
+          # The container script is SINGLE-quoted and its inputs arrive as
+          # environment variables. Double quotes would let the runner's shell
+          # expand $f and $(basename ...) before the container ever saw them --
+          # the same trap packages/Makefile documents at length after it handed
+          # tar an empty filename.
           docker run --rm --entrypoint /bin/bash \
             -v "$PWD/pkgs":/pkgs:ro \
             -v "$PWD/out":/out \
@@ -194,8 +293,60 @@ jobs:
             -v "$PWD/deps":/deps:ro \
             -e DUCT_SRC_CACHE=/cache \
             -e DUCT_JOBS="$(nproc)" \
+            -e DUCT_PKG='${{ matrix.package }}' \
+            -e DUCT_TARGET="$target" \
             '${{ matrix.image }}' \
-            -c "[ -d /deps/usr ] && cp -a /deps/. / ; cp -R /pkgs /tmp/pkgs && exec tape-builder build /tmp/pkgs/${{ matrix.package }} -t $target -o /out"
+            -c '
+              set -euo pipefail
+
+              if [ -d /deps/usr ]; then
+                # --remove-destination unlinks each destination before opening
+                # it. Without it, copying over a *running* binary fails with
+                # ETXTBSY -- and /usr/bin/bash is running this very script.
+                #
+                # That is not a warning: the cp in these images is uutils cp,
+                # which STOPS at the first error rather than carrying on like
+                # GNU cp. One busy file therefore silently abandons the rest of
+                # the copy, which is how a level that had correctly downloaded
+                # and unpacked bc went on to fail with "bc: command not found"
+                # several minutes later, pointing nowhere near the cause.
+                #
+                # packages/Makefile has carried the same flag, and the same
+                # reasoning, since someone hit this locally:
+                #
+                #   overwriting a *running* binary in place fails with ETXTBSY,
+                #   while cp --remove-destination unlinks the old inode and
+                #   leaves running processes attached to it. That is what makes
+                #   it safe to replace glibc and bash underneath the shell doing
+                #   the replacing.
+                cp -a --remove-destination /deps/. /
+
+                # Assert the copy actually completed. set -e catches a cp that
+                # reports failure; this catches one that half-succeeds, which is
+                # the failure mode that cost the most time to find.
+                missing=0
+                for f in /deps/usr/bin/*; do
+                  [ -e "$f" ] || continue
+                  if [ ! -e "/usr/bin/$(basename "$f")" ]; then
+                    echo "not copied: $f" >&2
+                    missing=$((missing + 1))
+                  fi
+                done
+                if [ "$missing" -ne 0 ]; then
+                  echo "the dependency copy did not complete: $missing file(s) missing" >&2
+                  exit 1
+                fi
+
+                # Nothing runs install hooks, so the cache is stale the moment
+                # a library lands. Non-fatal: the loader falls back to searching
+                # the directories in /etc/ld.so.conf, and not every image has
+                # ldconfig at all.
+                ldconfig 2>/dev/null || true
+              fi
+
+              cp -R /pkgs /tmp/pkgs
+              exec tape-builder build "/tmp/pkgs/$DUCT_PKG" -t "$DUCT_TARGET" -o /out
+            '
           ls -l out
 
       # if-no-files-found: error is not optional here, and it is easy to lose
