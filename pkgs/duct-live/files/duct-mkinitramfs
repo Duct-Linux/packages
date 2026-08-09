@@ -1,0 +1,93 @@
+#!/usr/bin/bash
+# Build the live initramfs.
+#
+# This runs inside the Duct system it is building an initramfs for, not on the
+# host assembling the ISO. That is deliberate: the initramfs contains Duct's
+# busybox, built by Duct's compiler against Duct's headers, packed by Duct's
+# cpio -- so the ISO's boot path has nothing from the build host in it, and the
+# same command run on a running Duct machine produces the same initramfs.
+#
+#   duct-mkinitramfs [-o OUTPUT] [-r KERNEL_RELEASE]
+#
+# The result is a gzip-compressed newc cpio archive, which is what
+# CONFIG_BLK_DEV_INITRD expects.
+
+set -euo pipefail
+
+PATH=/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin
+export PATH
+
+output=/boot/initramfs.img
+release=$(uname -r)
+
+usage() {
+	echo "usage: duct-mkinitramfs [-o OUTPUT] [-r KERNEL_RELEASE]" >&2
+	exit 2
+}
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+		-o) [ $# -ge 2 ] || usage; output=$2; shift 2 ;;
+		-r) [ $# -ge 2 ] || usage; release=$2; shift 2 ;;
+		-h|--help) usage ;;
+		*) echo "duct-mkinitramfs: unknown argument $1" >&2; usage ;;
+	esac
+done
+
+die() { echo "duct-mkinitramfs: $*" >&2; exit 1; }
+
+busybox=/usr/bin/busybox
+init=/usr/share/duct-live/initramfs-init
+
+[ -x "$busybox" ] || die "$busybox is missing; install the busybox package"
+[ -f "$init" ]    || die "$init is missing; install the duct-live package"
+
+# The property the whole initramfs rests on. A dynamically linked busybox needs
+# the loader and glibc at the paths it was linked against, and neither is in
+# here -- the failure mode is the kernel reporting that /init does not exist,
+# which is true only in the sense that its interpreter does not.
+if command -v readelf >/dev/null 2>&1 && readelf -l "$busybox" 2>/dev/null | grep -q INTERP; then
+	die "$busybox is dynamically linked and cannot be used in an initramfs"
+fi
+
+staging=$(mktemp -d)
+trap 'rm -rf "$staging"' EXIT
+
+mkdir -p "$staging"/{bin,dev,proc,sys,run,newroot}
+
+install -m 0755 "$busybox" "$staging/bin/busybox"
+
+# /init is the only name the kernel looks for, and it must be executable.
+install -m 0755 "$init" "$staging/init"
+
+# One symlink so the shebang in /init resolves. The rest are made at boot by
+# `busybox --install`, which knows the applet list better than this script can.
+ln -sf busybox "$staging/bin/sh"
+
+echo "duct-mkinitramfs: packing for $release"
+
+# find | cpio, with the paths relative to the staging root: an initramfs whose
+# entries begin with the build directory's absolute path unpacks into a
+# directory of that name and leaves / empty, and the kernel then reports no
+# /init.
+#
+# -H newc is the only format the kernel's initramfs unpacker reads.
+#
+# Ownership comes from the staging tree, which is why this has to run as root:
+# cpio records the uid it finds, and an initramfs whose /init is owned by uid
+# 1000 still works only because the kernel ignores ownership for the initial
+# ramdisk -- right up until something in it checks.
+#
+# The sort makes the archive deterministic. Without it the order is whatever
+# readdir returned, which differs between two runs on the same tree and makes
+# two byte-identical initramfs images compare as different.
+[ "$(id -u)" = 0 ] || echo "duct-mkinitramfs: warning: not running as root; the archive will record your uid" >&2
+
+(
+	cd "$staging"
+	find . | LC_ALL=C sort | "$busybox" cpio -o -H newc 2>/dev/null
+) | gzip -9 -n >"$output.tmp" || die "packing failed"
+
+mv "$output.tmp" "$output"
+
+echo "duct-mkinitramfs: wrote $output ($(wc -c <"$output") bytes)"

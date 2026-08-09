@@ -63,63 +63,78 @@ TARGET    ?= $(HOST_ARCH)-linux-gnu
 BASE_PKGS := \
 	duct-filesystem linux-headers glibc zlib \
 	gmp mpfr mpc binutils gcc \
-	ncurses bash tape
+	ncurses bash
 
 BUILDER_PKGS := \
 	m4 bison flex make gawk sed grep findutils diffutils \
 	tar gzip xz bzip2 patch file pkgconf perl texinfo
 
-# The build tooling the desktop stack needs before any of it can be configured.
+# Built in duct/rust rather than duct/chroot, because there is no Rust compiler
+# in the Duct package set. Cross-linked against Duct's own glibc, so the result
+# is bound to the libc that ships -- see docker/Dockerfile.rust.
+RUST_PKGS := uutils-coreutils
+
+# Everything the live ISO needs and a container image does not.
 #
-# python and gettext were already recipes but had never been listed here, so
-# they were only ever built by hand -- which is exactly the drift ALL_PKGS
-# exists to prevent. ninja bootstraps with python3, meson *is* python, and
-# everything from tier 1 onwards is configured by one or the other.
-# libffi, openssl and ca-certificates come *before* python, and the order is
-# load-bearing rather than tidy. Python builds the extension modules whose
-# dependencies it can find at the time and silently omits the rest: built
-# without libffi it has no _ctypes, and so no ctypes at all, which surfaced as
-# mesa's code generator dying on "No module named '_ctypes'" three tiers later.
-# Built without openssl it has no ssl module and cannot fetch anything over
-# https.
+# The order is the dependency order, and two entries in it are not obvious.
+# bc and elfutils come before linux because the kernel build needs both: bc
+# generates kernel/time/timeconst.h, and objtool links against libelf. kmod
+# comes before linux too, because the kernel package runs depmod as its last
+# install step and an empty modules.dep is not a failure anything notices.
 #
-# ca-certificates precedes openssl because openssl declares it: openssl's
-# install stage deliberately ships no certificate store of its own, since
-# ca-certificates owns that path. Found by tools/check-build-order.sh, which
-# derives the constraint from the recipe rather than from anyone remembering
-# it -- this file had them the other way round.
+# duct-live is last: it is only configuration, but it depends on busybox,
+# util-linux and kmod being real packages rather than intentions.
+# kmod and util-linux are NOT here. They have a single mention, in SESSION_PKGS,
+# which runs earlier -- so linux still gets them, and so do eudev and elogind,
+# which link libkmod, libblkid and libmount. Keeping the mention here instead
+# would satisfy linux and leave those three building without them.
+BOOT_PKGS := \
+	bc elfutils busybox \
+	linux grub duct-live
+
+# Recipes that have existed for a while and were never in this list, so nothing
+# ever built them. Each is a build dependency of something in BOOT_PKGS, and
+# each failed in a way that only appeared once the kernel and the bootloader
+# were being built:
+#
+#   python   grub's configure ends with "no suitable Python interpreter found"
+#            and stops. duct/chroot has one as a chapter-7 temporary tool and
+#            duct/builder does not, so grub built in one image and failed in
+#            the other.
+#   openssl  the kernel builds certs/extract-cert against libcrypto whenever
+#            CONFIG_SYSTEM_TRUSTED_KEYRING is set, which arm64's defconfig sets
+#            through CONFIG_INTEGRITY. Turning the keyring off would work and
+#            would also give up module signing and IMA before anyone asked.
+#   ca-certificates
+#            openssl declares it as a runtime dependency. Publishing openssl
+#            without it would put a package in the repository that cannot be
+#            installed.
+#
+# Built, but not necessarily shipped: the ISO manifest in
+# images/Dockerfile.iso is a separate list.
+#   libffi   python builds the extension modules whose dependencies it can find
+#            and silently omits the rest, so a python built before libffi has no
+#            _ctypes and therefore no ctypes at all. That surfaced three tiers
+#            away, as mesa's code generator dying on "No module named '_ctypes'".
+SUPPORT_PKGS := ca-certificates openssl libffi python
+
 TOOLS_PKGS := \
-	ca-certificates openssl libffi python \
+	\
 	gettext ninja cmake meson gperf \
 	libxml2 libxslt itstool python-markupsafe python-jinja2 python-mako \
 	python-setuptools python-pyyaml python-pycparser
 
-# Tier 1: the system and session base a desktop sits on.
-#
-# Ordered by what configure looks for, not by subject: libxcrypt before anything
-# that hashes a password, util-linux before anything that reads a block device,
-# and elogind last because it wants nearly all of the rest.
-#
-# util-linux and kmod are also the live ISO's, and their recipes are that work's
-# rather than this one's. They are listed here because eudev and elogind link
-# libblkid, libmount and libkmod and so have to be built after them; a name
-# appearing twice in ALL_PKGS costs nothing, since the second pass skips a
-# package that is already built.
 SESSION_PKGS := \
 	libxcrypt attr acl libcap expat pcre2 \
 	util-linux linux-pam shadow kmod eudev \
 	dbus duktape iso-codes xkeyboard-config hwdata elogind
 
-# Tier 2: everything between a GPU and a window.
-#
-# The X client libraries are here even though nothing runs an X server: several
-# GNOME components link them regardless of backend, and they are what an
-# Xwayland package would need first. mesa is built --without glx, so this is the
-# client side and nothing more.
-#
-# llvm is second to last and is by far the longest build in the set. It is here
-# for mesa's llvmpipe, which is what draws the desktop whenever the machine's
-# own driver did not load -- on a live ISO, most of the first boot.
+FONT_PKGS := \
+	libpng brotli freetype fontconfig fribidi pixman
+
+GLIB_PKGS := \
+	glib gobject-introspection glib-introspection
+
 GRAPHICS_PKGS := \
 	xorg-util-macros xorgproto xtrans xcb-proto \
 	libXau libXdmcp libxcb libX11 \
@@ -129,27 +144,6 @@ GRAPHICS_PKGS := \
 	mtdev libevdev libinput libxkbcommon \
 	llvm mesa
 
-# Tier 3: text rendering, up to the point where glib is needed.
-#
-# The order is not by subject. harfbuzz, cairo and pango are *not* here beside
-# freetype: each only builds the GLib-aware version GNOME needs if glib is
-# already installed when it configures, and each degrades silently rather than
-# failing if it is not.
-FONT_PKGS := \
-	libpng brotli freetype fontconfig fribidi pixman
-
-# The introspection cycle, resolved as three ordinary packages rather than as a
-# special case. glib is built with introspection off; gobject-introspection is
-# built against it; glib-introspection compiles the same glib source a second
-# time with the scanner present and installs nothing but the .gir and .typelib
-# files. See pkgs/glib-introspection/pkg.env for why the second build cannot be
-# skipped and why it is not a second pass over the glib recipe.
-GLIB_PKGS := \
-	glib gobject-introspection glib-introspection
-
-# Tier 4: the GTK stack. Everything here is built after glib's second pass,
-# because everything here generates introspection data and g-ir-scanner cannot
-# produce a Pango-1.0.gir without a GObject-2.0.gir to resolve against.
 GTK_PKGS := \
 	harfbuzz cairo pango \
 	libsass sassc \
@@ -160,45 +154,28 @@ GTK_PKGS := \
 	gsettings-desktop-schemas \
 	gtk4 libadwaita adwaita-icon-theme cantarell-fonts
 
-# Built in duct/rust rather than duct/chroot, because there is no Rust compiler
-# in the Duct package set. Cross-linked against Duct's own glibc, so the result
-# is bound to the libc that ships -- see docker/Dockerfile.rust.
-RUST_PKGS := uutils-coreutils
+ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
+	$(TOOLS_PKGS) $(SESSION_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
+	$(GRAPHICS_PKGS) $(GTK_PKGS) $(BOOT_PKGS)
 
-# The text stack and glib come *before* the graphics stack, though nothing
-# forces it: neither depends on a GPU, and llvm alone is longer than all of them
-# put together. Ordering them first means a recipe mistake in the text stack
-# surfaces in minutes rather than behind a multi-hour compile.
-ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(TOOLS_PKGS) $(SESSION_PKGS) \
-	$(FONT_PKGS) $(GLIB_PKGS) $(GRAPHICS_PKGS) $(GTK_PKGS)
-
-# Packages that are not machine-specific. Anything not listed is built for
-# $(TARGET); "any" installs on every architecture.
+# Packages that are not machine-specific: built once, installable everywhere.
 #
-# Kept in step with PKG_ARCH=any in the recipe's pkg.env, which is what CI reads
-# -- the Makefile cannot see into pkg.env, and CI does not read the Makefile.
-ARCH_duct-filesystem := any
-ARCH_meson := any
-ARCH_python-jinja2 := any
-ARCH_python-markupsafe := any
-ARCH_iso-codes := any
-ARCH_xkeyboard-config := any
-ARCH_hwdata := any
-ARCH_python-mako := any
-ARCH_python-setuptools := any
-ARCH_python-pyyaml := any
-ARCH_python-pycparser := any
-ARCH_itstool := any
-ARCH_xorg-util-macros := any
-ARCH_xorgproto := any
-ARCH_xtrans := any
-ARCH_xcb-proto := any
-ARCH_wayland-protocols := any
-ARCH_hicolor-icon-theme := any
-ARCH_adwaita-icon-theme := any
-ARCH_cantarell-fonts := any
-
-pkg_target = $(if $(ARCH_$(1)),$(ARCH_$(1)),$(TARGET))
+# Read from the recipe's own pkg.env rather than listed here, because a list
+# here is a SECOND source of truth and the two silently disagreed. CI's select
+# job greps pkg.env for PKG_ARCH; this used to consult hardcoded ARCH_<name>
+# variables. A recipe declaring only one of the two was not an error -- it
+# produced a package stamped "any" locally and two arch-stamped packages in
+# CI, or the reverse, with nothing to say so.
+#
+# Both instances in the tree were half-declared and neither had been noticed:
+# duct-live had only the Makefile entry, ca-certificates only the pkg.env one.
+# Deriving from pkg.env makes the disagreement unrepresentable rather than
+# something to catch by inspection.
+#
+# One `grep` per package at expansion time, which is not measurable against a
+# build that compiles gcc.
+pkg_arch_any = $(shell grep -qxE 'PKG_ARCH=any' $(PKGROOT)/pkgs/$(1)/pkg.env 2>/dev/null && echo any)
+pkg_target = $(if $(call pkg_arch_any,$(1)),any,$(TARGET))
 
 JOBS ?= $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || echo 4)
 
@@ -217,7 +194,7 @@ DOCKER_ARGS = --rm \
 DOCKER      = docker run $(DOCKER_ARGS) --entrypoint /bin/bash $(IMAGE) -c
 DOCKER_REPO = docker run $(DOCKER_ARGS) --entrypoint /bin/bash $(REPO_IMAGE) -c
 
-.PHONY: all packages packages-native packages-rust repo key clean clean-repo dirs stage pin toolchain check-sources check-recipes
+.PHONY: all packages packages-native packages-tape packages-rust repo key clean clean-repo dirs stage pin toolchain check-sources check-recipes
 
 all: repo
 
@@ -244,7 +221,7 @@ stage: dirs
 # foreach, not a shell loop: $(call pkg_target,...) is resolved by make, and a
 # shell variable would never match the ARCH_<name> variables -- every package
 # would silently be stamped for $(TARGET), including the arch-independent ones.
-packages: packages-native packages-rust
+packages: packages-native packages-tape packages-rust
 
 # Every package already built is unpacked into the container before the next one
 # is compiled.
@@ -283,6 +260,26 @@ packages: packages-native packages-rust
 # sees it -- which silently handed tar an empty filename. \$$f reaches the
 # container as a literal $f. Paths here never contain spaces, so leaving them
 # unquoted inside the container avoids nesting quotes at all.
+#
+# ONLY EVER RUN THIS AGAINST A DUCT IMAGE.
+#
+# It copies every package built so far over /, glibc included. In duct/chroot,
+# duct/builder or duct/rust that is the point -- they are Duct systems and this
+# is how a build gets its dependencies. In duct/bootstrap, which is Debian, it
+# replaces Debian's glibc underneath a running Debian userland, and the
+# container stops being able to execute its own programs:
+#
+#   ==> tape (aarch64-linux-gnu, in duct/bootstrap:latest)
+#   /bin/bash: line 1:   126 Illegal instruction     rm -rf /inst
+#
+# An rm, dying on SIGILL, several commands after the damage was done and
+# pointing nowhere near it. A target that needs to run in duct/bootstrap must
+# invoke tape-builder directly -- see packages-tape, which does exactly that
+# because the tape recipe compiles nothing and only copies binaries that are
+# already in the image.
+#
+# Current call sites, all Duct images: packages-native ($(IMAGE), duct/chroot)
+# and packages-rust ($(RUST_IMAGE), duct/rust, which is FROM duct/builder).
 BUILD_IN_CONTAINER = \
 	set -e; \
 	for f in /pkgs/*.tape.tar.gz; do \
@@ -303,7 +300,29 @@ BUILD_IN_CONTAINER = \
 # gcc first. REBUILD=1 forces the lot; deleting one artifact rebuilds just that
 # one.
 built = $(wildcard $(PKGS)/$(1)-[0-9]*.tape.tar.gz)
-skip_if_built = $(if $(REBUILD),,$(if $(call built,$(1)),true,))
+
+# ... but only if the artifact is newer than everything that went into it.
+#
+# "Already built" used to mean nothing more than "a file with that name
+# exists", so editing a recipe and re-running produced the OLD package with no
+# indication anything had been skipped. That is not hypothetical: an ISO was
+# built and booted carrying a duct-live from before its inittab changed, and
+# the only symptom was a boot test looking for a message that the shipped
+# package could not print.
+#
+# The inputs are the recipe directory, the shared stage scripts and the version
+# pins -- the same three things CI's select job treats as invalidating, so the
+# two agree about what a change is. `find -newer ... -print -quit` stops at the
+# first hit, so this is one stat-walk per package and not a scan of the tree.
+#
+# Timestamps rather than digests deliberately: a digest would be more rigorous
+# and needs somewhere to record it, and the failure being prevented here is
+# "someone edited a file and did not notice", which a timestamp catches.
+stale = $(shell [ -n "$(strip $(call built,$(1)))" ] && \
+	find $(PKGROOT)/pkgs/$(1) $(PKGROOT)/pkgs/_scripts $(PKGROOT)/pkgs/versions.env \
+	     -newer $(firstword $(call built,$(1))) -print -quit 2>/dev/null)
+
+skip_if_built = $(if $(REBUILD),,$(if $(call built,$(1)),$(if $(call stale,$(1)),,true),))
 
 packages-native: stage check-sources check-recipes
 	@set -e; $(foreach p,$(ALL_PKGS), \
@@ -313,6 +332,64 @@ packages-native: stage check-sources check-recipes
 			echo "==> $(p) ($(call pkg_target,$(p)))"; \
 			$(DOCKER) "$(call BUILD_IN_CONTAINER,$(p))"; \
 		fi; )
+
+# The tape island, and the reason it has to be one.
+#
+# tape's recipe copies the binaries out of the image it runs in rather than
+# compiling them, because no Go compiler is packaged. Its install.sh refuses to
+# run anywhere that has /var/lib/tape/installed.db -- an assembled Duct system,
+# where /usr/bin/tape came from a package -- so that the recipe cannot quietly
+# repackage a copy of itself. duct/builder and duct/chroot both trip that
+# guard, which meant `make repo` failed on tape whichever of them was used, and
+# nothing had noticed because the published repository's tape comes from CI.
+#
+# duct/bootstrap is where the binaries are compiled from source, so that is
+# where this builds. --user root because that image drops to uid 1000 for
+# package builds and BUILD_IN_CONTAINER writes to /inst and /.
+#
+# Exactly parallel to the Rust island below: two packages are not compiled from
+# an upstream tarball, and each needs its own image.
+TAPE_PKGS := tape
+
+# Deliberately NOT BUILD_IN_CONTAINER.
+#
+# That macro unpacks every package built so far over /, which is the dependency
+# mechanism for the Duct images and is fatal here: duct/bootstrap is Debian,
+# and copying Duct's glibc over Debian's leaves the container unable to run its
+# own userland. The symptom is memorable --
+#
+#   ==> tape (aarch64-linux-gnu, in duct/bootstrap:latest)
+#   /bin/bash: line 1: 126 Illegal instruction     rm -rf /inst
+#
+# -- the very next command after the copy dies on SIGILL, because it is a
+# Debian binary now running against a libc that is not Debian's.
+#
+# tape needs none of it. Its recipe compiles nothing and resolves nothing; it
+# copies four already-built binaries out of the image's own /usr/bin. So this
+# runs tape-builder directly.
+#
+# --user root because duct/bootstrap drops to uid 1000 for package builds, and
+# the mounted output directory is not writable by that user.
+packages-tape: stage check-sources
+	@set -e; $(foreach p,$(TAPE_PKGS), \
+		if $(if $(call skip_if_built,$(p)),true,false); then \
+			echo "==> $(p) (already built)"; \
+		else \
+			echo "==> $(p) ($(call pkg_target,$(p)), in $(REPO_IMAGE))"; \
+			docker run $(DOCKER_ARGS) --user root \
+				--entrypoint /bin/bash $(REPO_IMAGE) -c \
+				"set -e; cp -R /build/pkgs /tmp/pkgs; \
+				 tape-builder build /tmp/pkgs/$(p) -t $(call pkg_target,$(p)) -o /pkgs"; \
+		fi; )
+
+# The Rust island. Kept as its own target so the 29 native packages do not wait
+# on a 1.5 GB toolchain image that only one of them needs.
+packages-rust: stage check-sources
+	@set -e; $(foreach p,$(RUST_PKGS), \
+		echo "==> $(p) ($(call pkg_target,$(p)), in $(RUST_IMAGE))"; \
+		docker run $(DOCKER_ARGS) -v $(CARGO_CACHE):/cargo -e CARGO_HOME=/cargo \
+			--entrypoint /bin/bash $(RUST_IMAGE) -c \
+			"$(call BUILD_IN_CONTAINER,$(p))"; )
 
 # duct/chroot has no curl and no wget on purpose: a package build has no
 # business reaching the network. A tarball missing from the cache is therefore

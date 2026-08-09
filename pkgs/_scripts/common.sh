@@ -81,11 +81,40 @@ JOBS=${DUCT_JOBS:-$(nproc 2>/dev/null || echo 1)}
 # now means "takes no arguments" rather than "unspecified", so older code that
 # calls such a function with arguments no longer compiles. Packages that have
 # not caught up ask for -std=gnu17 here rather than being patched.
-for _var in CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS FORCE_UNSAFE_CONFIGURE; do
+for _var in CC CXX CFLAGS CXXFLAGS CPPFLAGS LDFLAGS FORCE_UNSAFE_CONFIGURE PKG_CONFIG; do
 	eval "_val=\${$_var:-}"
 	[ -n "$_val" ] && export "$_var"
 done
 unset _var _val
+
+# pkg-config, when the build image only has pkgconf.
+#
+# pkgconf is a drop-in replacement but only answers to that name, and nothing
+# looks for it: autoconf's PKG_PROG_PKG_CONFIG searches for "pkg-config" and
+# elfutils and kmod both stop dead with "configure: error: pkg-config not
+# found". The pkgconf recipe installs the alias -- but a *published* builder
+# image predating that fix does not have it, and CI builds every package in the
+# published image. So a recipe set that only builds in an image built from
+# itself is circular, and this breaks the circle.
+#
+# A shim on PATH rather than only exporting PKG_CONFIG, because build systems
+# are split on which they honour: configure respects the variable, and plenty
+# of Makefiles simply run `pkg-config`.
+#
+# Dead code the moment the builder images are refreshed, and harmless until
+# then -- it does nothing at all when a real pkg-config is present.
+if ! command -v pkg-config >/dev/null 2>&1 && command -v pkgconf >/dev/null 2>&1; then
+	_shim_dir=$WORK_DIR/.duct-bin
+	mkdir -p "$_shim_dir"
+	printf '#!/bin/sh\nexec pkgconf "$@"\n' >"$_shim_dir/pkg-config"
+	chmod 0755 "$_shim_dir/pkg-config"
+	PATH=$_shim_dir:$PATH
+	export PATH
+	PKG_CONFIG=$_shim_dir/pkg-config
+	export PKG_CONFIG
+	log "no pkg-config in this image; using pkgconf through a shim"
+	unset _shim_dir
+fi
 
 # The install staging root. tape-builder points TAPE_INSTALL_DIR at
 # <recipe>/work/install, and whatever is under it maps 1:1 onto / in the
