@@ -211,7 +211,6 @@ jobs:
 
           echo "jobs=$entries" >>"$GITHUB_OUTPUT"
           jq -r '.[] | "  \(.package) [\(.arch)] in \(.image)"' <<<"$entries"
-          jq -r '.[] | "  \(.package) [\(.arch)] in \(.image)"' <<<"$entries"
 
           # Partition the matrix into dependency levels.
           #
@@ -270,8 +269,24 @@ jobs:
   #
   # An empty level skips itself through the `if`, so a one-package change still
   # runs exactly one job.
+  # One job per level, each waiting on EVERY level below it.
+  #
+  # `needs: [select, level0, level1, ... levelN-1]` rather than just the
+  # previous level, and the verbosity is the point. `needs.*.result` only sees
+  # DIRECT needs, so a chain of single needs propagates failure exactly one
+  # hop: level0 fails, level1 correctly skips -- and level2, whose only lower
+  # need is a level1 that is 'skipped' rather than 'failed', sees no failure
+  # and runs anyway, on top of a level that produced nothing.
+  #
+  # That turns one clear failure into a cascade of confusing ones at every
+  # level above it, which is precisely the "failures that look like recipe
+  # bugs" outcome this whole change exists to prevent.
+  #
+  # An empty level skips itself through the `if`, so a one-package change still
+  # runs exactly one job.
+
   level0:
-    needs: select
+    needs: [select]
     if: needs.select.outputs.level0 != '[]'
     uses: ./.github/workflows/build-level.yml
     with: { jobs: "${{ needs.select.outputs.level0 }}", level: '0' }
@@ -279,110 +294,77 @@ jobs:
 
   level1:
     needs: [select, level0]
-    # always(): a level must still run when the one below it was skipped for
-    # being empty, which is the normal case for a small change. Without it a
-    # single skipped level silently cancels every level above it.
-    if: always() && needs.select.outputs.level1 != '[]' && !contains(needs.*.result, 'failure')
+    if: always() && needs.select.outputs.level1 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     uses: ./.github/workflows/build-level.yml
     with: { jobs: "${{ needs.select.outputs.level1 }}", level: '1' }
     secrets: inherit
 
   level2:
-    needs: [select, level1]
-    # always(): a level must still run when the one below it was skipped for
-    # being empty, which is the normal case for a small change. Without it a
-    # single skipped level silently cancels every level above it.
-    if: always() && needs.select.outputs.level2 != '[]' && !contains(needs.*.result, 'failure')
+    needs: [select, level0, level1]
+    if: always() && needs.select.outputs.level2 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     uses: ./.github/workflows/build-level.yml
     with: { jobs: "${{ needs.select.outputs.level2 }}", level: '2' }
     secrets: inherit
 
   level3:
-    needs: [select, level2]
-    # always(): a level must still run when the one below it was skipped for
-    # being empty, which is the normal case for a small change. Without it a
-    # single skipped level silently cancels every level above it.
-    if: always() && needs.select.outputs.level3 != '[]' && !contains(needs.*.result, 'failure')
+    needs: [select, level0, level1, level2]
+    if: always() && needs.select.outputs.level3 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     uses: ./.github/workflows/build-level.yml
     with: { jobs: "${{ needs.select.outputs.level3 }}", level: '3' }
     secrets: inherit
 
   level4:
-    needs: [select, level3]
-    # always(): a level must still run when the one below it was skipped for
-    # being empty, which is the normal case for a small change. Without it a
-    # single skipped level silently cancels every level above it.
-    if: always() && needs.select.outputs.level4 != '[]' && !contains(needs.*.result, 'failure')
+    needs: [select, level0, level1, level2, level3]
+    if: always() && needs.select.outputs.level4 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     uses: ./.github/workflows/build-level.yml
     with: { jobs: "${{ needs.select.outputs.level4 }}", level: '4' }
     secrets: inherit
 
   level5:
-    needs: [select, level4]
-    # always(): a level must still run when the one below it was skipped for
-    # being empty, which is the normal case for a small change. Without it a
-    # single skipped level silently cancels every level above it.
-    if: always() && needs.select.outputs.level5 != '[]' && !contains(needs.*.result, 'failure')
+    needs: [select, level0, level1, level2, level3, level4]
+    if: always() && needs.select.outputs.level5 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     uses: ./.github/workflows/build-level.yml
     with: { jobs: "${{ needs.select.outputs.level5 }}", level: '5' }
     secrets: inherit
 
   level6:
-    needs: [select, level5]
-    # always(): a level must still run when the one below it was skipped for
-    # being empty, which is the normal case for a small change. Without it a
-    # single skipped level silently cancels every level above it.
-    if: always() && needs.select.outputs.level6 != '[]' && !contains(needs.*.result, 'failure')
+    needs: [select, level0, level1, level2, level3, level4, level5]
+    if: always() && needs.select.outputs.level6 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     uses: ./.github/workflows/build-level.yml
     with: { jobs: "${{ needs.select.outputs.level6 }}", level: '6' }
     secrets: inherit
 
   level7:
-    needs: [select, level6]
-    # always(): a level must still run when the one below it was skipped for
-    # being empty, which is the normal case for a small change. Without it a
-    # single skipped level silently cancels every level above it.
-    if: always() && needs.select.outputs.level7 != '[]' && !contains(needs.*.result, 'failure')
+    needs: [select, level0, level1, level2, level3, level4, level5, level6]
+    if: always() && needs.select.outputs.level7 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     uses: ./.github/workflows/build-level.yml
     with: { jobs: "${{ needs.select.outputs.level7 }}", level: '7' }
     secrets: inherit
 
   level8:
-    needs: [select, level7]
-    # always(): a level must still run when the one below it was skipped for
-    # being empty, which is the normal case for a small change. Without it a
-    # single skipped level silently cancels every level above it.
-    if: always() && needs.select.outputs.level8 != '[]' && !contains(needs.*.result, 'failure')
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7]
+    if: always() && needs.select.outputs.level8 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     uses: ./.github/workflows/build-level.yml
     with: { jobs: "${{ needs.select.outputs.level8 }}", level: '8' }
     secrets: inherit
 
   level9:
-    needs: [select, level8]
-    # always(): a level must still run when the one below it was skipped for
-    # being empty, which is the normal case for a small change. Without it a
-    # single skipped level silently cancels every level above it.
-    if: always() && needs.select.outputs.level9 != '[]' && !contains(needs.*.result, 'failure')
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7, level8]
+    if: always() && needs.select.outputs.level9 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     uses: ./.github/workflows/build-level.yml
     with: { jobs: "${{ needs.select.outputs.level9 }}", level: '9' }
     secrets: inherit
 
   level10:
-    needs: [select, level9]
-    # always(): a level must still run when the one below it was skipped for
-    # being empty, which is the normal case for a small change. Without it a
-    # single skipped level silently cancels every level above it.
-    if: always() && needs.select.outputs.level10 != '[]' && !contains(needs.*.result, 'failure')
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7, level8, level9]
+    if: always() && needs.select.outputs.level10 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     uses: ./.github/workflows/build-level.yml
     with: { jobs: "${{ needs.select.outputs.level10 }}", level: '10' }
     secrets: inherit
 
   level11:
-    needs: [select, level10]
-    # always(): a level must still run when the one below it was skipped for
-    # being empty, which is the normal case for a small change. Without it a
-    # single skipped level silently cancels every level above it.
-    if: always() && needs.select.outputs.level11 != '[]' && !contains(needs.*.result, 'failure')
+    needs: [select, level0, level1, level2, level3, level4, level5, level6, level7, level8, level9, level10]
+    if: always() && needs.select.outputs.level11 != '[]' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     uses: ./.github/workflows/build-level.yml
     with: { jobs: "${{ needs.select.outputs.level11 }}", level: '11' }
     secrets: inherit
