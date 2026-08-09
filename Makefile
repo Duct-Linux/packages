@@ -203,6 +203,26 @@ packages: packages-native packages-tape packages-rust
 # sees it -- which silently handed tar an empty filename. \$$f reaches the
 # container as a literal $f. Paths here never contain spaces, so leaving them
 # unquoted inside the container avoids nesting quotes at all.
+#
+# ONLY EVER RUN THIS AGAINST A DUCT IMAGE.
+#
+# It copies every package built so far over /, glibc included. In duct/chroot,
+# duct/builder or duct/rust that is the point -- they are Duct systems and this
+# is how a build gets its dependencies. In duct/bootstrap, which is Debian, it
+# replaces Debian's glibc underneath a running Debian userland, and the
+# container stops being able to execute its own programs:
+#
+#   ==> tape (aarch64-linux-gnu, in duct/bootstrap:latest)
+#   /bin/bash: line 1:   126 Illegal instruction     rm -rf /inst
+#
+# An rm, dying on SIGILL, several commands after the damage was done and
+# pointing nowhere near it. A target that needs to run in duct/bootstrap must
+# invoke tape-builder directly -- see packages-tape, which does exactly that
+# because the tape recipe compiles nothing and only copies binaries that are
+# already in the image.
+#
+# Current call sites, all Duct images: packages-native ($(IMAGE), duct/chroot)
+# and packages-rust ($(RUST_IMAGE), duct/rust, which is FROM duct/builder).
 BUILD_IN_CONTAINER = \
 	set -e; \
 	for f in /pkgs/*.tape.tar.gz; do \
@@ -252,6 +272,25 @@ packages-native: stage check-sources
 # an upstream tarball, and each needs its own image.
 TAPE_PKGS := tape
 
+# Deliberately NOT BUILD_IN_CONTAINER.
+#
+# That macro unpacks every package built so far over /, which is the dependency
+# mechanism for the Duct images and is fatal here: duct/bootstrap is Debian,
+# and copying Duct's glibc over Debian's leaves the container unable to run its
+# own userland. The symptom is memorable --
+#
+#   ==> tape (aarch64-linux-gnu, in duct/bootstrap:latest)
+#   /bin/bash: line 1: 126 Illegal instruction     rm -rf /inst
+#
+# -- the very next command after the copy dies on SIGILL, because it is a
+# Debian binary now running against a libc that is not Debian's.
+#
+# tape needs none of it. Its recipe compiles nothing and resolves nothing; it
+# copies four already-built binaries out of the image's own /usr/bin. So this
+# runs tape-builder directly.
+#
+# --user root because duct/bootstrap drops to uid 1000 for package builds, and
+# the mounted output directory is not writable by that user.
 packages-tape: stage check-sources
 	@set -e; $(foreach p,$(TAPE_PKGS), \
 		if $(if $(call skip_if_built,$(p)),true,false); then \
@@ -260,7 +299,8 @@ packages-tape: stage check-sources
 			echo "==> $(p) ($(call pkg_target,$(p)), in $(REPO_IMAGE))"; \
 			docker run $(DOCKER_ARGS) --user root \
 				--entrypoint /bin/bash $(REPO_IMAGE) -c \
-				"$(call BUILD_IN_CONTAINER,$(p))"; \
+				"set -e; cp -R /build/pkgs /tmp/pkgs; \
+				 tape-builder build /tmp/pkgs/$(p) -t $(call pkg_target,$(p)) -o /pkgs"; \
 		fi; )
 
 # The Rust island. Kept as its own target so the 29 native packages do not wait
