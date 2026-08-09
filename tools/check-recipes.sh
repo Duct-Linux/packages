@@ -196,19 +196,27 @@ def scan_tarball(archive: pathlib.Path, src_dir: str) -> dict:
                 # and matching it bare reported CoreFoundation, AppKit and
                 # CoreText as missing Python packages, which would have been a
                 # very confusing thing to go looking for.
-                for match in re.finditer(
-                        r"find_installation\s*\((?P<args>[^)]*?)modules\s*:\s*"
-                        r"\[(?P<mods>[^\]]*)\](?P<rest>[^)]*)\)",
-                        data, re.S):
+                # A window after each find_installation rather than a regex
+                # spanning the whole call: the argument list nests parentheses.
+                # gobject-introspection's is
+                #   pymod.find_installation(get_option('python'),
+                #                           modules: ['setuptools'])
+                # and a [^)]* that stops at the first ")" never reaches the
+                # modules list -- which is how the check missed the one package
+                # that motivated writing it.
+                for call in re.finditer(r"find_installation\s*\(", data):
+                    window = data[call.end():call.end() + 400]
+                    mods = re.search(r"modules\s*:\s*\[([^\]]*)\]", window)
+                    if not mods:
+                        continue
                     # required : false means the build works without them --
-                    # xkeyboard-config asks for pytest and yaml that way, and
-                    # elogind for pefile. Packaging those to satisfy an optional
-                    # check would be chasing a requirement that is not one.
-                    tail = match.group("args") + match.group("rest")
-                    if re.search(r"required\s*:\s*false", tail):
+                    # xkeyboard-config asks for pytest that way, elogind for
+                    # pefile. Chasing those would be chasing a requirement that
+                    # is not one.
+                    if re.search(r"required\s*:\s*false", window[:mods.end() + 120]):
                         continue
                     found["python_modules"] |= set(
-                        re.findall(r"'([A-Za-z0-9_.-]+)'", match.group("mods")))
+                        re.findall(r"'([A-Za-z0-9_.-]+)'", mods.group(1)))
     return found
 
 
