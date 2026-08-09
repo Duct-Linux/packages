@@ -23,3 +23,6 @@ glibc = ">=2.42.0"
 expat = ">=2.7.1"
 
 [dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"

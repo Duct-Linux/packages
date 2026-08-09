@@ -25,3 +25,5 @@ eudev = ">=3.2.14"
 
 [dependencies.build]
 meson = ">=1.8.2"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"

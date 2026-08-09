@@ -24,3 +24,6 @@ freetype = ">=2.13.3"
 glib = ">=2.84.0"
 
 [dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"

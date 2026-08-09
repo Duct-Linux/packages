@@ -12,6 +12,14 @@ here shipped in that state (elogind 255.17 and pcre2 10.45) and nothing
 complained. A check that costs a second is worth more than a constraint written
 in a README that everyone, including its author, walks past.
 
+It also checks that a recipe declares the tools it actually uses. A recipe that
+calls pkg-config without declaring pkgconf builds perfectly on a machine that
+happens to have it and fails at configure on one that does not -- and a local
+success does not distinguish "declared" from "ambient". `[dependencies.build]`
+is discarded at wrap time and installs nothing, so this is documentation rather
+than mechanism; but it is the documentation the build order in the Makefile is
+derived from, and it is the only place the requirement is written down at all.
+
 Run by `make check-recipes`, which the package build depends on, and by CI.
 """
 
@@ -34,10 +42,24 @@ MESON_BUILTIN = {
 }
 
 problems: list[str] = []
+warnings: list[str] = []
 
 
 def fail(recipe: str, message: str) -> None:
     problems.append(f"{recipe}: {message}")
+
+
+def warn(recipe: str, message: str) -> None:
+    """Report without failing.
+
+    Used where this script cannot know the answer for certain. It reads meson
+    files with regular expressions and cannot evaluate a conditional, so a
+    `required : true` inside an `if` block that is never taken looks identical
+    to a hard requirement -- xkeyboard-config asks for PyYAML that way and
+    builds perfectly without it. Failing on a guess would make the check
+    something people work around rather than fix.
+    """
+    warnings.append(f"{recipe}: {message}")
 
 
 def read_recipes() -> dict[str, dict]:
@@ -122,6 +144,123 @@ def tarball_of(recipe: pathlib.Path) -> tuple[str | None, str | None]:
     return src_dir, name
 
 
+def scan_tarball(archive: pathlib.Path, src_dir: str) -> dict:
+    """One pass over a tarball for everything the later checks need.
+
+    Opened once rather than once per check: these are xz archives and llvm's is
+    130 MB, so a second pass is not free.
+    """
+    found = {"meson_options": set(), "pkgconfig": False, "python_modules": set()}
+    try:
+        tf = tarfile.open(archive)
+    except (OSError, tarfile.TarError):
+        return found
+
+    option_names = {f"{src_dir}/meson_options.txt", f"{src_dir}/meson.options"}
+    with tf:
+        for member in tf:
+            if not member.isfile():
+                continue
+            name = member.name[2:] if member.name.startswith("./") else member.name
+            base = name.rsplit("/", 1)[-1]
+
+            if name in option_names:
+                data = tf.extractfile(member).read().decode("utf-8", "replace")
+                found["meson_options"] |= set(
+                    re.findall(r"^\s*'([A-Za-z0-9_-]+)'\s*,", data, re.M))
+                found["meson_options"] |= set(
+                    re.findall(r"option\(\s*'([A-Za-z0-9_-]+)'", data))
+
+            elif base in ("meson.build", "configure", "configure.ac"):
+                # Test trees are not build inputs. meson's own test corpus asks
+                # find_installation for modules named 'notamodule' and
+                # 'thisbetternotexistmod' precisely because they do not exist,
+                # and reporting those as missing packages would be worse than
+                # not checking at all.
+                if re.search(r"(^|/)(test|tests|test cases|manual tests|"
+                             r"unittests|testsuite|subprojects)/", name):
+                    continue
+                # configure is generated and large; the markers are short and
+                # near-universal, so a decoded read is still cheaper than being
+                # wrong about it.
+                data = tf.extractfile(member).read().decode("utf-8", "replace")
+                if "PKG_CHECK_MODULES" in data or re.search(r"\bdependency\s*\(", data):
+                    found["pkgconfig"] = True
+                # pymod.find_installation('python3', modules : ['setuptools'])
+                # is the declarative form, and it is exactly what stopped
+                # gobject-introspection.
+                #
+                # Anchored on find_installation rather than on "modules:" alone.
+                # meson uses that keyword for other things -- notably
+                # dependency('appleframeworks', modules: ['CoreFoundation']) --
+                # and matching it bare reported CoreFoundation, AppKit and
+                # CoreText as missing Python packages, which would have been a
+                # very confusing thing to go looking for.
+                for match in re.finditer(
+                        r"find_installation\s*\((?P<args>[^)]*?)modules\s*:\s*"
+                        r"\[(?P<mods>[^\]]*)\](?P<rest>[^)]*)\)",
+                        data, re.S):
+                    # required : false means the build works without them --
+                    # xkeyboard-config asks for pytest and yaml that way, and
+                    # elogind for pefile. Packaging those to satisfy an optional
+                    # check would be chasing a requirement that is not one.
+                    tail = match.group("args") + match.group("rest")
+                    if re.search(r"required\s*:\s*false", tail):
+                        continue
+                    found["python_modules"] |= set(
+                        re.findall(r"'([A-Za-z0-9_.-]+)'", match.group("mods")))
+    return found
+
+
+def check_declared_tools(recipes: dict[str, dict], versions: dict[str, str]) -> None:
+    """Every tool a recipe uses is named in [dependencies.build].
+
+    The build systems are decided from the recipe itself; pkg-config and any
+    Python modules are decided from what the source actually calls, which is
+    why this needs the tarball.
+    """
+    for name in sorted(recipes):
+        recipe = PKGS / name
+        toml_text = (recipe / "TAPEBUILD.toml").read_text()
+        scripts = "".join(
+            (recipe / f).read_text() for f in ("pkg.env", "build.sh")
+            if (recipe / f).exists()
+        )
+        declared = set((recipes[name].get("dependencies", {}).get("build") or {}))
+
+        wants: set[str] = set()
+        if "build-meson.sh" in toml_text or "meson setup" in scripts:
+            wants |= {"meson", "ninja"}
+        if "build-cmake.sh" in toml_text or "cmake -G" in scripts:
+            wants |= {"cmake", "ninja"}
+
+        src_dir, tarball = tarball_of(recipe)
+        archive = CACHE / tarball if tarball else None
+        if src_dir and archive and archive.exists():
+            scanned = scan_tarball(archive, src_dir)
+            if scanned["pkgconfig"]:
+                wants.add("pkgconf")
+            for module in scanned["python_modules"]:
+                if module in ("python3", "python"):
+                    continue
+                # setuptools is packaged as python-setuptools, and so on.
+                pkg = f"python-{module.lower()}"
+                if pkg not in versions:
+                    warn(name, f"build may need the Python module {module!r}, "
+                               f"which no recipe provides (expected {pkg}). "
+                               "Duct's python is built --without-ensurepip, so "
+                               "it has no third-party modules at all unless one "
+                               "is packaged -- this is how gobject-introspection "
+                               "stopped on setuptools.")
+                else:
+                    wants.add(pkg)
+
+        missing = sorted(w for w in wants if w not in declared and w != name)
+        if missing:
+            fail(name, "uses but does not declare in [dependencies.build]: "
+                       + ", ".join(missing))
+
+
 def meson_options(archive: pathlib.Path, src_dir: str) -> set[str] | None:
     try:
         tf = tarfile.open(archive)
@@ -185,6 +324,12 @@ def main() -> int:
     versions = check_versions(recipes)
     check_dependencies(recipes, versions)
     check_meson_options(recipes)
+    check_declared_tools(recipes, versions)
+
+    if warnings:
+        print(f"{len(warnings)} warning(s):", file=sys.stderr)
+        for warning in warnings:
+            print(f"  {warning}", file=sys.stderr)
 
     if problems:
         print(f"{len(problems)} problem(s) in {len(recipes)} recipes:", file=sys.stderr)
@@ -192,7 +337,8 @@ def main() -> int:
             print(f"  {problem}", file=sys.stderr)
         return 1
 
-    print(f"{len(recipes)} recipes: versions, dependencies and meson options all check out")
+    print(f"{len(recipes)} recipes: versions, dependencies, meson options "
+          "and declared build tools all check out")
     return 0
 
 

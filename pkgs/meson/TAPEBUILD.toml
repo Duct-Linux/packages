@@ -20,3 +20,4 @@ script = "install.sh"
 python = ">=3.13.0"
 
 [dependencies.build]
+ninja = ">=1.13.0"

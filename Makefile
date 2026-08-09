@@ -78,7 +78,7 @@ BUILDER_PKGS := \
 TOOLS_PKGS := \
 	python gettext ninja cmake meson gperf \
 	libxml2 libxslt python-markupsafe python-jinja2 python-mako \
-	openssl ca-certificates
+	python-setuptools openssl ca-certificates
 
 # Tier 1: the system and session base a desktop sits on.
 #
@@ -187,6 +187,7 @@ ARCH_iso-codes := any
 ARCH_xkeyboard-config := any
 ARCH_hwdata := any
 ARCH_python-mako := any
+ARCH_python-setuptools := any
 ARCH_xorg-util-macros := any
 ARCH_xorgproto := any
 ARCH_xtrans := any

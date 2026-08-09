@@ -26,3 +26,4 @@ acl = ">=2.3.2"
 attr = ">=2.5.2"
 
 [dependencies.build]
+pkgconf = ">=2.5.0"

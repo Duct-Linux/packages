@@ -26,3 +26,6 @@ appstream = ">=1.0.4"
 pango = ">=1.56.3"
 
 [dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"

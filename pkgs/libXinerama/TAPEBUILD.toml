@@ -25,3 +25,4 @@ libXext = "*"
 xorgproto = "*"
 
 [dependencies.build]
+pkgconf = ">=2.5.0"

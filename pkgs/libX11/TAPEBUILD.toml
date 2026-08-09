@@ -25,3 +25,4 @@ libxcb = ">=1.17.0"
 [dependencies.build]
 xorgproto = ">=2024.1"
 xtrans = ">=1.6.0"
+pkgconf = ">=2.5.0"

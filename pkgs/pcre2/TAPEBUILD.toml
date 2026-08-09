@@ -22,3 +22,4 @@ script = "../_scripts/install.sh"
 glibc = ">=2.42.0"
 
 [dependencies.build]
+pkgconf = ">=2.5.0"

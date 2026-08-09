@@ -22,3 +22,5 @@ script = "../_scripts/install-cmake.sh"
 glibc = ">=2.42.0"
 
 [dependencies.build]
+cmake = ">=4.4.0"
+ninja = ">=1.13.0"

@@ -27,3 +27,6 @@ libxmlb = ">=0.3.22"
 curl = ">=8.13.0"
 
 [dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"

@@ -21,3 +21,5 @@ script = "../_scripts/install-meson.sh"
 [dependencies]
 
 [dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"

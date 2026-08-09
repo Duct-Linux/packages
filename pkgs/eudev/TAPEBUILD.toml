@@ -24,3 +24,4 @@ kmod = ">=33.0.0"
 util-linux = ">=2.41.1"
 
 [dependencies.build]
+pkgconf = ">=2.5.0"

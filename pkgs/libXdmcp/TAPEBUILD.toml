@@ -23,3 +23,4 @@ glibc = ">=2.42.0"
 xorgproto = "*"
 
 [dependencies.build]
+pkgconf = ">=2.5.0"

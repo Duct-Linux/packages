@@ -33,3 +33,6 @@ mesa = ">=25.0.0"
 fribidi = ">=1.0.16"
 
 [dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
