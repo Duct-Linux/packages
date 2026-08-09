@@ -164,8 +164,12 @@ RUST_PKGS := uutils-coreutils
 # second pass has to happen *between* the two halves. Anything in the second
 # half that generates a .gir needs GObject-2.0.gir to resolve against, and only
 # the second pass produces it.
+# The text stack and glib come *before* the graphics stack, though nothing
+# forces it: neither depends on a GPU, and llvm alone is longer than all of them
+# put together. Ordering them first means a recipe mistake in the text stack
+# surfaces in minutes rather than behind a multi-hour compile.
 PRE_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(TOOLS_PKGS) $(SESSION_PKGS) \
-	$(GRAPHICS_PKGS) $(FONT_PKGS) $(GLIB_PKGS)
+	$(FONT_PKGS) $(GLIB_PKGS) $(GRAPHICS_PKGS)
 POST_PKGS := $(GTK_PKGS)
 
 ALL_PKGS := $(PRE_PKGS) $(POST_PKGS)
