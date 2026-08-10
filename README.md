@@ -97,6 +97,30 @@ Design decisions since the first draft, all agreed with the orchestrator:
 On a development machine with no `lsblk` the disk screen shows a fixture set
 and says so in a banner across the top. It is never substituted silently.
 
+## Before anyone writes src/backend/real.c
+
+**The destructive path does not exist, and that is a decision rather than an
+oversight.** There is no `real.c`, meson.build does not reference one,
+`duct_backend_real_new()` returns NULL, and `--real` and `--execute` exit 1
+rather than degrading to a dry run. Nothing in this tree can write to a disk,
+and that is a property of what is *absent* — not of a flag that could be
+flipped.
+
+That property exists because the person this was built for asked for it. This
+installer erases disks; it was developed on their laptop, which must never be
+touched; and the standard they set was that the dangerous code should not be
+present, not merely switched off. Two gates were placed on writing it:
+
+1. `e2fsprogs` and `dosfstools` must exist, because until they do the code
+   cannot be tested and untested destructive code is the thing being avoided.
+2. A virtual machine must be arranged, and explicit approval given separately
+   from the approval to write it.
+
+**Adding `real.c` is not a coding task. It is a decision the user has to be
+part of.** If you are reading this because you are about to add it, that is the
+thing to check first — and QEMU-TEST-PLAN.md describes the harness it should be
+proved against before it is allowed to run anywhere.
+
 ## What I did not do
 
 - Touched `packages/` or `images/`. What is needed there — `e2fsprogs` and
