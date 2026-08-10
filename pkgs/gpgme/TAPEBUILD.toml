@@ -1,0 +1,34 @@
+[package]
+name = "gpgme"
+description = "GnuPG Made Easy, the library flatpak links for signature verification"
+version = "2.0.0"
+subversion = "1"
+authors = ["The GnuPG Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+libgpg-error = ">=1.55.0"
+libassuan = ">=3.0.2"
+# gnupg IS A RUNTIME DEPENDENCY AND NOT A LINK-TIME ONE, which is unusual enough
+# to be worth stating: gpgme does not link anything from gnupg. It EXECUTES gpg
+# and speaks Assuan to it over a pipe, discovering the binary on $PATH at run
+# time. So the dependency is real, load-bearing and invisible to any tool that
+# infers dependencies from linkage -- a gpgme installed without gnupg links
+# perfectly and fails the moment anything asks it to verify a signature.
+gnupg = ">=2.4.8"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
