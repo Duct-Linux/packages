@@ -586,6 +586,27 @@ def check_meson_options(recipes: dict[str, dict]) -> None:
             (recipe / f).read_text() for f in ("pkg.env", "build.sh")
             if (recipe / f).exists()
         )
+        # COMMENTS ARE STRIPPED FIRST, and this is a correctness fix rather
+        # than a convenience.
+        #
+        # The contract above is "every -D option a recipe PASSES exists". A
+        # comment passes nothing, so reading comments is this check examining
+        # text outside its own stated scope and then failing the build over it.
+        # The tempting counter-argument -- that a misspelled option in a
+        # commented-out flag might be a real one -- does not survive contact
+        # with that: an option that is not passed cannot affect the build.
+        #
+        # And the cost of getting this wrong is not a false positive, it is
+        # SILENT LOSS OF DOCUMENTATION. A neighbouring package's flag could not
+        # be quoted literally in a comment without failing the build, and the
+        # natural response to "your comment is an invalid option" is to delete
+        # the comment rather than reword it. weston's recipe hit this twice --
+        # once explaining which gtk4 backends are off, and again in the
+        # reworded warning about the trap, which spelled the pattern out in
+        # order to describe it. A rule that cannot be written down where it
+        # applies is a rule nobody learns.
+        text = "\n".join(
+            line for line in text.splitlines() if not line.lstrip().startswith("#"))
         used = set(re.findall(r"-D([A-Za-z0-9_-]+)=", text))
         if not used:
             continue
