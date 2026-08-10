@@ -15,8 +15,11 @@ script = "../_scripts/prepare.sh"
 [build]
 script = "../_scripts/build.sh"
 
+# Its own, to make the --disable-tofu pin loud rather than silent: it asserts
+# the built gpg does not link sqlite3, which it would only do with TOFU
+# compiled in. See install.sh.
 [install]
-script = "../_scripts/install.sh"
+script = "install.sh"
 
 [dependencies]
 glibc = ">=2.42.0"
