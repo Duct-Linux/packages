@@ -154,9 +154,32 @@ GTK_PKGS := \
 	gsettings-desktop-schemas \
 	gtk4 libadwaita adwaita-icon-theme cantarell-fonts
 
+# The GnuPG chain, plus zstd, which flatpak and libarchive both want.
+#
+# Placed after GTK_PKGS rather than near the other libraries, and the reason is
+# dependency order rather than taste: libgpg-error needs gettext at build time,
+# which lives in TOOLS_PKGS, and everything else here needs libgpg-error. Putting
+# the group last means every prerequisite precedes it no matter how the earlier
+# lists are rearranged, which is one fewer thing to get wrong when this list
+# grows -- gnupg and gpgme are next, and gnupg additionally needs zlib and bzip2
+# from BASE_PKGS and BUILDER_PKGS.
+#
+# The internal order is the dependency order. zstd and npth need nothing beyond
+# libc; libgpg-error is the base of the rest; libassuan, libksba and libgcrypt
+# each need it and none of them needs the others.
+#
+# Why these six existed unlisted at all: they merged before #11 added the rule
+# that a recipe must belong to a build list. CI selects from changed paths, so
+# each built fine in its own PR and none of them would ever have been built by
+# `make repo`. That is exactly the gap the rule was written to find, and it
+# found them on its first run against main.
+CRYPTO_PKGS := \
+	zstd npth libgpg-error \
+	libassuan libksba libgcrypt
+
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
-	$(GRAPHICS_PKGS) $(GTK_PKGS) $(BOOT_PKGS)
+	$(GRAPHICS_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #
