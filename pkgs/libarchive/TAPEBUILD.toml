@@ -15,8 +15,11 @@ script = "../_scripts/prepare.sh"
 [build]
 script = "../_scripts/build.sh"
 
+# Its own, to assert that the linked set matches the declared set. This recipe
+# argues that the dependency list is the specification; the assertion is what
+# makes that enforceable rather than aspirational. See install.sh.
 [install]
-script = "../_scripts/install.sh"
+script = "install.sh"
 
 # THIS LIST IS THE SPECIFICATION, NOT A DESCRIPTION. libarchive's backends have
 # no --with- flags; configure link-probes for each one and takes whatever it
