@@ -264,12 +264,43 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p deps
+
+          # EVERY package at THIS level, not only the one being built.
+          #
+          # The download pattern is pkg-*-<arch> and artifact names carry no
+          # level, so it collects every artifact PRESENT IN THE RUN AT THAT
+          # MOMENT -- including one a sibling at this same level uploaded
+          # seconds ago. That breaks the invariant build.yml states: "level N
+          # needs only levels below it".
+          #
+          # It is also a RACE, which is the worse half. zstd failed at level3
+          # because binutils -- SAME LEVEL -- finished at 18:07:55, inside
+          # zstd's seeding window which opened at 18:07:18. That binutils had
+          # auto-detected the newly published zstd and linked libzstd.so.1, and
+          # zstd is excluded from its own seed, so the assembler could not run.
+          # Thirty seconds the other way and it would have passed -- and a
+          # failure that depends on job timing is one everybody calls a flake
+          # and re-runs.
+          #
+          # Higher levels cannot contaminate: they have not started. So
+          # excluding this level's own packages is the whole fix, and
+          # inputs.jobs already names them.
+          same_level=$(jq -r '[.[].package] | unique | join(" ")' <<<'${{ inputs.jobs }}')
+          echo "not seeding from this level: $same_level"
           n=0
           downloaded=0
           for f in dl/*.tape.tar.gz; do
             [ -e "$f" ] || continue
             downloaded=$((downloaded + 1))
             base=$(basename "$f")
+            # NAME-VERSION-SUBVERSION.ARCH.tape.tar.gz
+            pkg=${base%-*-*.*.tape.tar.gz}
+            for q in $same_level; do
+              if [ "$pkg" = "$q" ]; then
+                echo "  not seeding $base: $pkg builds at this level"
+                continue 2
+              fi
+            done
             case $base in ${{ matrix.package }}-*) continue ;; esac
 
             # Filter again, on the filename, and deliberately not instead of
