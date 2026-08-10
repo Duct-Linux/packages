@@ -1,8 +1,19 @@
 # Duct installer — scratch workspace
 
-Work for the Duct graphical installer, kept **outside** `Projects/Duct` on
-purpose: `packages/` and `images/` were mid-merge and off limits. Nothing here
-has been committed to any Duct repository.
+Work for the Duct graphical installer, developed **outside** `Projects/Duct` on
+purpose: `packages/` and `images/` were mid-merge and off limits when it
+started.
+
+It now lives on `ao/duct-4-installer-scratch` in the `packages` repository, as
+an **orphan branch** — no shared history with `main`, so it cannot be merged by
+accident, and no PR. That is preservation, not a proposal: it existed for a
+working day on one machine with no version control at all, and where the
+installer source finally belongs is still an open decision. Moving a branch
+later is free; recovering a deleted directory is not.
+
+| file | what it is |
+|---|---|
+| `PACKAGE-SPEC.md` | what `e2fsprogs` and `dosfstools` had to contain, and where writing them proved the spec wrong. |
 
 | file | what it is |
 |---|---|
