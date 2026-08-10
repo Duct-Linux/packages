@@ -1,0 +1,26 @@
+[package]
+name = "libgcrypt"
+description = "General purpose cryptographic library for the GnuPG components"
+version = "1.11.2"
+subversion = "1"
+authors = ["The GnuPG Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+libgpg-error = ">=1.55.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
