@@ -1,0 +1,26 @@
+[package]
+name = "npth"
+description = "New Portable Threads library, GnuPG's thread abstraction"
+version = "1.8.0"
+subversion = "1"
+authors = ["The GnuPG Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
