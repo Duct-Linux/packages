@@ -56,8 +56,21 @@ Unload the `fuse` module (or bind-mount over `/dev/fuse`) and run again. **It mu
 fail.**
 
 This is the specific defect that shipped: `CONFIG_FUSE_FS=m` with nothing loading
-it, so `/dev/fuse` never appeared. The kernel is now `=y`, and this arm is what
-would notice a regression back to a module nothing loads.
+it, so `/dev/fuse` never appeared. duct-live's `rc` coldplugs by walking sysfs
+modaliases into `modprobe`, and a filesystem module advertises none.
+
+**That is still the state of `main` at the time of writing** — `CONFIG_FUSE_FS=m`
+in `pkgs/linux/config/common.config`, verified rather than assumed. The change to
+`=y` is duct-2's and is held behind the publish.
+
+**So this whole test is gated on that change, not on this package.** With
+`=m` and nothing loading it there is no `/dev/fuse`, which means the positive arm
+cannot pass and negative 2 is vacuous — it would fail for the reason it is
+supposed to detect, on every run, whether or not anything else is wrong. Running
+the suite before the kernel change would produce a red that means nothing.
+
+Once `=y` lands, this arm is what would notice a regression back to a module
+nothing loads.
 
 ### Negative 3 — the fallback is available but not silent
 
@@ -92,5 +105,10 @@ payload whose behaviour nobody here controls, to test a mount mechanism.
 
 ## Status
 
-**NOT YET RUN.** AppImage support should not be reported as working until the
+**NOT YET RUN, AND NOT YET RUNNABLE.** `CONFIG_FUSE_FS` is still `=m` on `main`,
+so `/dev/fuse` does not exist on a booted system and no arm of this suite means
+anything yet. The prerequisite is duct-2's kernel change, not anything in this
+package.
+
+Once it lands: AppImage support should not be reported as working until the
 positive arm shows a `fuse` mount type and negatives 1 and 2 both fail.
