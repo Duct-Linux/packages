@@ -1,0 +1,38 @@
+[package]
+name = "seatd"
+description = "Seat management daemon and libseat"
+version = "0.9.1"
+subversion = "1"
+authors = ["Kenny Levinsen and contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+# The generic stage is enough, and deliberately so. The one property worth
+# guaranteeing here -- that the logind backend is actually compiled in -- is
+# guaranteed at CONFIGURE time by naming -Dlibseat-logind=elogind rather than
+# leaving it at auto, because the explicit value makes libelogind a hard
+# dependency. See pkg.env. An install-time assertion would be checking something
+# the build could no longer have got wrong.
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# A real link-time dependency, not merely a runtime one. With
+# -Dlibseat-logind=elogind, meson.build takes
+#   dependency('lib@0@'.format(get_option('libseat-logind')))
+# -- required, no fallback -- so libelogind must be present to configure at all.
+elogind = ">=255.17.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
