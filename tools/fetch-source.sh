@@ -65,6 +65,40 @@ fetch() {
 
     for u in $_urls; do
         echo "  fetching $u"
+        # NO -A/--user-agent HERE, AND THAT IS A MEASURED DECISION RATHER THAN
+        # AN OVERSIGHT. Two packages have failed in CI with HTTP 418 from
+        # www.freedesktop.org -- fontconfig at level 9 and appstream at level 11,
+        # both x86_64, both with their aarch64 counterparts passing, and
+        # fontconfig passing on re-run. 418 reads as bot detection, and the
+        # obvious first fix is to send a browser user agent.
+        #
+        # THAT IS BACKWARDS. Measured against the exact fontconfig URL that
+        # failed, three repeats, identical every time:
+        #
+        #     default curl UA   206     <- works
+        #     browser UA        418     <- the failure
+        #     empty UA          403
+        #
+        # So a browser UA CAUSES the 418 on this host. Adding one would turn an
+        # intermittent failure into a deterministic one across the fourteen
+        # recipes that fetch from freedesktop.org, and if a mirror were added at
+        # the same time the mirror would appear to have fixed it.
+        #
+        # WHAT IS STILL UNKNOWN, and it matters: those numbers come from a
+        # developer machine, and the failures came from shared CI runner IPs.
+        # This shows the UA hypothesis is false HERE; it does not establish what
+        # caused the 418 THERE. IP-based rate limiting fits every observation and
+        # cannot be reproduced from outside a runner. So the transport fallback
+        # this needs is justified BY CLASS -- an unidentified transport failure --
+        # and NOT by an understood mechanism. Do not read a future fallback here
+        # as evidence that anyone knew the cause.
+        #
+        # The rule the fallback must follow: FALL BACK ON TRANSPORT FAILURES,
+        # STOP ON CONTENT FAILURES. A 502, a 418 or a timeout is a host problem
+        # and should try the next source; a 404 means the file is not there and
+        # another mirror of the same tree will not have it; A DIGEST MISMATCH
+        # MUST NEVER TRIGGER A FALLBACK, because that converts a security signal
+        # into a search for a host that agrees with you.
         if curl -fsSL --retry 3 --connect-timeout 20 --max-time 900 -o "$_file.part" "$u"; then
             _got=$(sha_of "$_file.part")
             if [ "$_got" = "$_want" ]; then
