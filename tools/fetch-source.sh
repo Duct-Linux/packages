@@ -88,6 +88,20 @@ fetch() {
         # developer machine, and the failures came from shared CI runner IPs.
         # This shows the UA hypothesis is false HERE; it does not establish what
         # caused the 418 THERE. IP-based rate limiting fits every observation and
+        # 
+        # SINCE MEASURED FROM THE RUNNERS THEMSELVES, and it did not
+        # reproduce: .github/workflows/probe-freedesktop.yml fetched the exact
+        # failing URL from both runner types, isolated and then in a burst of
+        # six, with this same invocation and no -A. Eleven of twelve requests
+        # returned 200; the twelfth was a 404 from a URL mistyped in the probe.
+        # Two Azure egress addresses, both clean.
+        # 
+        # So a standing block on runner ranges is ruled out, and so is a
+        # client-shape problem. But a real climb fetches far more than six files
+        # from one address in a few minutes, and that condition was not
+        # recreated. THE MECHANISM REMAINS UNIDENTIFIED. The retry below is
+        # justified by CLASS, not by cause -- do not read it as evidence that
+        # anyone knew.
         # cannot be reproduced from outside a runner. So the transport fallback
         # this needs is justified BY CLASS -- an unidentified transport failure --
         # and NOT by an understood mechanism. Do not read a future fallback here
@@ -99,15 +113,68 @@ fetch() {
         # another mirror of the same tree will not have it; A DIGEST MISMATCH
         # MUST NEVER TRIGGER A FALLBACK, because that converts a security signal
         # into a search for a host that agrees with you.
-        if curl -fsSL --retry 3 --connect-timeout 20 --max-time 900 -o "$_file.part" "$u"; then
-            _got=$(sha_of "$_file.part")
-            if [ "$_got" = "$_want" ]; then
-                mv "$_file.part" "$_file"
-                echo "  ok      $(basename "$_file")"
-                return 0
-            fi
-            echo "  sha256 mismatch from $u (want $_want, got $_got)" >&2
-        fi
+        # THE CODES ARE ENUMERATED RATHER THAN TESTED AS "NOT 200", AND THAT
+        # DISTINCTION IS THE WHOLE POINT OF THIS BLOCK.
+        #
+        # A 404 and a 418 both fail an is-it-200 test and mean opposite things:
+        # one says the file is not here and never will be, the other says the
+        # host would not serve it this time. Conflating them either retries
+        # something that cannot succeed, or gives up on something that would.
+        # The probe written to investigate these 418s made exactly that mistake
+        # -- it counted a 404 from a mistyped URL as a transport failure and
+        # reported a symmetric "1 of 6 failed" that looked precisely like
+        # intermittent rate limiting. The instrument committed the error this
+        # code exists to avoid, which is the strongest argument available for
+        # naming the codes.
+        #
+        # AND --retry CANNOT DO THIS. curl's --retry covers 408, 429, 5xx and
+        # connection failures. IT DOES NOT COVER 418. The `--retry 3` that used
+        # to be on this line was structurally incapable of firing on the one
+        # failure we have actually seen, while reading as though it handled it.
+        # Do not delete this loop as redundant with --retry; it is not.
+        _attempt=1
+        while :; do
+            _code=$(curl -sSL --connect-timeout 20 --max-time 900 \
+                         -o "$_file.part" -w '%{http_code}' "$u" 2>/dev/null) || _code=000
+            case $_code in
+                2*)
+                    # Only a 2xx is worth hashing. Anything else left a body in
+                    # the file -- an error page, or nothing -- and hashing it
+                    # would report a digest mismatch for a request that never
+                    # returned the file at all.
+                    _got=$(sha_of "$_file.part")
+                    if [ "$_got" = "$_want" ]; then
+                        mv "$_file.part" "$_file"
+                        echo "  ok      $(basename "$_file")"
+                        return 0
+                    fi
+                    # A DIGEST MISMATCH IS NEVER RETRIED AND NEVER FALLS BACK.
+                    # The bytes arrived and they are the wrong bytes; trying
+                    # another host converts a security signal into a search for
+                    # one that agrees with you.
+                    echo "  sha256 mismatch from $u (want $_want, got $_got)" >&2
+                    break ;;
+                408|418|425|429|500|502|503|504|000)
+                    # TRANSPORT. The host is there and would not serve it now.
+                    # 000 is curl's own failure -- timeout, reset, DNS -- which
+                    # is the same class.
+                    if [ "$_attempt" -ge 3 ]; then
+                        echo "  HTTP $_code from $u after 3 attempts" >&2
+                        break
+                    fi
+                    echo "  HTTP $_code from $u; retrying in $((_attempt * 5))s" >&2
+                    sleep $((_attempt * 5))
+                    _attempt=$((_attempt + 1))
+                    continue ;;
+                *)
+                    # CONTENT, or something we have never seen. 404 and 410 mean
+                    # this URL does not have the file, and no number of retries
+                    # changes that -- but another URL in $_urls might, so this
+                    # breaks to the next source rather than returning.
+                    echo "  HTTP $_code from $u" >&2
+                    break ;;
+            esac
+        done
         rm -f "$_file.part"
     done
 
