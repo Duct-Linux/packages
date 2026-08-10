@@ -91,17 +91,24 @@ done
 img=$BUILD_DIR/.mkfs-check.img
 rm -f "$img"
 
-if ! LD_LIBRARY_PATH="$DESTDIR/usr/lib" "$DESTDIR/usr/sbin/mke2fs" -V >/dev/null 2>&1; then
-	# Stated, never silent. On a native build this must work, and CI builds
-	# natively for each architecture; a cross build cannot run the binary it
-	# just produced and says so here rather than skipping quietly.
-	if [ -n "${TAPE_TARGET:-}" ] && [ "${TAPE_TARGET%%-*}" != "$(uname -m)" ]; then
-		log "cross build for $TAPE_TARGET: cannot run mke2fs, skipping the filesystem check"
-		log "installed e2fsprogs (filesystem check skipped)"
-		exit 0
-	fi
-	die "the mke2fs that was just built cannot be executed"
-fi
+# No cross-build escape hatch, deliberately.
+#
+# An earlier version skipped this check when TAPE_TARGET's architecture did not
+# match `uname -m`. Two things were wrong with it. TAPE_TARGET is always set --
+# tape-builder defaults it to arch.Current()+"-linux-gnu" (builder/cmd/build.go)
+# and exports it (builder/utils/exec.go:23) -- so the guard was reachable, but
+# the comparison was not reliable: tape names 32-bit ARM `armv7h` while uname
+# reports `armv7l`, so a NATIVE armv7 build would have taken the cross branch
+# and skipped the check without failing. A guard that silently skips the only
+# functional test in the recipe, on one architecture, is worse than no guard.
+#
+# So a build that cannot run what it produced fails here and says so. Nothing
+# cross-compiles in this tree today, and if that changes, a loud failure naming
+# the reason is the right thing to meet.
+LD_LIBRARY_PATH="$DESTDIR/usr/lib" "$DESTDIR/usr/sbin/mke2fs" -V >/dev/null 2>&1 ||
+	die "the mke2fs that was just built cannot be executed on this machine.
+       If this is a cross build, the filesystem check below cannot run and this
+       recipe needs a decision rather than a silent skip."
 
 truncate -s 16M "$img" 2>/dev/null || dd if=/dev/zero of="$img" bs=1M count=16 >/dev/null 2>&1 ||
 	die "could not create a scratch image for the filesystem check"
