@@ -22,7 +22,34 @@ arch=$(${CC:-gcc} -dumpmachine | cut -d- -f1)
 # other direction: an ISO is usually tried in a virtual machine first.
 case "$arch" in
 	x86_64|i?86)
-		drivers=llvmpipe,softpipe,virgl,iris,crocus,radeonsi,r300,r600,nouveau,svga
+		# iris IS DELIBERATELY ABSENT, and it is the driver for Intel Gen8+ --
+		# most x86 laptops since about 2014. Enabling it makes mesa require
+		# libclc, from its own meson.build:
+		#
+		#   with_clc = get_option('mesa-clc') != 'auto' or with_microsoft_clc
+		#              or with_drivers_clc or WITH_GALLIUM_IRIS or with_intel_vk
+		#              or with_gallium_asahi or with_asahi_vk
+		#              or with_gallium_rusticl
+		#   if with_gallium_clover or with_clc
+		#     dep_clc = dependency('libclc')
+		#
+		# libclc is not packaged here, and packaging it is not a small job:
+		# it compiles OpenCL C to LLVM bitcode using CLANG, which this
+		# distribution does not build either. None of the other drivers in this
+		# list appear in that condition, so iris is the only one that costs
+		# anything -- which is why it is the only one removed.
+		#
+		# TO RESTORE IT, in this order: package clang, then package libclc,
+		# then add iris back to this list. Each step is a prerequisite of the
+		# next; adding iris alone reproduces exactly the failure that removed
+		# it -- meson setup dying with `Dependency "libclc" not found`, ten
+		# levels into a CI run, on x86_64 only.
+		#
+		# The consequence until then: Intel Gen8+ graphics fall back to
+		# llvmpipe. The GNOME session still runs, software-rendered. crocus
+		# still covers earlier Intel, radeonsi covers AMD, and virgl covers the
+		# virtual machine this ISO is likeliest to be tried in first.
+		drivers=llvmpipe,softpipe,virgl,crocus,radeonsi,r300,r600,nouveau,svga
 		;;
 	aarch64|arm*)
 		drivers=llvmpipe,softpipe,virgl,panfrost,lima,v3d,vc4,freedreno,etnaviv

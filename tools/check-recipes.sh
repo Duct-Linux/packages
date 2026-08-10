@@ -192,7 +192,7 @@ def scan_tarball(archive: pathlib.Path, src_dir: str) -> dict:
     130 MB, so a second pass is not free.
     """
     found = {"meson_options": set(), "pkgconfig": False, "python_modules": set(),
-             "programs": []}
+             "programs": [], "generates_gir": False}
     try:
         tf = tarfile.open(archive)
     except (OSError, tarfile.TarError):
@@ -269,6 +269,15 @@ def scan_tarball(archive: pathlib.Path, src_dir: str) -> dict:
                 # separately would demand a package for gtk-update-icon-cache
                 # (GTK 3, which this distribution does not ship) alongside the
                 # gtk4 one that actually satisfies the call.
+                # gnome.generate_gir() is the same requirement arriving without
+                # an option to read. appstream never passes -Dintrospection: it
+                # calls generate_gir directly, so a rule that only inspected the
+                # recipe's own flags saw nothing, and the build got far enough
+                # to link before dying on "Couldn't find include
+                # 'GObject-2.0.gir'" -- the data, not the scanner.
+                if re.search(r"\bgenerate_gir\s*\(", data):
+                    found["generates_gir"] = True
+
                 for call in re.finditer(r"find_program\s*\(", data):
                     window = data[call.end():call.end() + 300]
                     head = window.split(")", 1)[0]
@@ -448,15 +457,32 @@ def check_tool_dependencies(recipes: dict[str, dict]) -> None:
         # -Dintrospection=enabled runs g-ir-scanner from gobject-introspection
         # against the GObject typelibs that glib-introspection ships, and
         # neither is implied by anything else in the recipe.
-        if re.search(r"-Dintrospection=(enabled|true)", scripts):
-            wants |= {"gobject-introspection", "glib-introspection"}
+        # The option this recipe passes is a fact about the build that will
+        # run, so it fails. generate_gir in upstream source is read without
+        # evaluating the conditions around it, so it warns -- and the data
+        # says so plainly: of the four recipes it names, three are wrong.
+        # glib calls generate_gir in a branch its first pass does not take,
+        # gobject-introspection cannot depend on the glib-introspection that
+        # depends on IT, and libxmlb builds its gir only when configured to.
+        # Only appstream is real. A failing rule with a 75% false-positive
+        # rate would be worked around within a day.
+        introspects_option = bool(
+            re.search(r"-Dintrospection=(enabled|true)", scripts))
+        introspects_source = False
 
         # Rule two: the general form. Whatever the source's own meson.build
         # insists on, some package here has to provide.
         src_dir, tarball = tarball_of(recipe)
         archive = CACHE / tarball if tarball else None
+        scanned = None
         if src_dir and archive and archive.exists():
-            for alternatives in scan_tarball(archive, src_dir)["programs"]:
+            scanned = scan_tarball(archive, src_dir)
+            # Generating a GIR needs g-ir-scanner AND the GObject typelibs it
+            # reads. The scanner comes from gobject-introspection; the .gir
+            # files come from glib-introspection, and a package that has one
+            # without the other links successfully and then dies.
+            introspects_source = scanned["generates_gir"]
+            for alternatives in scanned["programs"]:
                 providers = set()
                 for program in alternatives:
                     providers |= index.get(program, set())
@@ -468,6 +494,9 @@ def check_tool_dependencies(recipes: dict[str, dict]) -> None:
                 if providers & declared:
                     continue
                 wants.add(sorted(providers)[0])
+
+        if introspects_option or introspects_source:
+            wants |= {"gobject-introspection", "glib-introspection"}
 
         missing = sorted(w for w in wants if w not in declared)
         if not missing:
@@ -490,9 +519,9 @@ def check_tool_dependencies(recipes: dict[str, dict]) -> None:
         # graph at all. A check whose findings are applied blindly would
         # therefore break the build it exists to protect, so this one reports
         # and a person decides.
-        if any(w in ("gobject-introspection", "glib-introspection")
-               for w in missing) and re.search(
-                   r"-Dintrospection=(enabled|true)", scripts):
+        if introspects_option and any(
+                w in ("gobject-introspection", "glib-introspection")
+                for w in missing):
             fail(name, "enables introspection but does not declare: "
                        + ", ".join(missing))
         else:
