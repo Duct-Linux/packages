@@ -1,0 +1,28 @@
+[package]
+name = "libX11"
+description = "Core X11 client library"
+version = "1.8.12"
+subversion = "1"
+authors = ["The X.Org Foundation"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+libxcb = ">=1.17.0"
+
+[dependencies.build]
+xorgproto = ">=2024.1"
+xtrans = ">=1.6.0"
+pkgconf = ">=2.5.0"

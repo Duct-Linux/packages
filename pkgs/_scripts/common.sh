@@ -140,6 +140,81 @@ strip_payload() {
 	done
 }
 
+# finish_install -- everything that happens after `make install`, whatever ran
+# it. Autotools and meson stage the same tree and have the same things wrong
+# with it, so the tail of the two install stages was identical; it is shared
+# here rather than kept in step by hand.
+finish_install() {
+	# The GNU info directory index. Every GNU package wants to write it, and
+	# tape treats two packages claiming one path as a hard error with no
+	# override (daemon/utils/install.go). Nothing regenerates it here anyway,
+	# since tape has no install hooks -- so it is dropped rather than fought
+	# over.
+	rm -f "$DESTDIR/usr/share/info/dir"
+
+	# libtool archives point at build-time paths and break anything that later
+	# reads them from a different prefix. Distributions drop them; nothing in
+	# Duct links with libtool.
+	if [ "${KEEP_LA_FILES:-0}" != "1" ]; then
+		find "$DESTDIR" -name '*.la' -type f -delete 2>/dev/null || true
+	fi
+
+	if [ "${KEEP_DOCS:-0}" != "1" ]; then
+		rm -rf "$DESTDIR/usr/share/doc" "$DESTDIR/usr/share/gtk-doc"
+	fi
+
+	# A recipe can do its own final touch-ups -- splitting, moving, generating a
+	# config file -- without having to replace the whole install stage.
+	if [ -x "$RECIPE_DIR/post-install.sh" ]; then
+		log "running post-install.sh"
+		"$RECIPE_DIR/post-install.sh" || die "post-install.sh failed"
+	fi
+
+	strip_payload
+
+	# An empty payload is almost always a recipe bug -- a wrong DESTDIR, a
+	# configure that installed to /usr/local, a make install that quietly did
+	# nothing. tape would happily package the emptiness and the mistake would
+	# surface much later.
+	if [ -z "$(find "$DESTDIR" -mindepth 1 -print -quit 2>/dev/null)" ]; then
+		die "staging root is empty; nothing would be packaged"
+	fi
+}
+
+# memory_jobs -- how many compilations this machine can run at once without
+# being killed, which for a few packages is a much smaller number than $JOBS.
+#
+# Most builds are bounded by cores. A handful are bounded by memory: LLVM's
+# larger translation units peak around 2 GB in cc1plus, and its link needs
+# several more. On a machine with a conventional amount of RAM per core,
+# -j$(nproc) on those does not build slowly, it gets OOM-killed -- and what it
+# leaves behind names neither memory nor the job count:
+#
+#   c++: fatal error: Killed signal terminated program cc1plus
+#
+# Both of the builds that compile LLVM have hit this: the llvm package, and
+# rust, whose x.py builds its own vendored copy. They are in different images
+# and were found days apart, which is the argument for one implementation here
+# rather than the arithmetic copied into each.
+#
+#   memory_jobs [<gb_per_job>]   -- default 2 GB per job
+#
+# Being wrong in the cautious direction costs time; being wrong the other way
+# costs the whole build.
+memory_jobs() {
+	_per=${1:-2}
+	_kb=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo 0)
+	if [ "${_kb:-0}" -le 0 ]; then
+		echo 1
+		return 0
+	fi
+	_gb=$((_kb / 1024 / 1024))
+	_n=$((_gb / _per))
+	[ "$_n" -lt 1 ] && _n=1
+	[ "$_n" -gt "$JOBS" ] && _n=$JOBS
+	echo "$_n"
+}
+
 # verify_sha256 <file> <expected>
 verify_sha256() {
 	_file=$1

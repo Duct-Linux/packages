@@ -84,8 +84,12 @@ RUST_PKGS := uutils-coreutils
 #
 # duct-live is last: it is only configuration, but it depends on busybox,
 # util-linux and kmod being real packages rather than intentions.
+# kmod and util-linux are NOT here. They have a single mention, in SESSION_PKGS,
+# which runs earlier -- so linux still gets them, and so do eudev and elogind,
+# which link libkmod, libblkid and libmount. Keeping the mention here instead
+# would satisfy linux and leave those three building without them.
 BOOT_PKGS := \
-	bc elfutils busybox kmod util-linux \
+	bc elfutils busybox \
 	linux grub duct-live
 
 # Recipes that have existed for a while and were never in this list, so nothing
@@ -108,9 +112,51 @@ BOOT_PKGS := \
 #
 # Built, but not necessarily shipped: the ISO manifest in
 # images/Dockerfile.iso is a separate list.
-SUPPORT_PKGS := ca-certificates openssl python
+#   libffi   python builds the extension modules whose dependencies it can find
+#            and silently omits the rest, so a python built before libffi has no
+#            _ctypes and therefore no ctypes at all. That surfaced three tiers
+#            away, as mesa's code generator dying on "No module named '_ctypes'".
+SUPPORT_PKGS := ca-certificates openssl libffi python
 
-ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) $(BOOT_PKGS)
+TOOLS_PKGS := \
+	\
+	gettext ninja cmake meson gperf \
+	libxml2 libxslt itstool python-markupsafe python-jinja2 python-mako \
+	python-setuptools python-pyyaml python-pycparser
+
+SESSION_PKGS := \
+	libxcrypt attr acl libcap expat pcre2 \
+	util-linux linux-pam shadow kmod eudev \
+	dbus duktape iso-codes xkeyboard-config hwdata elogind
+
+FONT_PKGS := \
+	libpng brotli freetype fontconfig fribidi pixman
+
+GLIB_PKGS := \
+	glib gobject-introspection glib-introspection
+
+GRAPHICS_PKGS := \
+	xorg-util-macros xorgproto xtrans xcb-proto \
+	libXau libXdmcp libxcb libX11 \
+	libXext libXrender libXfixes libXdamage libXcomposite \
+	libXrandr libXi libXinerama libXcursor libXtst \
+	libpciaccess libdrm wayland wayland-protocols \
+	mtdev libevdev libinput libxkbcommon \
+	llvm mesa
+
+GTK_PKGS := \
+	harfbuzz cairo pango \
+	libsass sassc \
+	libjpeg-turbo libtiff libwebp \
+	shared-mime-info desktop-file-utils hicolor-icon-theme \
+	gdk-pixbuf graphene libepoxy \
+	libyaml curl libxmlb appstream \
+	gsettings-desktop-schemas \
+	gtk4 libadwaita adwaita-icon-theme cantarell-fonts
+
+ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
+	$(TOOLS_PKGS) $(SESSION_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
+	$(GRAPHICS_PKGS) $(GTK_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #
@@ -148,7 +194,7 @@ DOCKER_ARGS = --rm \
 DOCKER      = docker run $(DOCKER_ARGS) --entrypoint /bin/bash $(IMAGE) -c
 DOCKER_REPO = docker run $(DOCKER_ARGS) --entrypoint /bin/bash $(REPO_IMAGE) -c
 
-.PHONY: all packages packages-native packages-tape packages-rust repo key clean clean-repo dirs stage pin toolchain check-sources
+.PHONY: all packages packages-native packages-tape packages-rust repo key clean clean-repo dirs stage pin toolchain check-sources check-recipes
 
 all: repo
 
@@ -278,7 +324,7 @@ stale = $(shell [ -n "$(strip $(call built,$(1)))" ] && \
 
 skip_if_built = $(if $(REBUILD),,$(if $(call built,$(1)),$(if $(call stale,$(1)),,true),))
 
-packages-native: stage check-sources
+packages-native: stage check-sources check-recipes
 	@set -e; $(foreach p,$(ALL_PKGS), \
 		if $(if $(call skip_if_built,$(p)),true,false); then \
 			echo "==> $(p) (already built)"; \
@@ -350,6 +396,13 @@ packages-rust: stage check-sources
 # a failed build, not a slow one -- so it is worth one second up front.
 check-sources:
 	@DUCT_SRC_CACHE=$(CACHE) ./tools/check-sources.sh
+
+# The recipe errors tape does not report. Chief among them: a version that does
+# not parse as semver makes the resolver skip the package *silently*, so it
+# builds, indexes, and then never resolves for anything depending on it. Two
+# recipes shipped in that state before this check existed.
+check-recipes:
+	@./tools/check-recipes.sh
 
 # Generated once and then reused. Losing it means every client that trusted the
 # old key has to be updated, so it is never regenerated implicitly.

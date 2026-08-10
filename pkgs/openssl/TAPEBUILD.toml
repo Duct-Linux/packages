@@ -1,8 +1,8 @@
 [package]
 name = "openssl"
 description = "TLS and cryptography library"
-version = "4.0.1"
-subversion = "1"
+version = "3.5.7"
+subversion = "2"
 authors = ["The OpenSSL Project"]
 packagers = ["ItzYanick"]
 

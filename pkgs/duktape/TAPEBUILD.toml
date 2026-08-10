@@ -1,0 +1,24 @@
+[package]
+name = "duktape"
+description = "Embeddable JavaScript engine"
+version = "2.7.0"
+subversion = "1"
+authors = ["Duktape authors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]

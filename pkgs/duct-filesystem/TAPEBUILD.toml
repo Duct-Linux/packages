@@ -2,7 +2,7 @@
 name = "duct-filesystem"
 description = "The Duct directory skeleton and base system files"
 version = "0.1.0"
-subversion = "1"
+subversion = "3"
 authors = ["Duct"]
 packagers = ["ItzYanick"]
 

@@ -1,0 +1,35 @@
+[package]
+name = "pango"
+description = "Text layout and rendering library"
+version = "1.56.3"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+harfbuzz = ">=11.0.0"
+fribidi = ">=1.0.16"
+cairo = ">=1.18.4"
+fontconfig = ">=2.16.0"
+freetype = ">=2.13.3"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.1"

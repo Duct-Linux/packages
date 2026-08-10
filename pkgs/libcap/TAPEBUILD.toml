@@ -1,0 +1,24 @@
+[package]
+name = "libcap"
+description = "POSIX capabilities library and utilities"
+version = "2.76.0"
+subversion = "1"
+authors = ["upstream"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]

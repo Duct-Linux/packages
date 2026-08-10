@@ -1,0 +1,27 @@
+[package]
+name = "adwaita-icon-theme"
+description = "The GNOME icon theme"
+version = "48.0.0"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+hicolor-icon-theme = ">=0.18.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+gtk4 = ">=4.18.5"

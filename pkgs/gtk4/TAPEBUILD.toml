@@ -1,0 +1,41 @@
+[package]
+name = "gtk4"
+description = "GTK 4 user interface toolkit"
+version = "4.18.5"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+gdk-pixbuf = ">=2.42.12"
+pango = ">=1.56.3"
+cairo = ">=1.18.4"
+graphene = ">=1.10.8"
+libepoxy = ">=1.5.10"
+wayland = ">=1.23.1"
+libxkbcommon = ">=1.8.1"
+iso-codes = ">=4.18.0"
+mesa = ">=25.0.0"
+fribidi = ">=1.0.16"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+sassc = ">=3.6.0"
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.1"

@@ -57,8 +57,21 @@ codegen-tests = false
 deny-warnings = false
 TOML
 
-log "building llvm and rustc for $host (this takes hours)"
-python3 x.py build --stage 2 -j "$JOBS" || die "x.py build failed"
+# -j from memory, not from cores. x.py builds its own vendored LLVM before it
+# builds anything Rust, so this compiles the same enormous C++ translation
+# units the llvm package does and fails the same way: at -j$(nproc) on a 7.7 GB
+# machine it was OOM-killed on SLPVectorizer.cpp, one of LLVM's hungriest
+# files, at object 1551 of 2920 -- hours in, with a message naming neither
+# memory nor the job count.
+#
+# This is the second place that bug has appeared. It was fixed in the llvm
+# package first and did not travel here, because x.py's LLVM has nothing to do
+# with the llvm recipe -- different build, different image, same failure. The
+# arithmetic now lives in common.sh so a third such build inherits it rather
+# than rediscovering it.
+jobs=$(memory_jobs 2)
+log "building llvm and rustc for $host with $jobs jobs (this takes hours)"
+python3 x.py build --stage 2 -j "$jobs" || die "x.py build failed"
 
 [ -x "build/$host/stage2/bin/rustc" ] || die "no stage2 rustc was produced"
 log "built $(build/"$host"/stage2/bin/rustc --version)"

@@ -1,0 +1,25 @@
+[package]
+name = "itstool"
+description = "Translate XML documents with PO files"
+version = "2.0.7"
+subversion = "1"
+authors = ["Shaun McCance"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+python = ">=3.13.0"
+libxml2 = ">=2.13.0"
+
+[dependencies.build]

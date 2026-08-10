@@ -1,0 +1,25 @@
+[package]
+name = "acl"
+description = "POSIX access control list utilities and library"
+version = "2.3.2"
+subversion = "1"
+authors = ["upstream"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+attr = ">=2.5.2"
+
+[dependencies.build]

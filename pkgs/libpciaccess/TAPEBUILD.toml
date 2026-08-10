@@ -1,0 +1,28 @@
+[package]
+name = "libpciaccess"
+description = "PCI device access library"
+version = "0.18.1"
+subversion = "1"
+authors = ["The X.Org Foundation"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+hwdata = ">=0.394.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"

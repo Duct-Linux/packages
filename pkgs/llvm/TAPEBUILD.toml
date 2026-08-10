@@ -1,0 +1,27 @@
+[package]
+name = "llvm"
+description = "Compiler infrastructure libraries"
+version = "20.1.8"
+subversion = "2"
+authors = ["The LLVM Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+gcc = ">=15.2.0"
+zlib = ">=1.3.1"
+libffi = ">=3.4.8"
+
+[dependencies.build]
+cmake = ">=4.0.0"
+ninja = ">=1.13.0"
+python = ">=3.13.0"

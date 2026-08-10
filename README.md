@@ -134,8 +134,14 @@ keep new ones that way.
   The generic `install.sh` drops `usr/share/info/dir` and `*.la` for this reason.
 - `package.arch` cannot be set in the recipe. It comes from `--target`, which
   the Makefile supplies per package (`ARCH_<name> := any` for the portable ones).
-- setuid/setgid/sticky bits do not survive installation, and device nodes cannot
-  be packaged at all.
+- setuid/setgid/sticky bits **do** survive, in both the archive and the install.
+  This bullet used to say the opposite; it was wrong. The daemon's install path
+  sets `PreserveSetuid` deliberately (`daemon/utils/install.go`), on the grounds
+  that a package's digest was checked against a signed index before extraction,
+  so it is not an arbitrary archive — and dropping the bits would ship a `su`
+  that is present, executable and broken. Verified end to end: `shadow`'s
+  `passwd` is `-rwsr-xr-x` in the archive, `duct-filesystem`'s `/tmp` is
+  `drwxrwxrwt`. Device nodes still cannot be packaged.
 - There are no install hooks, so nothing can run `ldconfig`. The image build does
   it once, after everything is installed.
 
@@ -146,6 +152,94 @@ picked individually, so the set is known to build together and a failure is a
 recipe bug rather than a version-compatibility bug. Each `pkg.env` records the
 URL and a sha256 that `fetch.sh` verifies before unpacking — a cached tarball
 that fails verification is deleted and re-fetched rather than trusted.
+
+The desktop packages follow BLFS 12.4, which is the book that matches LFS 12.4
+— the same argument, one level up. They pin their URL and sha256 **in their own
+`pkg.env`** rather than in `versions.env`, as `openssl`, `cmake`, `ninja`, `go`
+and `rust` already did: `versions.env` is regenerated wholesale from the LFS
+book by `tools/pin-versions.sh`, so a desktop pin placed there would be
+destroyed by the next `make pin`.
+
+## The desktop stack
+
+Roughly seventy recipes, added in dependency tiers. The tiers are the lists in
+the Makefile, and the order within each is what `configure` looks for rather
+than what the packages are about:
+
+| tier | Makefile list | what it is |
+|---|---|---|
+| 0 | `TOOLS_PKGS` | meson, cmake, gperf, libxml2/libxslt, three pure-Python modules |
+| 1 | `SESSION_PKGS` | PAM, shadow, udev, dbus, **elogind**, and the libraries under them |
+| 2 | `GRAPHICS_PKGS` | wayland, libdrm, libinput, libxkbcommon, X client libraries, llvm, mesa |
+| 3–4 | `DESKTOP_PKGS` | freetype through pango, then glib through gtk4 and libadwaita |
+
+Three decisions worth knowing before reading the recipes:
+
+- **Wayland first.** mesa is built with `-Dplatforms=wayland` and no GLX, gtk4
+  with no X11 backend, cairo with no xlib surface. The X *client* libraries are
+  packaged because several GNOME components link them regardless of backend, and
+  because Xwayland would need them first — but nothing here runs an X server.
+- **elogind, not systemd.** mutter cannot open a DRM device or an input device
+  on a seat-managed system without asking logind; gnome-shell will not draw
+  until logind says the session is active. elogind installs a `libsystemd.pc`
+  symlink because every GNOME component looks for that name.
+- **Three build systems.** `_scripts/` now carries a `build`/`install` pair for
+  each of autotools, meson and cmake. All three are told to use `/usr/lib`
+  explicitly: both meson and cmake pick `lib64` when `/usr/lib64` exists, and
+  `duct-filesystem` creates it because the ELF interpreter path baked into every
+  x86_64 binary is `/lib64/ld-linux-x86-64.so.2`.
+
+### What the image build still has to do
+
+tape has no install hooks, so every cache that is a build product of the *whole*
+installation rather than of one package has to be generated after everything is
+installed. Each is a no-op until the package that provides the tool is present:
+
+```
+ldconfig
+glib-compile-schemas /usr/share/glib-2.0/schemas
+gdk-pixbuf-query-loaders --update-cache
+update-mime-database /usr/share/mime
+update-desktop-database
+fc-cache -f
+gtk4-update-icon-cache
+udevadm hwdb --update
+```
+
+`/etc/machine-id` is not in that list on purpose: it identifies the
+installation, so it is generated on first boot and must never be baked into an
+image. Setuid and sticky bits, by contrast, need no restoration step — see the
+constraints above.
+
+### What is not packaged yet
+
+The tiers above stop at libadwaita. That is a complete GTK 4 application
+platform — a GTK program will build, run and draw against a Wayland compositor
+— but it is **not yet a GNOME session**: there is no compositor and no shell.
+What is still missing, in dependency order:
+
+1. **Crypto and network**: `sqlite`, `libgpg-error`, `libgcrypt`, `libtasn1`,
+   `nettle`, `p11-kit`, `gnutls`, `glib-networking`, `json-glib`, `libsoup`.
+2. **Session services**: `polkit` (duktape is already packaged for it),
+   `libgudev`, `upower`, `accountsservice`, `libnotify`, `gnome-desktop`,
+   `gnome-menus`, `gcr`, `libsecret`, `gnome-keyring`.
+3. **JavaScript**: `mozjs`, then `gjs`.
+4. **The session itself**: `mutter`, `gnome-settings-daemon`, `gnome-session`,
+   `gnome-shell`, `gnome-shell-extensions`, and a display manager or an
+   autologin path.
+
+`mozjs` is the one with real risk in it, and it is unavoidable: `gnome-shell` is
+written in JavaScript, it runs on `gjs`, and `gjs` is a binding for
+SpiderMonkey. Building SpiderMonkey needs Rust — which Duct packages, in its own
+build image — and clang, which it does not. The `llvm` recipe added here builds
+with `LLVM_ENABLE_PROJECTS` empty; turning clang on is most of what unblocks
+`mozjs`, at a substantial cost in build time. Until that is done there is no
+GNOME Shell, and saying so plainly is better than discovering it at the end of
+the tier.
+
+Also deferred, and cheaper: `xwayland` (so X-only applications run at all),
+`gstreamer` (so `GtkVideo` and `gnome-shell`'s screencasting work), `cups` (so
+anything can print), and `nasm` (so `libjpeg-turbo` can use its SIMD paths).
 
 ## Status
 
@@ -188,8 +282,9 @@ temporary one meant grub built in `duct/chroot` and failed in `duct/builder`.
 ## Layout
 
 ```
-pkgs/            41 package recipes + the shared stage scripts
-pkgs/versions.env  every upstream URL and sha256, generated
+pkgs/            package recipes + the shared stage scripts
+pkgs/_scripts/   fetch, prepare, and a build/install pair per build system
+pkgs/versions.env  every LFS upstream URL and sha256, generated
 toolchain/       the cross toolchain and temporary tools (LFS ch. 5 and 6)
 tools/           pin-versions.sh, gen-recipes.sh
 legacy/          the original single-pass scripts, superseded
@@ -203,7 +298,9 @@ builder would buy nothing.
 `tools/gen-recipes.sh` writes the routine recipes so the twenty-odd
 configure-make-install packages cannot drift apart. It refuses to overwrite an
 existing recipe, so the hand-written ones (glibc, gcc, bzip2, perl,
-linux-headers, uutils-coreutils, duct-filesystem, tape) are safe from it.
+linux-headers, uutils-coreutils, duct-filesystem, tape) are safe from it. It has
+not been taught the desktop tiers: those pin their sources in `pkg.env` rather
+than in `versions.env`, which is the one assumption the generator makes.
 
 `legacy/` holds the original single-pass scripts. They are superseded — they
 compiled against the host toolchain and produced a rootfs with no packaging at

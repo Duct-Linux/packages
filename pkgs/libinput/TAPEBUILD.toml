@@ -1,0 +1,31 @@
+[package]
+name = "libinput"
+description = "Input device handling library"
+version = "1.28.1"
+subversion = "1"
+authors = ["freedesktop.org"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+libevdev = ">=1.13.4"
+mtdev = ">=1.1.7"
+eudev = ">=3.2.14"
+
+[dependencies.build]
+meson = ">=1.8.2"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+wayland = ">=1.23.1"

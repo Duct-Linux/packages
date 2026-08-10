@@ -1,0 +1,29 @@
+[package]
+name = "libdrm"
+description = "Direct Rendering Manager userspace library"
+version = "2.4.124"
+subversion = "1"
+authors = ["freedesktop.org"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+libpciaccess = ">=0.18.1"
+eudev = ">=3.2.14"
+
+[dependencies.build]
+meson = ">=1.8.2"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"

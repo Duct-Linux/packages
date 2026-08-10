@@ -1,0 +1,26 @@
+[package]
+name = "libxslt"
+description = "XSLT transformation library"
+version = "1.1.43"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+libxml2 = ">=2.13.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"

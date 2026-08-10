@@ -1,0 +1,25 @@
+[package]
+name = "xorgproto"
+description = "X Window System protocol headers"
+version = "2024.1.0"
+subversion = "1"
+authors = ["The X.Org Foundation"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"

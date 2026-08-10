@@ -1,0 +1,18 @@
+[package]
+name = "python-setuptools"
+description = "Package discovery and build support for Python"
+version = "80.9.0"
+subversion = "1"
+authors = ["Python Packaging Authority"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+python = ">=3.13.0"
+
+[dependencies.build]

@@ -1,0 +1,29 @@
+[package]
+name = "freetype"
+description = "Font rendering engine"
+version = "2.13.3"
+subversion = "1"
+authors = ["The FreeType Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+zlib = ">=1.3.1"
+libpng = ">=1.6.47"
+bzip2 = ">=1.0.8"
+brotli = ">=1.1.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
