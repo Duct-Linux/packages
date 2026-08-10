@@ -2,7 +2,7 @@
 name = "binutils"
 description = "GNU binary utilities"
 version = "2.45.0"
-subversion = "2"
+subversion = "3"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 
