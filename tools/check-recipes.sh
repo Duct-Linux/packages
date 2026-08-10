@@ -423,6 +423,42 @@ def declared_closure(recipes: dict[str, dict], name: str) -> set[str]:
     return seen
 
 
+def check_pkg_env_sources() -> None:
+    """Every pkg.env can actually be sourced by a shell.
+
+    pkg.env is not a config file, it is SHELL, sourced by common.sh and by
+    fetch-source.sh. So an unquoted value containing spaces is not a style
+    problem -- the shell reads the first word as the assignment and tries to
+    RUN the rest. That is how this check came to exist: a PKG_UNLISTED marker
+    added to explain why go is not in any build list was written unquoted, and
+
+        pkgs/go/pkg.env: line 14: in: command not found
+
+    failed the go and rust jobs on both architectures within a minute. The
+    marker documenting an exclusion broke the build of the package it
+    described.
+
+    Nothing else would have caught it. The recipe checks read pkg.env with
+    regular expressions, which do not care about quoting; the syntax is valid,
+    so `sh -n` passes; and it only fails when something SOURCES the file.
+    So the check sources it.
+    """
+    for env in sorted(PKGS.glob("*/pkg.env")):
+        proc = subprocess.run(
+            ["sh", "-c", f'. "{env}"'],
+            capture_output=True, text=True,
+            # A recipe reads $SOMETHING_URL from versions.env, so source that
+            # first or every recipe using a shared pin reports an error it does
+            # not have.
+            env={"PATH": "/usr/bin:/bin"},
+        )
+        if proc.returncode != 0 or proc.stderr.strip():
+            detail = (proc.stderr.strip().splitlines() or ["exit %d" % proc.returncode])[0]
+            fail(env.parent.name, f"pkg.env cannot be sourced: {detail}. "
+                                  "It is shell, not a config file -- a value "
+                                  "containing spaces has to be quoted.")
+
+
 def check_tool_dependencies(recipes: dict[str, dict]) -> None:
     """A recipe declares the packages providing the programs its build needs.
 
@@ -804,6 +840,7 @@ def main() -> int:
     check_meson_options(recipes)
     check_declared_tools(recipes, versions)
     check_tool_dependencies(recipes)
+    check_pkg_env_sources()
     check_version_matches_source(recipes)
     check_arch_independence()
     check_every_recipe_is_listed()
