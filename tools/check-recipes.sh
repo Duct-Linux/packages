@@ -33,6 +33,7 @@ import tomllib
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 PKGS = ROOT / "pkgs"
 CACHE = pathlib.Path.home() / ".cache/duct/sources"
+OUT = ROOT / "out" / "pkgs"
 
 # meson's own options, which never appear in a project's option file.
 MESON_BUILTIN = {
@@ -190,7 +191,8 @@ def scan_tarball(archive: pathlib.Path, src_dir: str) -> dict:
     Opened once rather than once per check: these are xz archives and llvm's is
     130 MB, so a second pass is not free.
     """
-    found = {"meson_options": set(), "pkgconfig": False, "python_modules": set()}
+    found = {"meson_options": set(), "pkgconfig": False, "python_modules": set(),
+             "programs": []}
     try:
         tf = tarfile.open(archive)
     except (OSError, tarfile.TarError):
@@ -256,6 +258,31 @@ def scan_tarball(archive: pathlib.Path, src_dir: str) -> dict:
                         r"""['"]import ([A-Za-z_][A-Za-z0-9_]*)['"]""", data):
                     found["python_modules"].add(imp.group(1))
 
+                # find_program() is the general form of the same problem, and
+                # it is the one that stopped adwaita-icon-theme:
+                #   find_program('gtk4-update-icon-cache',
+                #                'gtk-update-icon-cache', required : true)
+                # meson dies at setup if none of the named programs exists.
+                #
+                # The names are ALTERNATIVES, not a list of requirements, so
+                # they are kept together as one group -- reporting each
+                # separately would demand a package for gtk-update-icon-cache
+                # (GTK 3, which this distribution does not ship) alongside the
+                # gtk4 one that actually satisfies the call.
+                for call in re.finditer(r"find_program\s*\(", data):
+                    window = data[call.end():call.end() + 300]
+                    head = window.split(")", 1)[0]
+                    # required : false means the build copes without it, the
+                    # same reasoning as for Python modules above.
+                    if re.search(r"required\s*:\s*false", head):
+                        continue
+                    # Stop at the first keyword argument: everything after
+                    # "required :" or "native :" is configuration, not a name.
+                    names_part = re.split(r"[A-Za-z_]+\s*:", head)[0]
+                    alts = re.findall(r"'([A-Za-z0-9_.+-]+)'", names_part)
+                    if alts:
+                        found["programs"].append(tuple(alts))
+
                 for call in re.finditer(r"find_installation\s*\(", data):
                     window = data[call.end():call.end() + 400]
                     mods = re.search(r"modules\s*:\s*\[([^\]]*)\]", window)
@@ -320,6 +347,159 @@ def check_declared_tools(recipes: dict[str, dict], versions: dict[str, str]) -> 
         if missing:
             fail(name, "uses but does not declare in [dependencies.build]: "
                        + ", ".join(missing))
+
+
+def program_index() -> dict[str, set[str]]:
+    """Map program name -> packages that ship it, read from the built packages.
+
+    Derived from what the packages ACTUALLY SHIP rather than from a table kept
+    by hand. A table would be a second source of truth about the tree, and the
+    tree already knows: every executable this distribution provides is in a
+    tarball under out/pkgs. Same reasoning as asking make for its own ALL_PKGS
+    expansion instead of parsing the Makefile by eye.
+
+    Empty when nothing has been built locally, which makes the check that uses
+    it silently inert rather than wrong -- the same bargain as the meson-option
+    check and the cache.
+    """
+    index: dict[str, set[str]] = {}
+    if not OUT.is_dir():
+        return index
+    for archive in sorted(OUT.glob("*.tape.tar.gz")):
+        m = re.match(r"^(?P<name>.+)-\d[^-]*-\d+\.(?:any|aarch64|x86_64)"
+                     r"\.tape\.tar\.gz$", archive.name)
+        if not m:
+            continue
+        owner = m.group("name")
+        # out/pkgs is a build output directory, not a manifest: it accumulates
+        # whatever has ever been built here, including packages from other
+        # branches. clang is built by a recipe that lives on another branch,
+        # and indexing its artefact here would have this check demanding a
+        # dependency on a package that does not exist in this tree.
+        if not (PKGS / owner / "TAPEBUILD.toml").exists():
+            continue
+        try:
+            tf = tarfile.open(archive)
+        except (OSError, tarfile.TarError):
+            continue
+        with tf:
+            for member in tf:
+                if not (member.isfile() or member.issym()):
+                    continue
+                name = member.name
+                if not re.search(r"^install/usr/(bin|sbin|libexec)/", name):
+                    continue
+                index.setdefault(name.rsplit("/", 1)[-1], set()).add(owner)
+    return index
+
+
+def declared_closure(recipes: dict[str, dict], name: str) -> set[str]:
+    """Every package reachable from name through declared dependencies.
+
+    Transitive rather than direct, because ordering is what is being checked
+    and a declared chain already guarantees it: adwaita-icon-theme naming gtk4
+    is enough to be built after everything gtk4 names.
+    """
+    seen: set[str] = set()
+    queue = [name]
+    while queue:
+        current = queue.pop()
+        deps = recipes.get(current, {}).get("dependencies", {}) or {}
+        for section in (deps, deps.get("build") or {}):
+            for dep in section:
+                if dep == "build" or dep in seen:
+                    continue
+                seen.add(dep)
+                queue.append(dep)
+    return seen
+
+
+def check_tool_dependencies(recipes: dict[str, dict]) -> None:
+    """A recipe declares the packages providing the programs its build needs.
+
+    THIS IS THE CHECK THE MAKEFILE CANNOT BE. A local build runs ALL_PKGS in
+    sequence, so every earlier package is present whether or not it was
+    declared -- a total order supplies by accident what a declaration should
+    supply on purpose. CI builds in dependency LEVELS, a partial order, and
+    seeds each job only from levels strictly below it. So an undeclared build
+    dependency is invisible locally and fatal in CI, and it fails in the worst
+    possible way: at the same level as the thing it needed, deterministically,
+    with an error naming the program rather than the missing declaration.
+
+    That is not hypothetical. graphene, harfbuzz and gsettings-desktop-schemas
+    were placed at the same level as gobject-introspection because they never
+    named it, and adwaita-icon-theme three levels below the gtk4 whose
+    gtk4-update-icon-cache it cannot start without.
+    """
+    index = program_index()
+    if not index:
+        return
+
+    for name in sorted(recipes):
+        recipe = PKGS / name
+        scripts = "".join(
+            (recipe / f).read_text() for f in ("pkg.env", "build.sh")
+            if (recipe / f).exists()
+        )
+        declared = declared_closure(recipes, name) | {name}
+        wants: set[str] = set()
+
+        # Rule one: introspection is a build-time code generator, not a flag.
+        # -Dintrospection=enabled runs g-ir-scanner from gobject-introspection
+        # against the GObject typelibs that glib-introspection ships, and
+        # neither is implied by anything else in the recipe.
+        if re.search(r"-Dintrospection=(enabled|true)", scripts):
+            wants |= {"gobject-introspection", "glib-introspection"}
+
+        # Rule two: the general form. Whatever the source's own meson.build
+        # insists on, some package here has to provide.
+        src_dir, tarball = tarball_of(recipe)
+        archive = CACHE / tarball if tarball else None
+        if src_dir and archive and archive.exists():
+            for alternatives in scan_tarball(archive, src_dir)["programs"]:
+                providers = set()
+                for program in alternatives:
+                    providers |= index.get(program, set())
+                # No provider means the program is not something this
+                # distribution ships -- a host tool, or one that arrives with
+                # the base image. Nothing to declare.
+                if not providers:
+                    continue
+                if providers & declared:
+                    continue
+                wants.add(sorted(providers)[0])
+
+        missing = sorted(w for w in wants if w not in declared)
+        if not missing:
+            continue
+
+        # Rule one is decided from the option THIS recipe passes, so it is a
+        # fact about the build that will actually run: it fails.
+        #
+        # Rule two reads the source's find_program calls without evaluating the
+        # conditions around them, so it cannot tell a call the build makes from
+        # one guarded by an option this recipe disables. It warns.
+        #
+        # That distinction is not caution, it is a correctness requirement, and
+        # both false positives prove it -- BOTH ARE CYCLES. xkeyboard-config's
+        # meson asks for xkbcli, which libxkbcommon ships, and libxkbcommon
+        # depends on xkeyboard-config. glib's asks for g-ir-scanner in the
+        # introspection branch its first pass does not take, and
+        # gobject-introspection depends on glib. Declaring either would make
+        # dep-levels.sh report a dependency cycle and refuse to produce a
+        # graph at all. A check whose findings are applied blindly would
+        # therefore break the build it exists to protect, so this one reports
+        # and a person decides.
+        if any(w in ("gobject-introspection", "glib-introspection")
+               for w in missing) and re.search(
+                   r"-Dintrospection=(enabled|true)", scripts):
+            fail(name, "enables introspection but does not declare: "
+                       + ", ".join(missing))
+        else:
+            warn(name, "build may need programs from packages it does not "
+                       "declare: " + ", ".join(missing) + ". Check whether the "
+                       "call is guarded by an option this recipe disables, and "
+                       "whether declaring it would create a cycle.")
 
 
 def meson_options(archive: pathlib.Path, src_dir: str) -> set[str] | None:
@@ -528,6 +708,7 @@ def main() -> int:
     check_dependencies(recipes, versions)
     check_meson_options(recipes)
     check_declared_tools(recipes, versions)
+    check_tool_dependencies(recipes)
     check_version_matches_source(recipes)
     check_arch_independence()
 

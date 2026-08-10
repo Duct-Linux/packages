@@ -24,3 +24,5 @@ glib = ">=2.84.0"
 [dependencies.build]
 meson = ">=1.8.0"
 ninja = ">=1.13.0"
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.1"
