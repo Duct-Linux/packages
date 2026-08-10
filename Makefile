@@ -181,7 +181,8 @@ CRYPTO_PKGS := \
 	zstd npth libgpg-error \
 	libassuan libksba libgcrypt \
 	gnupg gpgme \
-	libseccomp libarchive ostree bubblewrap xdg-dbus-proxy
+	libseccomp libarchive ostree bubblewrap xdg-dbus-proxy \
+	dconf
 
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
