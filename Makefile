@@ -182,7 +182,7 @@ CRYPTO_PKGS := \
 	libassuan libksba libgcrypt \
 	gnupg gpgme \
 	libseccomp libarchive ostree bubblewrap xdg-dbus-proxy \
-	dconf flatpak
+	dconf flatpak libpsl
 
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
