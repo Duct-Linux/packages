@@ -2,7 +2,7 @@
 name = "gcc"
 description = "The GNU Compiler Collection (C and C++)"
 version = "15.2.0"
-subversion = "2"
+subversion = "3"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 
