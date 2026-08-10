@@ -34,6 +34,7 @@ ROOT = pathlib.Path(__file__).resolve().parent.parent
 PKGS = ROOT / "pkgs"
 CACHE = pathlib.Path.home() / ".cache/duct/sources"
 OUT = ROOT / "out" / "pkgs"
+INDEX_FILE = ROOT / "tools" / "program-index.tsv"
 
 # meson's own options, which never appear in a project's option file.
 MESON_BUILTIN = {
@@ -359,46 +360,66 @@ def check_declared_tools(recipes: dict[str, dict], versions: dict[str, str]) -> 
 
 
 def program_index() -> dict[str, set[str]]:
-    """Map program name -> packages that ship it, read from the built packages.
+    """Map program name -> packages that ship it.
 
-    Derived from what the packages ACTUALLY SHIP rather than from a table kept
-    by hand. A table would be a second source of truth about the tree, and the
-    tree already knows: every executable this distribution provides is in a
-    tarball under out/pkgs. Same reasoning as asking make for its own ALL_PKGS
-    expansion instead of parsing the Makefile by eye.
+    Read from tools/program-index.tsv, which is GENERATED from the built
+    packages by tools/gen-program-index.py and committed. It is committed
+    because computing it from out/pkgs made this rule LOCAL-ONLY: CI runs this
+    script in the select job on a fresh checkout where out/pkgs does not exist,
+    so the index came out empty and the rule silently checked nothing -- fast,
+    green, and inert in the one place it most needed to run.
 
-    Empty when nothing has been built locally, which makes the check that uses
-    it silently inert rather than wrong -- the same bargain as the meson-option
-    check and the cache.
+    When real packages ARE present the live contents win, and anything they
+    show that the committed file lacks is reported, so the file cannot rot
+    unnoticed on any machine that has built something.
     """
     index: dict[str, set[str]] = {}
-    if not OUT.is_dir():
-        return index
-    for archive in sorted(OUT.glob("*.tape.tar.gz")):
-        m = re.match(r"^(?P<name>.+)-\d[^-]*-\d+\.(?:any|aarch64|x86_64)"
-                     r"\.tape\.tar\.gz$", archive.name)
-        if not m:
-            continue
-        owner = m.group("name")
-        # out/pkgs is a build output directory, not a manifest: it accumulates
-        # whatever has ever been built here, including packages from other
-        # branches. clang is built by a recipe that lives on another branch,
-        # and indexing its artefact here would have this check demanding a
-        # dependency on a package that does not exist in this tree.
-        if not (PKGS / owner / "TAPEBUILD.toml").exists():
-            continue
-        try:
-            tf = tarfile.open(archive)
-        except (OSError, tarfile.TarError):
-            continue
-        with tf:
-            for member in tf:
-                if not (member.isfile() or member.issym()):
-                    continue
-                name = member.name
-                if not re.search(r"^install/usr/(bin|sbin|libexec)/", name):
-                    continue
-                index.setdefault(name.rsplit("/", 1)[-1], set()).add(owner)
+    committed: dict[str, str] = {}
+    if INDEX_FILE.exists():
+        for line in INDEX_FILE.read_text().splitlines():
+            if line.startswith("#") or "\t" not in line:
+                continue
+            program, owner = line.split("\t", 1)
+            committed[program] = owner
+            index.setdefault(program, set()).add(owner)
+
+    live: dict[str, str] = {}
+    if OUT.is_dir():
+        for archive in sorted(OUT.glob("*.tape.tar.gz")):
+            m = re.match(r"^(?P<name>.+)-\d[^-]*-\d+\."
+                         r"(?:any|aarch64|x86_64)\.tape\.tar\.gz$", archive.name)
+            if not m:
+                continue
+            owner = m.group("name")
+            if not (PKGS / owner / "TAPEBUILD.toml").exists():
+                continue
+            try:
+                tf = tarfile.open(archive)
+            except (OSError, tarfile.TarError):
+                continue
+            with tf:
+                for member in tf:
+                    if not (member.isfile() or member.issym()):
+                        continue
+                    hit = re.match(r"^install/usr/(?:bin|sbin|libexec)/([^/]+)$",
+                                   member.name)
+                    if hit:
+                        live[hit.group(1)] = owner
+                        index.setdefault(hit.group(1), set()).add(owner)
+
+    missing = sorted(p for p in live if p not in committed)
+    if missing:
+        warn("tools/program-index.tsv",
+             f"{len(missing)} program(s) shipped by built packages are not in "
+             f"the committed index ({', '.join(missing[:5])}"
+             f"{'...' if len(missing) > 5 else ''}). "
+             "Run `make program-index` to regenerate it.")
+
+    if not index:
+        warn("tools/program-index.tsv",
+             "no program index and no built packages: the rule that checks "
+             "build-tool dependencies did not run at all. This is the check "
+             "being silent rather than passing.")
     return index
 
 
@@ -601,6 +622,27 @@ def check_meson_options(recipes: dict[str, dict]) -> None:
             (recipe / f).read_text() for f in ("pkg.env", "build.sh")
             if (recipe / f).exists()
         )
+        # COMMENTS ARE STRIPPED FIRST, and this is a correctness fix rather
+        # than a convenience.
+        #
+        # The contract above is "every -D option a recipe PASSES exists". A
+        # comment passes nothing, so reading comments is this check examining
+        # text outside its own stated scope and then failing the build over it.
+        # The tempting counter-argument -- that a misspelled option in a
+        # commented-out flag might be a real one -- does not survive contact
+        # with that: an option that is not passed cannot affect the build.
+        #
+        # And the cost of getting this wrong is not a false positive, it is
+        # SILENT LOSS OF DOCUMENTATION. A neighbouring package's flag could not
+        # be quoted literally in a comment without failing the build, and the
+        # natural response to "your comment is an invalid option" is to delete
+        # the comment rather than reword it. weston's recipe hit this twice --
+        # once explaining which gtk4 backends are off, and again in the
+        # reworded warning about the trap, which spelled the pattern out in
+        # order to describe it. A rule that cannot be written down where it
+        # applies is a rule nobody learns.
+        text = "\n".join(
+            line for line in text.splitlines() if not line.lstrip().startswith("#"))
         used = set(re.findall(r"-D([A-Za-z0-9_-]+)=", text))
         if not used:
             continue
