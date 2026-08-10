@@ -1,0 +1,48 @@
+[package]
+name = "zstd"
+description = "Zstandard compression library and command"
+version = "1.5.7"
+subversion = "1"
+authors = ["Meta Platforms, Inc. and contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+# Its own, both of them: zstd has no configure and no meson, only a Makefile,
+# so neither generic stage applies. See build.sh and install.sh.
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+# Nothing but libc, AND THAT IS A DECISION RATHER THAN A PROPERTY OF THE
+# PACKAGE. programs/Makefile probes for zlib, lzma and lz4 by compiling a test
+# program, and zlib and xz are both packaged here -- so left alone the zstd
+# command would link against both and this list would be wrong without anything
+# reporting it. pkg.env pins all three probes to 0. See the comment there.
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]
+# DECLARED FOR THE CHECKER, NOT FOR THE BUILD, and saying so rather than letting
+# it look like a build requirement.
+#
+# This recipe drives the Makefile, which never invokes pkg-config -- the only
+# mentions in Makefile, lib/Makefile and programs/Makefile are two comments. But
+# zstd also SHIPS build systems it does not require you to use: build/meson/ and
+# build/cmake/. tools/check-recipes.sh scans every meson.build, configure and
+# configure.ac in a tarball and sets "uses pkg-config" if any of them contains
+# dependency() or PKG_CHECK_MODULES; zstd's build/meson/meson.build has five
+# dependency() calls, so the inference fires on a build system this recipe never
+# runs.
+#
+# Declared rather than argued with, because pkgconf is present in the builder
+# regardless and an undeclared-tool failure would block CI for a distinction the
+# checker cannot currently draw. The comment is the part that matters: without
+# it, the next reader concludes the Makefile needs pkg-config, which it does not.
+pkgconf = ">=2.5.0"
