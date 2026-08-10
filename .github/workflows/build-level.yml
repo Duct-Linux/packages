@@ -54,10 +54,76 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      # THE CACHE KEY, and everything downstream of it is skipped on a hit.
+      #
+      # A full climb is about four hours, and most of it rebuilds packages the
+      # change under test cannot have affected: rust takes a hundred minutes and
+      # llvm fifty-three, and neither had been touched in the four climbs that
+      # rebuilt them. build.yml rebuilds everything whenever pkgs/_scripts or
+      # versions.env changes, which is right -- but on a pull request that is
+      # measured against the whole branch diff, so one early edit to common.sh
+      # makes every later push rebuild all 134 packages for the rest of the
+      # branch's life.
+      #
+      # tools/pkg-hash.sh hashes everything that decides the output: the recipe
+      # directory, pkgs/_scripts, versions.env, and the dependency closure --
+      # recursively, because a package built against a different glib is a
+      # different package. The source tarball rides along inside pkg.env's
+      # SRC_SHA256.
+      #
+      # The IMAGE DIGEST is appended here rather than inside that script,
+      # because it is the one input that no file in the tree can see: duct/builder
+      # is a moving tag, and a republished image can change what a build produces
+      # with nothing in pkgs/ changing at all. Resolved to a digest rather than
+      # trusting the tag, since the tag is exactly the mutable part.
+      #
+      # If any of this is wrong the failure is SILENT -- a stale package that
+      # builds green and ships something else -- so the key is deliberately
+      # over-inclusive. A needless rebuild costs minutes; a wrong cache hit costs
+      # trust in every green in the run.
+      - name: Compute cache key
+        id: key
+        run: |
+          set -euo pipefail
+          hash=$(./tools/pkg-hash.sh '${{ matrix.package }}' | cut -d' ' -f2)
+          digest=$(docker manifest inspect -v '${{ matrix.image }}' 2>/dev/null \
+                   | jq -r 'if type == "array" then .[0].Descriptor.digest
+                            else .Descriptor.digest end' 2>/dev/null || true)
+          # No digest is not a reason to skip caching, but it IS a reason not to
+          # reuse across an unknown image: fall back to a value that cannot
+          # collide with a real digest, so the entry is written and simply never
+          # matches a differently-resolved one.
+          [ -n "$digest" ] && [ "$digest" != null ] || digest="unresolved-${{ github.run_id }}"
+          echo "hash=$hash" >>"$GITHUB_OUTPUT"
+          echo "key=pkg-v1-${{ matrix.package }}-${{ matrix.arch }}-$hash-$digest" >>"$GITHUB_OUTPUT"
+          echo "cache key: pkg-v1-${{ matrix.package }}-${{ matrix.arch }}-$hash-$digest"
+
+      - name: Restore built package
+        id: cache
+        uses: actions/cache/restore@v4
+        with:
+          path: out
+          # No restore-keys, deliberately. A prefix match would happily restore
+          # a package built from a DIFFERENT recipe, which is the one outcome
+          # this must never produce. Exact key or build it.
+          key: ${{ steps.key.outputs.key }}
+
+      - name: Reuse cached package
+        if: steps.cache.outputs.cache-hit == 'true'
+        run: |
+          set -euo pipefail
+          echo "cache hit: ${{ matrix.package }} (${{ matrix.arch }}) is unchanged; not rebuilding"
+          ls -la out/*.tape.tar.gz
+          # A hit that restored nothing would upload nothing and fail the run at
+          # the artifact step with a confusing message. Say so here instead.
+          compgen -G 'out/*.tape.tar.gz' >/dev/null \
+            || { echo "::error::cache hit restored no package archive"; exit 1; }
+
       # Fetched here, not in the container: the build images have no curl or
       # wget, on purpose. Verified against the pinned sha256 before it is ever
       # mounted.
       - name: Fetch source
+        if: steps.cache.outputs.cache-hit != 'true'
         run: DUCT_SRC_CACHE="$PWD/sources" ./tools/fetch-source.sh '${{ matrix.package }}'
 
       # Everything already published for this architecture, unpacked over the
@@ -71,6 +137,7 @@ jobs:
       # that this repository has packaged for months. Seeding costs a download
       # and removes a whole class of stale-image failure.
       - name: Seed published packages
+        if: steps.cache.outputs.cache-hit != 'true'
         env:
           REPO_URL: https://repo.duct.dss-net.de
         run: |
@@ -167,6 +234,7 @@ jobs:
       # architecture alone would drop them -- and they include the tools other
       # packages cannot build without.
       - name: Download this architecture's packages from earlier levels
+        if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -183,6 +251,7 @@ jobs:
       # package below is architecture-specific. The duct-live job downloaded
       # zero artifacts and the assertion below caught it.
       - name: Download architecture-independent packages from earlier levels
+        if: steps.cache.outputs.cache-hit != 'true'
         uses: actions/download-artifact@v4
         continue-on-error: true
         with:
@@ -191,6 +260,7 @@ jobs:
           merge-multiple: true
 
       - name: Seed packages from this run
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           mkdir -p deps
@@ -256,12 +326,14 @@ jobs:
       # dependency-unpacking step. CI never needed it until seeding started
       # running for builder images.
       - name: Prune runtime-owned paths from the seed
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           rm -rf deps/dev deps/proc deps/sys
           rm -f deps/etc/hosts deps/etc/hostname deps/etc/resolv.conf
 
       - name: Build
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           mkdir -p out sources deps
@@ -379,6 +451,19 @@ jobs:
       # empty artifact and the job goes GREEN -- and then every level above it
       # seeds nothing from that package and fails somewhere else entirely, for
       # a reason that looks nothing like "the build made nothing".
+      # success() is written out rather than relied upon. GitHub ANDs an
+      # implicit success() into any `if:` that contains no status function, so
+      # this would behave correctly without it -- but the consequence of being
+      # wrong about that subtlety is a cache entry holding the output of a
+      # FAILED build, which every later climb would then restore instead of
+      # retrying. Cheap to state, expensive to assume.
+      - name: Save built package
+        if: success() && steps.cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: out
+          key: ${{ steps.key.outputs.key }}
+
       - uses: actions/upload-artifact@v4
         with:
           name: pkg-${{ matrix.package }}-${{ matrix.arch }}
