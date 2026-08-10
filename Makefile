@@ -174,6 +174,7 @@ GTK_PKGS := \
 # `make repo`. That is exactly the gap the rule was written to find, and it
 # found them on its first run against main.
 CRYPTO_PKGS := \
+	fuse3 \
 	zstd npth libgpg-error \
 	libassuan libksba libgcrypt
 
