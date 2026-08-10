@@ -256,7 +256,18 @@ jobs:
                 #
                 # A package on the standard image can no longer be dropped by a
                 # lookup, because there is no longer a lookup to fail.
-                *)                     image=$(image_for "$a"); add "$p" "$a" "$(runner_for "$a")" "$image" "$a"; continue ;;
+                #
+                # The deleted probe was ALSO, incidentally, the only thing that
+                # would have caught an empty image string -- `docker manifest
+                # inspect ""` fails, so the package was skipped. It is
+                # unreachable by construction, since $a comes from found[] and
+                # image_for() answers for every member, but an empty image now
+                # produces a job that fails at docker pull with a message about
+                # nothing. Asserting it costs one line and keeps the removal
+                # strictly a subtraction of risk.
+                *)                     image=$(image_for "$a")
+                                       [ -n "$image" ] || { echo "::error::no image resolved for $a; found=(${found[*]})"; exit 1; }
+                                       add "$p" "$a" "$(runner_for "$a")" "$image" "$a"; continue ;;
               esac
               # Only the special images are probed, because only they can
               # genuinely be missing for an architecture: rust, go and bootstrap
