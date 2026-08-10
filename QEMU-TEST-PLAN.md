@@ -415,6 +415,79 @@ on a test nobody has specified tends to be declared done by default.
 
 ---
 
+## 5c. AppImage — placing duct-5's spec in this rig
+
+The specification is theirs (`pkgs/fuse3/VERIFICATION-REQUIRED.md`, one positive
+arm and three negatives) and I am not restating it. This is how it runs here,
+plus three things that have to change before it can.
+
+Their central finding is the one to keep: **the obvious test passes with no FUSE
+at all**, because the type-2 runtime falls back to extract-and-run. So the
+positive arm has to observe a `fuse` mount type from *inside* the process, since
+the mount is namespaced and gone by exit. And their negative 3 — extract-and-run
+must *succeed* while FUSE is broken — is the control that makes negatives 1 and 2
+mean something. A negative arm with no control is just a failure.
+
+### Running order, because the arms mutate the system
+
+Each arm changes state that the next one depends on, so the order is not free.
+Running them in the wrong sequence produces arms that pass for reasons belonging
+to the arm before.
+
+| # | arm | state | restore after |
+|---|---|---|---|
+| 1 | positive | pristine | — |
+| 2 | negative 1 | `chmod u-s /usr/bin/fusermount3` | restore the bit |
+| 3 | negative 2 | mask `/dev/fuse` | leave masked |
+| 4 | negative 3 | still masked, `APPIMAGE_EXTRACT_AND_RUN=1` | unmask |
+
+Negative 3 runs **while FUSE is still broken from negative 2**, which is its
+precondition rather than a convenience — it is the arm that proves the two paths
+are distinguishable, so it has to run in the same broken state that made 1 and 2
+fail.
+
+The live root is an overlay on tmpfs, so every mutation is discarded at reboot
+and none of it can persist into a later test. Restoration between arms is for
+isolation within the run, not for cleanliness.
+
+Results arrive as serial-console markers like everything else here:
+`DUCT-TEST: appimage <arm> <PASS|FAIL> fstype=<...>`.
+
+### Three things that must change first
+
+**1. `CONFIG_FUSE_FS=m` on main, not `=y`.** The spec says the kernel is now `=y`
+and negative 2 would catch a regression back to a module nothing loads. That
+change is not on `origin/main` — `pkgs/linux/config/common.config:88` still reads
+`=m`. **So the positive arm cannot pass today**: with a module nothing loads,
+`/dev/fuse` never appears, and the run either fails or silently falls back to
+extraction. This is not a flaw in the spec; it is the spec describing a state the
+tree has not reached. Placing it is fine, running it is not.
+
+**2. `fusermount3` is not in `images/iso/post-install.sh`'s setuid table.** That
+table carries `passwd`, `chage`, `newgrp`, `gpasswd`, `su` and nothing else, so
+the ISO depends entirely on tape preserving the bit from the package — which it
+does (`install.go` sets `PreserveSetuid`), and which `fuse3`'s own `install.sh`
+asserts at build time. Negative 1 therefore tests a property that **nothing on
+the ISO side re-applies**. That is worth knowing rather than fixing: if the bit
+ever fails to survive packaging, negative 1 is what notices, and adding
+`fusermount3` to the table would mask exactly that.
+
+**3. `linux/build.sh` asserts nine symbols and `CONFIG_FUSE_FS` is not among
+them** — in either form. Same gap as `EFI_PARTITION` and `DEVTMPFS_MOUNT`: the
+kernel change this whole test depends on would be unasserted, so a later
+`olddefconfig` could quietly return it to `=m` with nothing failing. If the `=y`
+change lands, the assertion should land with it.
+
+### The test AppImage is not mine to build
+
+Their spec is right that it must be built rather than fetched, and that
+`mksquashfs` already exists on the ISO build host. That places it in the **ISO
+build**, not in this harness: the image has to be on the medium before the guest
+boots. That is an `images/` change and a duct-2 dependency, and this plan cannot
+create it.
+
+---
+
 ## 6. What could go wrong
 
 The honest list, roughly by likelihood.
@@ -543,6 +616,7 @@ waiting on everything.
 
 | when | runnable |
 |---|---|
+| + `CONFIG_FUSE_FS=y`, fuse3 and a test AppImage on the medium | **§5c, AppImage** — cannot pass before the kernel change; see the three preconditions there |
 | + glib-networking in the ISO manifest | **§5b, TLS verification** — independent of every row below, needs no disk and no installer, and gates a package already marked NOT YET VERIFIED |
 | as soon as I write `duct-install-cli` | test 1, against today's ISO. Catches the boot-device fallback path. |
 | + `e2fsprogs`, `dosfstools`, repo on the medium | tests 2 and 3 |
