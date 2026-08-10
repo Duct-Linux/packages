@@ -1,0 +1,208 @@
+name: withdraw a published version
+
+# Removes one published version from the repository index, so that clients stop
+# resolving it, without deleting the package it describes.
+#
+# WHY THIS EXISTS. tape resolves by HIGHEST VERSION, not by most recently
+# published (daemon/utils/queryPkg.go, selectLatest). So re-pinning a package to
+# a LOWER version does not take effect: publishing openssl 3.5.7 beside a
+# published 4.0.1 leaves 4.0.1 the newest, and every unbounded `>=` constraint
+# goes on resolving to it. The recipe is fixed and the repository is not.
+#
+# WHY IT IS A WORKFLOW AND NOT A COMMAND SOMEONE RUNS ON THE SERVER. The index
+# is signed: publish.yml runs `tape-repo sign-repo` and uploads repo.db.sig
+# beside repo.db. Editing deleted_at with sqlite over FTP would leave an index
+# that no longer matches its signature, and every client would then reject the
+# whole repository -- a distribution that cannot be installed from at all,
+# caused by a fix for a version-ordering problem. Any withdrawal has to re-sign,
+# and the signing key is reachable only from the protected `release`
+# environment. So this is the only shape the operation can take.
+#
+# WHY SOFT DELETE RATHER THAN DELETING THE ROW. RepoModelPkgs embeds gorm.Model,
+# so GORM scopes every read to `deleted_at IS NULL` automatically -- setting the
+# column is enough to withdraw it. And the schema was designed for exactly this:
+# common/database/installed.go carries a comment explaining that the INSTALLED
+# models deliberately do NOT embed gorm.Model, because soft deletes there would
+# make "is this installed?" ambiguous. Soft delete is off for installed
+# packages and on for the index, on purpose.
+#
+# The tarball is deliberately left on the server. The index is what resolution
+# reads, so leaving the file means a mistaken withdrawal is undone by clearing
+# one column rather than by rebuilding a package.
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: 'Package name (e.g. openssl)'
+        required: true
+      version:
+        description: 'Version to withdraw (e.g. 4.0.1)'
+        required: true
+      subversion:
+        description: 'Subversion to withdraw (e.g. 1)'
+        required: true
+      arch:
+        description: 'Architecture'
+        required: true
+        type: choice
+        options: [x86_64, aarch64, any]
+      reason:
+        description: 'Why (recorded in the run log)'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  # The SAME group as publish.yml. A withdrawal and a publish both rewrite the
+  # index and its signature; interleaving them could upload an index built from
+  # one state and a signature computed over another.
+  group: publish-repository
+  cancel-in-progress: false
+
+jobs:
+  withdraw:
+    runs-on: ubuntu-latest
+    environment: release
+    env:
+      REPO_NAME: duct
+      REPO_URL: https://repo.duct.dss-net.de
+      REMOTE_DIR: .
+      BUILDER: ghcr.io/duct-linux/builder:latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch the current index
+        run: |
+          set -euo pipefail
+          mkdir -p repo
+          curl -fsSL -o repo/repo.db "$REPO_URL/repo.db"
+          echo "index: $(stat -c%s repo/repo.db) bytes"
+
+      - name: Decide, and refuse if the result would be wrong
+        id: decide
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq && sudo apt-get install -y -qq sqlite3
+
+          n='${{ inputs.name }}'; v='${{ inputs.version }}'
+          s='${{ inputs.subversion }}'; a='${{ inputs.arch }}'
+
+          echo "currently live rows for $n:"
+          sqlite3 -column repo/repo.db \
+            "select name,version,subversion,arch from packages
+             where name='$n' and deleted_at is null order by id;" | sed 's/^/  /'
+
+          live=$(sqlite3 repo/repo.db \
+            "select count(*) from packages where name='$n' and version='$v'
+             and subversion='$s' and arch='$a' and deleted_at is null;")
+          if [ "$live" != 1 ]; then
+            echo "::error::no single live row for $n $v-$s [$a] (found $live)."
+            echo "::error::Nothing was changed. Check the listing above."
+            exit 1
+          fi
+
+          # Refuse to make a package vanish entirely. "This version is bad" and
+          # "this package does not exist" are different statements, and the
+          # second one surfaces days later as a resolution failure pointing
+          # nowhere near this operation.
+          survivors=$(sqlite3 repo/repo.db \
+            "select count(*) from packages where name='$n' and arch='$a'
+             and deleted_at is null
+             and not (version='$v' and subversion='$s');")
+          if [ "$survivors" = 0 ]; then
+            echo "::error::withdrawing $n $v-$s [$a] would leave NO published"
+            echo "::error::version of $n for $a. That is a removal, not a"
+            echo "::error::withdrawal, and this workflow will not do it."
+            exit 1
+          fi
+          echo "$survivors other live row(s) for $n [$a] would remain"
+
+      - name: Withdraw and re-sign
+        run: |
+          set -euo pipefail
+          n='${{ inputs.name }}'; v='${{ inputs.version }}'
+          s='${{ inputs.subversion }}'; a='${{ inputs.arch }}'
+
+          # The UPDATE and the changes() readback MUST be one invocation.
+          # changes() is per-connection, so asking a second sqlite3 process
+          # always answers 0 -- the update would succeed and the check would
+          # then report it had done nothing. Found by running it, not by
+          # reading it.
+          changed=$(sqlite3 repo/repo.db \
+            "update packages set deleted_at = datetime('now')
+             where name='$n' and version='$v' and subversion='$s'
+             and arch='$a' and deleted_at is null;
+             select changes();")
+          [ "$changed" = 1 ] || { echo "::error::updated $changed rows, expected 1"; exit 1; }
+
+          # What the operator actually needs to know is the CONSEQUENCE, not the
+          # action: which version clients will resolve now. Computed the way
+          # tape computes it -- highest version, ties broken on subversion --
+          # and with `sort -V`, because the components are already two-digit in
+          # this repository (3.12.0, 4.10.0, 15.2.0, 6.16.1) and a lexical
+          # comparison would put 3.9.0 above 3.12.0.
+          now=$(sqlite3 repo/repo.db \
+            "select version||'-'||subversion from packages
+             where name='$n' and arch='$a' and deleted_at is null;" \
+            | sort -V | tail -1)
+          echo "::notice::withdrew $n $v-$s [$a]; clients now resolve $n $now [$a]"
+          echo "reason: ${{ inputs.reason }}"
+
+          umask 077
+          printf '%s' "${{ secrets.DUCT_SIGNING_KEY }}" > signing.key
+          chmod 600 signing.key
+          docker run --rm -v "$PWD/repo":/repo -v "$PWD/signing.key":/key:ro \
+            "$BUILDER" tape-repo sign-repo /repo /key --name "$REPO_NAME"
+          test -s repo/repo.db.sig
+
+      - name: Upload
+        env:
+          FTP_HOST: ${{ secrets.FTP_HOST }}
+          FTP_USER: ${{ secrets.FTP_USER }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y -qq lftp
+
+          # Written to temporary names and renamed, exactly as publish.yml does,
+          # so the window in which a client can fetch a fresh index beside a
+          # stale signature is as short as the server can make it. Done naively
+          # that window is the seconds between two uploads, and a client landing
+          # in it rejects the entire repository.
+          lftp -c "
+            set ftp:ssl-force true;
+            set ssl:verify-certificate true;
+            set net:max-retries 3;
+            open -u '$FTP_USER','$FTP_PASSWORD' '$FTP_HOST';
+            put repo/repo.db     -o $REMOTE_DIR/repo.db.new;
+            put repo/repo.db.sig -o $REMOTE_DIR/repo.db.sig.new;
+            mv $REMOTE_DIR/repo.db.new     $REMOTE_DIR/repo.db;
+            mv $REMOTE_DIR/repo.db.sig.new $REMOTE_DIR/repo.db.sig;
+          "
+
+      - name: Always remove the key
+        if: always()
+        run: shred -u signing.key 2>/dev/null || rm -f signing.key
+
+      - name: Verify against the server
+        run: |
+          set -euo pipefail
+          n='${{ inputs.name }}'; v='${{ inputs.version }}'
+          s='${{ inputs.subversion }}'; a='${{ inputs.arch }}'
+
+          # Fetched back from the server rather than checked locally. The local
+          # file is what we uploaded; only what the server serves is evidence.
+          curl -fsSL -o check.db "$REPO_URL/repo.db"
+          still=$(sqlite3 check.db \
+            "select count(*) from packages where name='$n' and version='$v'
+             and subversion='$s' and arch='$a' and deleted_at is null;")
+          [ "$still" = 0 ] || { echo "::error::$n $v-$s [$a] is still live on the server"; exit 1; }
+
+          curl -fsS -o /dev/null "$REPO_URL/repo.db.sig"
+          echo "verified: $n $v-$s [$a] is withdrawn on the server"
+          sqlite3 -column check.db \
+            "select name,version,subversion,arch from packages
+             where name='$n' and deleted_at is null order by id;" | sed 's/^/  /'
