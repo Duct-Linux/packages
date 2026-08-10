@@ -162,7 +162,7 @@ GTK_PKGS := \
 # After SESSION_PKGS because e2fsprogs links against util-linux's libuuid and
 # libblkid -- it is configured to refuse its own private copies, since
 # util-linux already owns those libraries and the programs that come with them.
-FS_PKGS := e2fsprogs
+FS_PKGS := e2fsprogs dosfstools
 
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \

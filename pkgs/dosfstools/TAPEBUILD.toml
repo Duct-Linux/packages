@@ -1,0 +1,26 @@
+[package]
+name = "dosfstools"
+description = "FAT filesystem utilities: mkfs.fat, fsck.fat"
+version = "4.2.0"
+subversion = "1"
+authors = ["upstream"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+# glibc and nothing else. configure.ac declares no PKG_CHECK_MODULES and no
+# AC_CHECK_LIB; the only optional external is iconv, which glibc provides.
+glibc = ">=2.42.0"
+
+[dependencies.build]
