@@ -14,6 +14,10 @@ on:
       run_id:
         description: 'Build run to publish artifacts from (required for a manual run)'
         required: false
+      create_repo:
+        description: 'Create a NEW repository index. Only for a genuinely empty server -- this makes anything already published unreferenced.'
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -59,17 +63,43 @@ jobs:
           run-id: ${{ github.event.workflow_run.id || inputs.run_id || github.run_id }}
 
       - name: Fetch the current index
+        env:
+          CREATE_REPO: ${{ inputs.create_repo }}
         run: |
           set -euo pipefail
           mkdir -p repo/packages
           # Only the index is fetched, not the packages: add-to-repo appends to
           # an existing repo.db, so previously published packages stay indexed
           # without moving 187 MB through the runner on every publish.
+          # A MISSING INDEX IS AN ERROR, NOT A REASON TO MAKE A NEW ONE.
+          #
+          # This used to fall through to `tape-repo create-repo` on any failure
+          # to fetch. That is correct exactly once in the life of the repository
+          # and catastrophic every other time: a transient curl failure would
+          # build a FRESH EMPTY index, add only this build's packages, SIGN it,
+          # and upload it over the published one. Every other package on the
+          # server becomes unreferenced in a single step -- the tarballs survive
+          # and nothing points at them -- and the run goes green, because every
+          # step did exactly what it was told.
+          #
+          # The legitimate trigger for that branch is permanently in the past.
+          # It must not be reachable from a network error, so creating a
+          # repository now requires someone to ask for it by name.
+          #
+          # Retrying would be the wrong fix: it lowers the probability of
+          # reaching a branch that must never be reached by accident, and no
+          # number of retries makes "the index is gone" a safe thing to assume.
           if curl -fsSL -o repo/repo.db "$REPO_URL/repo.db"; then
             echo "extending the published index ($(stat -c%s repo/repo.db) bytes)"
-          else
-            echo "no published index yet; creating a new repository"
+          elif [ "${CREATE_REPO:-false}" = "true" ]; then
+            echo "::warning::creating a NEW repository index; anything already published becomes unreferenced"
             docker run --rm -v "$PWD/repo":/repo "$BUILDER" tape-repo create-repo /repo
+          else
+            echo "::error::could not fetch $REPO_URL/repo.db, and this workflow will not"
+            echo "::error::replace a published index it cannot read. If the repository is"
+            echo "::error::genuinely new, re-run with create_repo: true. Otherwise this is"
+            echo "::error::a transport failure and publishing must not continue."
+            exit 1
           fi
 
       - name: Index the new packages
