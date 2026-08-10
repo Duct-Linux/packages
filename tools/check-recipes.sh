@@ -103,13 +103,43 @@ def check_versions(recipes: dict[str, dict]) -> dict[str, str]:
     return versions
 
 
+def constraint_bounds(constraint: str):
+    """(lower, upper) for a tape dependency constraint; upper None if unbounded.
+
+    tape resolves with github.com/Masterminds/semver/v3 and adds no range logic
+    of its own (daemon/utils/queryPkg.go), so the library's semantics are
+    tape's. Two forms, which do NOT mean the same thing:
+
+      "2.43"            a BARE version is a RANGE: >=2.43.0, <2.44.0
+      ">=2.43.0"        an EXPLICIT operator is an OPEN FLOOR -- 3.x satisfies it
+      ">=3.5.0,<4.0.0"  bounded, because the upper end was written down
+
+    Returns None for anything else, which is reported rather than guessed at.
+    """
+    m = re.fullmatch(r">=(\d+)\.(\d+)\.(\d+),<(\d+)\.(\d+)\.(\d+)", constraint)
+    if m:
+        g = [int(x) for x in m.groups()]
+        return tuple(g[:3]), tuple(g[3:])
+    m = re.fullmatch(r">=(\d+)\.(\d+)\.(\d+)", constraint)
+    if m:
+        return tuple(int(x) for x in m.groups()), None
+    m = re.fullmatch(r"(\d+)\.(\d+)(?:\.(\d+))?", constraint)
+    if m:
+        major, minor = int(m.group(1)), int(m.group(2))
+        return (major, minor, int(m.group(3) or 0)), (major, minor + 1, 0)
+    return None
+
+
 def check_dependencies(recipes: dict[str, dict], versions: dict[str, str]) -> None:
     """Every dependency names a real recipe, and every constraint admits it.
 
-    A constraint of ">=2.43.0" is not a floor, it is a range: tape reads it as
-    >=2.43.0, <2.44.0. So a constraint can name a version that exists and still
-    admit nothing, which is what `eudev` asking for `kmod >=34.0.0` did while
-    the packaged kmod was 33.
+    This used to treat ">=X.Y.Z" as bounded to <X.(Y+1).0. That was wrong, and
+    the error survived a long time because it kept producing correct answers:
+    `eudev` asking for `kmod >=34.0.0` against a packaged 33 really is a
+    violation -- but because 33 < 34, not because of an implied ceiling. It
+    would have begun mis-reporting the moment any packaged version moved ahead
+    of its constraint's minor. See constraint_bounds for the real semantics,
+    which were established by running tape's resolver rather than by reading it.
     """
     for name, doc in recipes.items():
         table = dict(doc.get("dependencies") or {})
@@ -125,20 +155,23 @@ def check_dependencies(recipes: dict[str, dict], versions: dict[str, str]) -> No
                 continue
             if constraint == "*":
                 continue
-            match = re.fullmatch(r">=(\d+)\.(\d+)\.(\d+)", constraint)
-            if not match:
-                fail(name, f"dependency {dep} constraint {constraint!r} "
-                           "is not of the form >=X.Y.Z")
+            parsed = constraint_bounds(constraint)
+            if parsed is None:
+                fail(name, f"dependency {dep} constraint {constraint!r} is not a "
+                           "form this checker understands (>=X.Y.Z, "
+                           ">=X.Y.Z,<A.B.C, or a bare X.Y)")
                 continue
-            want = tuple(int(g) for g in match.groups())
+            lower, upper = parsed
             have_str = versions[dep]
             if not re.fullmatch(r"\d+\.\d+\.\d+", have_str):
                 continue  # already reported by check_versions
             have = tuple(int(p) for p in have_str.split("."))
-            if have < want or have[:2] != want[:2]:
+            if have < lower or (upper is not None and have >= upper):
+                shown = ">=" + ".".join(map(str, lower))
+                if upper is not None:
+                    shown += ", <" + ".".join(map(str, upper))
                 fail(name, f"dependency {dep} {constraint} does not admit the "
-                           f"packaged {have_str} (the constraint means "
-                           f">={'.'.join(map(str, want))}, <{want[0]}.{want[1] + 1}.0)")
+                           f"packaged {have_str} (it means {shown})")
 
 
 def tarball_of(recipe: pathlib.Path) -> tuple[str | None, str | None]:

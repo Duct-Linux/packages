@@ -2,7 +2,7 @@
 name = "rust"
 description = "The Rust programming language toolchain"
 version = "1.97.1"
-subversion = "3"
+subversion = "4"
 authors = ["The Rust Project Developers"]
 packagers = ["ItzYanick"]
 
@@ -26,7 +26,12 @@ zlib = ">=1.3.1"
 # The constraint has to move with the pin, not merely be loosened: tape reads
 # ">=3.5.0" as >=3.5.0, <3.6.0, so the old ">=4.0.0" would have admitted
 # nothing at all against a 3.5 package rather than quietly still matching.
-openssl = ">=3.5.0"
+# Bounded, not an open floor. tape resolves with Masterminds/semver and adds no
+# range logic, so ">=3.5.0" alone would admit 4.0.1 -- and published openssl
+# 4.0.1 ships libssl.so.4 while 3.5.7 ships libssl.so.3. Resolution could then
+# hand this package an openssl whose soname it cannot load, as a runtime failure
+# at install time, displaced from the cause.
+openssl = ">=3.5.0,<4.0.0"
 
 [dependencies.build]
 cmake = ">=4.0.0"
