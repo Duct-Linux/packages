@@ -1,0 +1,34 @@
+[package]
+name = "libgpg-error"
+description = "Error codes and runtime support for the GnuPG components"
+# 1.55.0, not 1.55, and the padding is required rather than cosmetic: tape's
+# resolver needs three-component semver and SKIPS A PACKAGE SILENTLY if it does
+# not parse -- which is why tools/check-recipes.sh has a rule for it. Upstream
+# ships the tarball as 1.55, so SRC_URL and SRC_DIR keep that spelling and
+# version_forms() in the checker tolerates the difference.
+version = "1.55.0"
+subversion = "1"
+authors = ["The GnuPG Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+# Nothing but libc. That is what makes this the base of the chain: libassuan,
+# libgcrypt, libksba and npth all depend on it and it depends on none of them.
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
+# NLS is enabled by default and this is what provides msgfmt for it.
+gettext = ">=0.26.0"
