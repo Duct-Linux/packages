@@ -13,11 +13,8 @@ later is free; recovering a deleted directory is not.
 
 | file | what it is |
 |---|---|
-| `PACKAGE-SPEC.md` | what `e2fsprogs` and `dosfstools` had to contain, and where writing them proved the spec wrong. |
-
-| file | what it is |
-|---|---|
 | `GAP-ANALYSIS.md` | what is missing before Duct can install itself to a disk. Read this first. |
+| `PACKAGE-SPEC.md` | what `e2fsprogs` and `dosfstools` had to contain, and where writing them proved the spec wrong. |
 | `DESIGN.md` | screen flow, backend operations, failure handling, and what v1 refuses to do. |
 | `QEMU-TEST-PLAN.md` | how the installer gets tested, what each test proves, what could go wrong. |
 | `src/`, `tests/` | the prototype: GTK 4 / libadwaita, backend stubbed behind an interface. |
