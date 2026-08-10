@@ -299,8 +299,12 @@ jobs:
           for a in "${found[@]}"; do
             have=$(jq -r --arg a "$a" '[.[] | select(.arch == $a)] | length' <<<"$entries")
             lost=0
+            # An `if` rather than `[ ... ] && ...`: the && form makes the loop's
+            # exit status depend on whether the LAST element matched, and this
+            # runs under `set -e`. Safe here only because a command follows the
+            # loop, which is a property of statement order rather than of intent.
             for d in ${dropped[@]+"${dropped[@]}"}; do
-              [ "${d##*/}" = "$a" ] && lost=$((lost + 1))
+              if [ "${d##*/}" = "$a" ]; then lost=$((lost + 1)); fi
             done
             echo "  $a: $have entries, $lost deliberately dropped"
             counts+=("$((have + lost))")
