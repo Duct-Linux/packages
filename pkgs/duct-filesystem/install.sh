@@ -59,20 +59,49 @@ VERSION="0.1 (bootstrap)"
 HOME_URL="https://yanick.gay/"
 EOF
 
-# Only the accounts the base system genuinely needs. Package builds run as root
-# in the image, and nothing here is setuid -- tape cannot represent setuid bits
-# at all, so an account model that depended on them would be a lie.
+# THE USER DATABASE IS SHIPPED AS A TEMPLATE, NOT AS /etc/passwd.
 #
-# The service accounts below are here rather than in the packages that use them
-# because /etc/passwd can only be owned once: two packages claiming one path is
-# a hard install error in tape, with no override. A daemon whose account is
-# missing does not warn, it refuses to start -- dbus-daemon exits with "Failed
-# to drop privileges", and everything downstream of the bus fails with it.
+# tape has no notion of a conffile: upgrade stages a temp file and renames it
+# over the target, unconditionally, with no path treated specially. So any file
+# a package owns is reverted on every upgrade of that package -- and useradd
+# mutates /etc/passwd and /etc/group on a running system.
 #
+# Owning them meant the first tape upgrade of duct-filesystem would silently
+# delete every account created since installation. Worse than it sounds, because
+# /etc/shadow is owned by nothing: the hashes would survive the upgrade that
+# deleted the accounts they belong to, leaving a shadow file describing users
+# who no longer exist, weeks later, on a routine upgrade, with nothing pointing
+# at the cause. After this change passwd, group and shadow are all unowned and
+# consistent with each other, which is the state that should have existed from
+# the start.
+#
+# The templates still receive package updates; only the live files are unowned.
+# images/scripts/seed-etc.sh copies each into /etc if absent, per file, from
+# both the base image and the ISO -- both, because only the ISO runs
+# post-install.sh, and an ISO-only restore would ship duct/builder with no
+# /etc/passwd at all, which every getpwnam in every package build depends on.
+#
+# EXACTLY THREE FILES ARE UNOWNED: passwd, group and hosts, because useradd
+# mutates the first two and the installer sets a hostname in the third.
+# nsswitch.conf, ld.so.conf, os-release, shells and profile stay owned even
+# though they are written a few lines away, because nothing mutates them at
+# runtime -- and unowning a file is not free: an unowned file never receives an
+# improvement again, so every future fix would reach new installs only.
+#
+# ONE OF THOSE FIVE IS A TRAP FOR THE FUTURE. /etc/shells is conventionally
+# APPENDED TO by shell packages. Nothing in this distribution does today, and
+# duct-filesystem is its only author, so it correctly stays owned. But the
+# moment a zsh or fish package adds its own path to it, /etc/shells becomes a
+# file mutated outside this package and joins passwd, group and hosts -- the
+# upgrade would revert it and the shell would silently stop being a valid login
+# shell. If you are here because you are adding such a package: move
+# /etc/shells to a template too rather than appending to an owned file.
+install -d -m 0755 "$DESTDIR/usr/share/duct-filesystem"
+
 # The uids are fixed rather than allocated at install time, because a live ISO
 # and an installed system have to agree on them for a home directory or a
 # runtime directory created under one to be readable under the other.
-cat >"$DESTDIR/etc/passwd" <<'EOF'
+cat >"$DESTDIR/usr/share/duct-filesystem/passwd.default" <<'EOF'
 root:x:0:0:root:/root:/bin/bash
 messagebus:x:18:18:D-Bus Message Daemon User:/run/dbus:/usr/bin/false
 polkitd:x:27:27:PolicyKit Daemon Owner:/var/lib/polkit-1:/usr/bin/false
@@ -84,7 +113,7 @@ EOF
 # The device groups are what seat management hands out: elogind puts the
 # logged-in user's ACL on the DRM node and the input devices, but the groups
 # still have to exist for udev's own rules to chgrp them at all.
-cat >"$DESTDIR/etc/group" <<'EOF'
+cat >"$DESTDIR/usr/share/duct-filesystem/group.default" <<'EOF'
 root:x:0:
 tty:x:5:
 disk:x:6:
@@ -135,7 +164,8 @@ cat >"$DESTDIR/etc/shells" <<'EOF'
 /usr/bin/bash
 EOF
 
-cat >"$DESTDIR/etc/hosts" <<'EOF'
+# Unowned for the same reason: the installer writes a hostname here.
+cat >"$DESTDIR/usr/share/duct-filesystem/hosts.default" <<'EOF'
 127.0.0.1 localhost
 ::1 localhost ip6-localhost ip6-loopback
 EOF
