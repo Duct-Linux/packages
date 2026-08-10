@@ -145,6 +145,87 @@ log_line (const char *line, gpointer user_data)
 /* A refusal must be classifiable as one. The CLI prints REFUSED rather than
  * FAIL on the strength of this, and the difference is what a user reads when
  * the installer correctly declines their too-small disk. */
+/* --- the boot-medium fallback, which had never executed -------------------- */
+
+/* A resolver backed by a table instead of /sys, so the branch that decides
+ * "this source has no parent, therefore it IS the disk" can be reached on any
+ * machine. Entries are pairs: kernel name, parent node or NULL. */
+static char *
+fake_parent (const char *kernel_name, gpointer user_data)
+{
+	const char * const *table = user_data;
+
+	for (guint i = 0; table[i] != NULL; i += 2) {
+		if (g_strcmp0 (table[i], kernel_name) == 0)
+			return table[i + 1] ? g_strdup (table[i + 1]) : NULL;
+	}
+	return NULL;
+}
+
+static void
+test_boot_medium_detection (void)
+{
+	g_print ("identifying the live medium\n");
+
+	/* Real mountinfo shapes. The optional-fields section before the "-" is
+	 * variable length on purpose in two of them, because that is the reason
+	 * the parser looks for the separator rather than counting fields. */
+	const char *qemu_iso =
+		"21 1 0:20 / /run/live/medium ro,relatime - iso9660 /dev/vda ro\n";
+	const char *usb_partition =
+		"19 1 8:17 / /proc rw,relatime - proc proc rw\n"
+		"21 1 8:17 / /run/live/medium ro,relatime shared:2 - vfat /dev/sdb1 ro\n";
+	const char *nvme_partition =
+		"21 1 259:3 / /run/live/medium ro,relatime - ext4 /dev/nvme0n1p3 ro\n";
+	const char *no_medium =
+		"19 1 0:5 / /proc rw,relatime - proc proc rw\n"
+		"20 1 0:6 / /sys rw,relatime - sysfs sysfs rw\n";
+	const char *not_a_device =
+		"21 1 0:20 / /run/live/medium ro,relatime - overlay overlay ro\n";
+
+	const char *parents[] = {
+		"vda",        NULL,            /* whole disk, no partition table */
+		"sdb1",       "/dev/sdb",
+		"nvme0n1p3",  "/dev/nvme0n1",
+		NULL
+	};
+
+	struct { const char *what; const char *mountinfo; const char *expect; } cases[] = {
+		/* THE CASE THAT HAD NEVER RUN. A QEMU virtio disk carrying ISO9660
+		 * directly: no parent, so the source itself is the disk to exclude.
+		 * If this returned NULL the installer would offer the live medium. */
+		{ "whole disk with no partition table -> itself", qemu_iso,      "/dev/vda" },
+		{ "partition on a USB stick -> its parent disk",  usb_partition, "/dev/sdb" },
+		{ "nvme partition -> its parent disk",            nvme_partition,"/dev/nvme0n1" },
+		{ "no live medium mounted -> nothing",            no_medium,      NULL },
+		{ "source is not a device -> nothing",            not_a_device,   NULL },
+	};
+
+	for (guint i = 0; i < G_N_ELEMENTS (cases); i++) {
+		g_autofree char *got =
+			duct_disk_boot_medium_from (cases[i].mountinfo, fake_parent, parents);
+
+		gboolean ok = (cases[i].expect == NULL)
+			? (got == NULL)
+			: (g_strcmp0 (got, cases[i].expect) == 0);
+
+		if (ok) {
+			g_print ("  ok    %s\n", cases[i].what);
+		} else {
+			g_print ("  FAIL  %s (got %s, expected %s)\n", cases[i].what,
+			         got ? got : "NULL", cases[i].expect ? cases[i].expect : "NULL");
+			failures++;
+		}
+	}
+
+	/* Empty input must not be mistaken for "no medium found" by accident --
+	 * it reaches the same answer through a different path and should. */
+	g_autofree char *empty = duct_disk_boot_medium_from ("", fake_parent, parents);
+	CHECK (empty == NULL, "empty mountinfo yields no medium");
+	g_autofree char *null_in = duct_disk_boot_medium_from (NULL, fake_parent, parents);
+	CHECK (null_in == NULL, "NULL mountinfo yields no medium");
+}
+
 static void
 test_refusals_are_classified (void)
 {
@@ -243,6 +324,7 @@ main (void)
 	test_partition_naming ();
 	test_stage_weights ();
 	test_real_backend_refuses ();
+	test_boot_medium_detection ();
 	test_refusals_are_classified ();
 	test_dry_run_writes_nothing ();
 

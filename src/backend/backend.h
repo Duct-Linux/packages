@@ -90,6 +90,28 @@ GPtrArray *duct_disk_probe (gboolean *simulated, GError **error);
  * -- and /sys/class/block/<part>/.. gives its parent disk. */
 char *duct_disk_boot_medium (void);
 
+/* The same answer, computed from text and a lookup rather than from the
+ * filesystem -- which is what makes it testable.
+ *
+ * THIS IS THE MOST DANGEROUS FUNCTION IN THE PROGRAM AND ITS MOST IMPORTANT
+ * BRANCH HAD NEVER RUN. When the live medium is a whole disk carrying a
+ * filesystem directly, with no partition table -- exactly what a QEMU
+ * virtio-blk ISO is -- there is no parent block device, and the answer has to
+ * be the source device itself. Nothing on a development machine reaches that
+ * path, and if it is wrong the installer offers the live medium as an install
+ * target.
+ *
+ * `resolve_parent` is handed a kernel device name and returns its parent disk
+ * node, or NULL when there is none. In production that reads
+ * /sys/class/block; under test it is a table. Everything else -- finding the
+ * mount, locating the source field, deciding what to do when there is no
+ * parent -- is pure and is now exercised directly. */
+typedef char *(*DuctParentResolver) (const char *kernel_name, gpointer user_data);
+
+char *duct_disk_boot_medium_from (const char        *mountinfo,
+                                  DuctParentResolver resolve_parent,
+                                  gpointer           user_data);
+
 /* --- the partition plan -------------------------------------------------- */
 
 /* Computed, never chosen. v1 has exactly one layout; see DESIGN.md.

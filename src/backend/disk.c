@@ -97,6 +97,60 @@ parent_disk_of (const char *kernel_name)
 	return g_strdup_printf ("/dev/%s", base);
 }
 
+/* The real resolver: /sys/class/block/<name> is a symlink into the device
+ * tree whose parent directory is the whole disk. */
+static char *
+sysfs_parent (const char *kernel_name, gpointer user_data)
+{
+	(void) user_data;
+	return parent_disk_of (kernel_name);
+}
+
+char *
+duct_disk_boot_medium_from (const char        *mountinfo,
+                            DuctParentResolver resolve_parent,
+                            gpointer           user_data)
+{
+	g_return_val_if_fail (resolve_parent != NULL, NULL);
+
+	if (mountinfo == NULL)
+		return NULL;
+
+	g_auto (GStrv) lines = g_strsplit (mountinfo, "\n", -1);
+
+	for (guint i = 0; lines[i] != NULL; i++) {
+		/* mountinfo: id parent maj:min root MOUNTPOINT opts... - fstype SOURCE super */
+		g_auto (GStrv) fields = g_strsplit (lines[i], " ", -1);
+		guint n = g_strv_length (fields);
+
+		if (n < 10 || g_strcmp0 (fields[4], "/run/live/medium") != 0)
+			continue;
+
+		/* Find the "-" separator rather than counting to it: the optional
+		 * fields before it are variable length, which is the whole reason
+		 * mountinfo has a separator at all. */
+		for (guint j = 6; j + 2 < n; j++) {
+			if (g_strcmp0 (fields[j], "-") != 0)
+				continue;
+
+			const char *source = fields[j + 2];
+			if (!g_str_has_prefix (source, "/dev/"))
+				return NULL;
+
+			g_autofree char *kernel_name = g_path_get_basename (source);
+			char *parent = resolve_parent (kernel_name, user_data);
+
+			/* NO PARENT MEANS THE SOURCE IS ITSELF A WHOLE DISK. A USB stick
+			 * dd'd with the ISO and mounted as /dev/sdb, or a QEMU virtio disk
+			 * holding ISO9660 directly. Returning NULL here would leave the
+			 * medium unexcluded and offerable as a target. */
+			return parent != NULL ? parent : g_strdup (source);
+		}
+	}
+
+	return NULL;
+}
+
 char *
 duct_disk_boot_medium (void)
 {
@@ -110,37 +164,7 @@ duct_disk_boot_medium (void)
 	if (!g_file_get_contents ("/proc/self/mountinfo", &mountinfo, NULL, NULL))
 		return NULL;   /* not Linux, or no procfs: the caller treats this as "unknown" */
 
-	g_auto (GStrv) lines = g_strsplit (mountinfo, "\n", -1);
-
-	for (guint i = 0; lines[i] != NULL; i++) {
-		/* mountinfo: id parent maj:min root MOUNTPOINT opts... - fstype SOURCE super */
-		g_auto (GStrv) fields = g_strsplit (lines[i], " ", -1);
-		guint n = g_strv_length (fields);
-
-		if (n < 10 || g_strcmp0 (fields[4], "/run/live/medium") != 0)
-			continue;
-
-		/* The source is the field after the "-" separator plus one. Find the
-		 * separator rather than counting, because the optional-fields section
-		 * before it is variable length. */
-		for (guint j = 6; j + 2 < n; j++) {
-			if (g_strcmp0 (fields[j], "-") != 0)
-				continue;
-
-			const char *source = fields[j + 2];
-			if (!g_str_has_prefix (source, "/dev/"))
-				return NULL;
-
-			g_autofree char *kernel_name = g_path_get_basename (source);
-			char *parent = parent_disk_of (kernel_name);
-
-			/* A source that is already a whole disk -- a USB stick dd'd with
-			 * the ISO, mounted as /dev/sdb rather than /dev/sdb1. */
-			return parent != NULL ? parent : g_strdup (source);
-		}
-	}
-
-	return NULL;
+	return duct_disk_boot_medium_from (mountinfo, sysfs_parent, NULL);
 }
 
 /* --- probing ------------------------------------------------------------- */
