@@ -121,6 +121,24 @@ jobs:
 
           echo "selected: $(tr '\n' ' ' <<<"$sel")"
 
+          # A push that touches only this workflow selects NO packages, and
+          # that is a correct outcome, not an error. Without this, $sel is
+          # empty, `./tools/dep-levels.sh $sel` is called with no arguments,
+          # and it exits 2 on its usage message -- so the run dies at select
+          # with "Process completed with exit code 2" and no explanation.
+          #
+          # Pre-existing and unreachable until now: build.yml is in this
+          # workflow's own push paths, so the first workflow-only merge to main
+          # is the first push that can select nothing. publish.yml already
+          # handles the same state gracefully ("no packages were built; nothing
+          # to publish"); select did not.
+          if [ -z "$(tr -d '[:space:]' <<<"$sel")" ]; then
+            echo "::notice::no packages selected; nothing to build"
+            echo "jobs=[]" >>"$GITHUB_OUTPUT"
+            for i in $(seq 0 19); do echo "level$i=[]" >>"$GITHUB_OUTPUT"; done
+            exit 0
+          fi
+
           # Which architectures exist, discovered rather than assumed. This
           # picks up a new one the moment its bootstrap lands.
           #
