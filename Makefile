@@ -194,7 +194,7 @@ DOCKER_ARGS = --rm \
 DOCKER      = docker run $(DOCKER_ARGS) --entrypoint /bin/bash $(IMAGE) -c
 DOCKER_REPO = docker run $(DOCKER_ARGS) --entrypoint /bin/bash $(REPO_IMAGE) -c
 
-.PHONY: all packages packages-native packages-tape packages-rust repo key clean clean-repo dirs stage pin toolchain check-sources check-recipes
+.PHONY: all packages packages-native packages-tape packages-rust repo key clean clean-repo dirs stage pin toolchain check-sources check-recipes program-index
 
 all: repo
 
@@ -403,6 +403,13 @@ check-sources:
 # recipes shipped in that state before this check existed.
 check-recipes:
 	@./tools/check-recipes.sh
+
+# The program-to-package map check-recipes.sh uses to turn "this build needs
+# gtk4-update-icon-cache" into "declare gtk4". Generated from what the built
+# packages actually ship, never edited by hand, and committed so the check also
+# works in CI, which runs on a fresh checkout with no out/pkgs at all.
+program-index:
+	@./tools/gen-program-index.py
 
 # Generated once and then reused. Losing it means every client that trusted the
 # old key has to be updated, so it is never regenerated implicitly.
