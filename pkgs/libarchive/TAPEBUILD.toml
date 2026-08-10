@@ -1,0 +1,39 @@
+[package]
+name = "libarchive"
+description = "Multi-format archive and compression library"
+version = "3.8.1"
+subversion = "1"
+authors = ["Tim Kientzle and contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+# THIS LIST IS THE SPECIFICATION, NOT A DESCRIPTION. libarchive's backends have
+# no --with- flags; configure link-probes for each one and takes whatever it
+# finds. So what is declared here is what gets seeded, which is what gets
+# detected, which is what the shipped library can read. Under-declaring does not
+# fail the build -- it produces a libarchive quietly missing a format. See
+# pkg.env.
+[dependencies]
+glibc = ">=2.42.0"
+zlib = ">=1.3.1"
+bzip2 = ">=1.0.8"
+xz = ">=5.8.1"
+zstd = ">=1.5.7"
+openssl = ">=3.5.0"
+libxml2 = ">=2.13.0"
+acl = ">=2.3.2"
+attr = ">=2.5.2"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
