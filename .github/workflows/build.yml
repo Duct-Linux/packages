@@ -137,7 +137,7 @@ jobs:
           want='${{ inputs.arch }}'; want=${want:-all}
           [ "$want" = all ] || echo "restricted to $want"
 
-          found=() imgs=()
+          found=() imgs=() dropped=() counts=()
           image_for() {
             i=0
             for a in "${found[@]}"; do
@@ -145,15 +145,45 @@ jobs:
               i=$((i+1))
             done
           }
+          # A registry lookup that fails tells you about the NETWORK, not about
+          # the world -- but every use of it here reads it as a fact about the
+          # world, and resolves the ambiguity toward "skip and succeed".
+          #
+          # Three ghcr.io flakes in two hours made that expensive. One dropped a
+          # single architecture of libassuan, which published half a package and
+          # left anything depending on it building on x86_64 and failing on
+          # aarch64. One dropped libsass entirely, and sassc then failed three
+          # levels later with `sass.h: No such file or directory` -- an error
+          # naming the blameless package while the cause sat in a warning nobody
+          # reads.
+          #
+          # So: retry transport-class failures, and only believe an absence that
+          # survives three attempts. A genuinely new architecture still has no
+          # image after three tries, so bootstrapping keeps working exactly as
+          # before; a hiccup does not.
+          #
+          # Loud when it retries. A silent retry turns a degrading registry into
+          # an invisible one, and the first symptom should not be that
+          # everything got slower.
+          manifest_exists() {
+            for attempt in 1 2 3; do
+              docker manifest inspect "$1" >/dev/null 2>&1 && return 0
+              [ "$attempt" = 3 ] && break
+              echo "::warning::registry lookup for $1 failed (attempt $attempt/3); retrying"
+              sleep $((attempt * 3))
+            done
+            return 1
+          }
+
           for a in x86_64 aarch64; do
             [ "$want" = all ] || [ "$want" = "$a" ] || continue
-            if docker manifest inspect "ghcr.io/duct-linux/builder:$a" >/dev/null 2>&1; then
+            if manifest_exists "ghcr.io/duct-linux/builder:$a"; then
               found+=("$a"); imgs+=("ghcr.io/duct-linux/builder:$a")
-            elif docker manifest inspect "ghcr.io/duct-linux/chroot:$a" >/dev/null 2>&1; then
+            elif manifest_exists "ghcr.io/duct-linux/chroot:$a"; then
               found+=("$a"); imgs+=("ghcr.io/duct-linux/chroot:$a")
               echo "::notice::$a has no builder image yet; bootstrapping its packages in duct/chroot"
             else
-              echo "::notice::no builder or chroot image for $a yet; skipping that architecture"
+              echo "::warning::no builder or chroot image for $a after 3 attempts; skipping that architecture"
             fi
           done
           [ ${#found[@]} -gt 0 ] || { echo "::error::no build image for any architecture"; exit 1; }
@@ -217,10 +247,23 @@ jobs:
                 # recipe would copy that image's own /usr/bin/tape, republishing
                 # the previous package as though it were a new build.
                 tape)                  image=ghcr.io/duct-linux/bootstrap:$a ;;
-                *)                     image=$(image_for "$a") ;;
+                # No probe for the default image, deliberately. image_for()
+                # returns the one already confirmed above, so re-checking it
+                # here asks the registry the same question twice and gives the
+                # answer a second chance to be wrong -- which is exactly what
+                # dropped libsass on BOTH architectures while every other
+                # package in the same run resolved fine.
+                #
+                # A package on the standard image can no longer be dropped by a
+                # lookup, because there is no longer a lookup to fail.
+                *)                     image=$(image_for "$a"); add "$p" "$a" "$(runner_for "$a")" "$image" "$a"; continue ;;
               esac
-              if ! docker manifest inspect "$image" >/dev/null 2>&1; then
-                echo "::warning::$image does not exist; not building $p for $a"
+              # Only the special images are probed, because only they can
+              # genuinely be missing for an architecture: rust, go and bootstrap
+              # are produced separately and may not exist everywhere yet.
+              if ! manifest_exists "$image"; then
+                echo "::warning::$image does not exist after 3 attempts; not building $p for $a"
+                dropped+=("$p/$a")
                 continue
               fi
               add "$p" "$a" "$(runner_for "$a")" "$image" "$a"
@@ -229,6 +272,37 @@ jobs:
 
           echo "jobs=$entries" >>"$GITHUB_OUTPUT"
           jq -r '.[] | "  \(.package) [\(.arch)] in \(.image)"' <<<"$entries"
+
+          # THE PAIR ASSERTION. Retry lowers the probability of a dropped
+          # package; it does not make one detectable. This does.
+          #
+          # Every architecture that has an image should end up with the same
+          # number of per-arch entries -- the selection is the same list for
+          # each. A count that differs between architectures means a package was
+          # dropped for one of them, which is how libassuan published x86_64
+          # only and then failed on aarch64 for anything that used it.
+          #
+          # Anything deliberately dropped is in $dropped and is subtracted, so
+          # a rust image that genuinely does not exist for an architecture stays
+          # a notice rather than becoming a failure.
+          for a in "${found[@]}"; do
+            have=$(jq -r --arg a "$a" '[.[] | select(.arch == $a)] | length' <<<"$entries")
+            lost=0
+            for d in ${dropped[@]+"${dropped[@]}"}; do
+              [ "${d##*/}" = "$a" ] && lost=$((lost + 1))
+            done
+            echo "  $a: $have entries, $lost deliberately dropped"
+            counts+=("$((have + lost))")
+          done
+          first=${counts[0]}
+          for c in "${counts[@]}"; do
+            [ "$c" = "$first" ] || {
+              echo "::error::architectures cover different numbers of packages (${counts[*]})."
+              echo "::error::A package was dropped from one architecture's matrix. That publishes"
+              echo "::error::half a package and fails later in something that depends on it."
+              exit 1
+            }
+          done
 
           # Partition the matrix into dependency levels.
           #
