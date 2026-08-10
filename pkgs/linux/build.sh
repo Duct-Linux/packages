@@ -68,10 +68,29 @@ make O="$BUILD_DIR" ARCH="$karch" olddefconfig >/dev/null || die "olddefconfig f
 # kernel without squashfs or overlayfs cannot mount a live root at all, and the
 # failure would appear as an unbootable ISO twenty minutes later rather than
 # here.
+# Every symbol here is labelled with WHY it is required, because "live path"
+# used to be implicit -- and implicit is exactly how the installed path came to
+# have no assertions at all while every one of these nine covered the ISO.
+#
+#   LIVE       the ISO: squashfs root, overlay, loop-mounted medium, initramfs
+#   INSTALLED  a disk: ext4 found by PARTUUID, and NO initramfs, so the kernel
+#              must do unaided what an initramfs would otherwise do
+#   FEATURE    something a package above the kernel needs to exist
+#
+# THIS LOOP IS ALSO THE ONLY CROSS-ARCHITECTURE CHECK OF THE CONFIG THERE IS.
+# Anything not named in config/*.config comes from that architecture's
+# defconfig, which is a DIFFERENT FILE PER ARCHITECTURE -- so a symbol that is
+# =y on aarch64 and =m on x86_64 is invisible from any one machine. CI builds
+# both, and this loop runs in each, so asserting a symbol turns a silent
+# per-arch divergence into a failure in the job where it diverges. That is why
+# symbols we RELY ON but do NOT SET belong here too.
 for required in \
 	CONFIG_SQUASHFS=y CONFIG_OVERLAY_FS=y CONFIG_BLK_DEV_LOOP=y \
 	CONFIG_ISO9660_FS=y CONFIG_VFAT_FS=y CONFIG_BLK_DEV_INITRD=y \
-	CONFIG_DEVTMPFS=y CONFIG_EFI_STUB=y CONFIG_MODULES=y
+	CONFIG_DEVTMPFS=y CONFIG_EFI_STUB=y CONFIG_MODULES=y \
+	CONFIG_EFI_PARTITION=y CONFIG_EXT4_FS=y CONFIG_DEVTMPFS_MOUNT=y \
+	CONFIG_BLK_DEV_SD=y CONFIG_SATA_AHCI=y CONFIG_BLK_DEV_NVME=y \
+	CONFIG_VIRTIO_BLK=y CONFIG_FUSE_FS=y
 do
 	grep -q "^$required\$" "$BUILD_DIR/.config" || \
 		die "$required is not in the resolved configuration; the ISO would not boot"
