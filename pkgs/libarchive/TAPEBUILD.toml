@@ -34,6 +34,12 @@ openssl = ">=3.5.0"
 libxml2 = ">=2.13.0"
 acl = ">=2.3.2"
 attr = ">=2.5.2"
+# Declared because its probe is UNGATED and pcre2 is packaged, so configure will
+# find it. Whether it survives into libarchive.so with the CLI tools disabled is
+# unverified -- see pkg.env. Declared rather than omitted because an undeclared
+# dependency that is really linked corrupts the graph, and a declared one that
+# turns out unused costs a seed edge to a package already present.
+pcre2 = ">=10.45.0"
 
 [dependencies.build]
 pkgconf = ">=2.5.0"
