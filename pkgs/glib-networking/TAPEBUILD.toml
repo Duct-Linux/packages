@@ -1,0 +1,40 @@
+[package]
+name = "glib-networking"
+description = "TLS and proxy backends for GLib, without which libsoup has no HTTPS"
+version = "2.80.1"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+# Its own, to assert that the backend this recipe argued for is the one that got
+# built -- and to say plainly what that does NOT prove. See install.sh and
+# VERIFICATION-REQUIRED.md.
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+# The TLS backend itself. This is the dependency the whole recipe argues about.
+openssl = ">=3.5.0"
+# -Dgnome_proxy=enabled reads proxy configuration from GSettings, whose schemas
+# live here.
+gsettings-desktop-schemas = ">=48.0.0"
+# Not a build dependency but a runtime one, and easy to miss because nothing
+# links it: a TLS backend with no trust store verifies nothing. ca-certificates
+# is what populates the store openssl reads.
+ca-certificates = ">=2026.7.16"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
