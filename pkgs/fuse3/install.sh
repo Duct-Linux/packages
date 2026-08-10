@@ -49,9 +49,13 @@ case $(ls -l "$fusermount") in
 	*) die "fusermount3 is not setuid after staging; AppImages and flatpak would both fail at run time" ;;
 esac
 
-# The config the binary was compiled to look for. -Dsysconfdir=/etc in pkg.env is
-# what keeps this out of /usr/etc, and the failure it prevents is silent, so it
-# is worth one line to confirm the two agree.
-[ -f "$DESTDIR/etc/fuse.conf" ] || die "fuse.conf is not at /etc/fuse.conf; check -Dsysconfdir"
+# The config the binary was compiled to look for, asserted as an OUTCOME rather
+# than by trusting the mechanism that produces it. No -Dsysconfdir is passed:
+# meson special-cases a /usr prefix and defaults sysconfdir to the absolute
+# /etc, so util/meson.build's join_paths(prefix, sysconfdir) already yields
+# /etc/fuse.conf. That is a property of meson rather than of this recipe, and if
+# it ever changed the config would land at /usr/etc with the binary compiled to
+# match -- consistent, working, and invisible. This line is what would notice.
+[ -f "$DESTDIR/etc/fuse.conf" ] || die "fuse.conf is not at /etc/fuse.conf; meson's sysconfdir default may have changed"
 
 log "installed fuse3 with fusermount3 setuid root"
