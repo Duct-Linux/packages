@@ -180,11 +180,8 @@ GTK_PKGS := \
 CRYPTO_PKGS := \
 	zstd npth libgpg-error \
 	libassuan libksba libgcrypt \
-<<<<<<< HEAD
 	gnupg gpgme \
-=======
->>>>>>> 7f35cfd (Package libseccomp, where --disable-static is finally load-bearing)
-	libseccomp
+	libseccomp libarchive
 
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
