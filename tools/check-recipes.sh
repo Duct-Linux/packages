@@ -27,6 +27,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import functools
 import tarfile
 import tomllib
 
@@ -186,8 +187,17 @@ def tarball_of(recipe: pathlib.Path) -> tuple[str | None, str | None]:
     return src_dir, name
 
 
+@functools.lru_cache(maxsize=None)
 def scan_tarball(archive: pathlib.Path, src_dir: str) -> dict:
     """One pass over a tarball for everything the later checks need.
+
+    MEMOISED, and that is not an optimisation so much as a repair. Two checks
+    need this data -- the declared-build-tools rule and the tool-dependency
+    rule -- and the second was added later without noticing the first already
+    paid for it, so every tarball in the tree was opened and decompressed
+    twice. On 148 recipes that took this script past ten minutes and made it
+    time out for other workers: the tool everyone runs before pushing became
+    the slowest step in the loop, and the cost grows with the tree.
 
     Opened once rather than once per check: these are xz archives and llvm's is
     130 MB, so a second pass is not free.
@@ -675,6 +685,18 @@ def version_forms(version: str) -> list[str]:
     """
     forms = [version]
     parts = version.split(".")
+
+    # sqlite's documented encoding: MAJOR, then minor and patch zero-padded to
+    # two digits, then a two-digit build number. 3.50.4 ships as
+    # sqlite-autoconf-3500400. It is a stable upstream convention rather than a
+    # one-off, and there is NO WAY TO SPELL AROUND IT: declaring 3500400 would
+    # satisfy this check and fail the semver rule, and a version that is not
+    # three-component semver makes tape's resolver skip the package SILENTLY --
+    # which is the exact failure that rule exists to prevent. The two rules are
+    # individually right and jointly excluded sqlite until this form existed.
+    if len(parts) == 3 and all(x.isdigit() for x in parts):
+        major, minor, patch = parts
+        forms.append(f"{major}{int(minor):02d}{int(patch):02d}00")
     while len(parts) > 1 and parts[-1] == "0":
         parts = parts[:-1]
         forms.append(".".join(parts))
