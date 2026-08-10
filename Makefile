@@ -154,7 +154,11 @@ GTK_PKGS := \
 	gsettings-desktop-schemas \
 	gtk4 libadwaita adwaita-icon-theme cantarell-fonts
 
-# The GnuPG chain, plus zstd, which flatpak and libarchive both want.
+# The flatpak dependency chain. Named CRYPTO_PKGS for its original members and
+# kept that way deliberately -- renaming a variable in a file three workers are
+# editing costs more than the name is worth. It holds everything flatpak needs
+# that is not already elsewhere: the GnuPG chain, zstd for libarchive and for
+# flatpak's delta transport, and libseccomp for the sandbox's syscall filter.
 #
 # Placed after GTK_PKGS rather than near the other libraries, and the reason is
 # dependency order rather than taste: libgpg-error needs gettext at build time,
@@ -176,7 +180,9 @@ GTK_PKGS := \
 CRYPTO_PKGS := \
 	zstd npth libgpg-error \
 	libassuan libksba libgcrypt \
-	gnupg gpgme
+	libassuan libksba libgcrypt \
+	gnupg gpgme \
+	libseccomp
 
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
