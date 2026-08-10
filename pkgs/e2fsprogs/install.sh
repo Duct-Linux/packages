@@ -56,10 +56,20 @@ done
 # dropped `install-libs` was wrongly believed to be needed for, so it is the
 # claim worth measuring rather than reasoning about a second time.
 for l in libext2fs libe2p libcom_err libss; do
-	# shellcheck disable=SC2144
-	if ! ls "$DESTDIR"/usr/lib/$l.so* >/dev/null 2>&1; then
-		die "$l shared library was not staged; e2fsck and mke2fs would not start"
-	fi
+	# A glob expansion rather than `ls <glob> >/dev/null 2>&1`.
+	#
+	# The ls form works here -- this runs under a non-interactive sh, where
+	# aliases are not loaded -- but it is the shape of a defect that bit two
+	# people on this project today: `ls` aliased to long format turns a path
+	# into an "ls -l" line, and the 2>&1 that keeps the check tidy eats the
+	# error that would have named it. SILENCING STDERR TO KEEP OUTPUT TIDY IS
+	# HOW A BROKEN COMMAND BECOMES AN EMPTY RESULT.
+	#
+	# This form calls nothing, hides nothing, and cannot be affected by the
+	# environment: an unmatched glob stays literal, so $1 is a path that does
+	# not exist and -e is false.
+	set -- "$DESTDIR"/usr/lib/$l.so*
+	[ -e "$1" ] || die "$l shared library was not staged; e2fsck and mke2fs would not start"
 done
 
 # No static archives: nothing links them and they would ship in every installed
