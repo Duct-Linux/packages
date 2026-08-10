@@ -1,0 +1,104 @@
+name: probe freedesktop
+
+# A MEASUREMENT, NOT A FIX. Delete it once the question is answered.
+#
+# Two packages failed in CI with HTTP 418 from www.freedesktop.org -- fontconfig
+# at level 9 and appstream at level 11, both x86_64, both with their aarch64
+# counterparts passing, and fontconfig passing on a re-run.
+#
+# Two hypotheses survive, and they need OPPOSITE fixes:
+#
+#   RATE or VOLUME   CI fetches many files from one runner in a burst. A
+#                    developer fetching two files slowly from a residential
+#                    address would never see it. Fix: spacing and backoff.
+#   ADDRESS          the runner IP range is throttled or blocked outright,
+#                    regardless of pace. Fix: a mirror.
+#
+# A third -- the client's user agent -- is already REFUTED, and in the opposite
+# direction to the obvious fix: measured against the exact failing URL, default
+# curl UA returns 206, a browser UA returns 418, an empty UA returns 403. So
+# sending a browser UA would CAUSE the failure rather than avoid it. That
+# measurement is recorded above the curl in tools/fetch-source.sh; this probe
+# does not set -A, for the same reason.
+#
+# THIS DISCRIMINATES THE TWO REMAINING HYPOTHESES IN ONE JOB:
+#   the isolated fetch succeeds and the burst fails  -> RATE
+#   both fail                                        -> ADDRESS
+#   both succeed                                     -> neither reproduces, and
+#                                                       the fallback stays
+#                                                       justified by CLASS
+#
+# It runs on both runner types because every failure so far has been x86_64
+# while the aarch64 counterpart passed, which is the single strongest clue and
+# has never been tested deliberately.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: ubuntu-latest,    arch: x86_64  }
+          - { runner: ubuntu-24.04-arm, arch: aarch64 }
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Where are we fetching from
+        run: |
+          echo "runner arch: ${{ matrix.arch }}"
+          # The source address is the thing the ADDRESS hypothesis is about, so
+          # record it -- two runners of the same type may sit on different
+          # ranges, and a result without the address cannot be compared later.
+          echo "egress IP:   $(curl -fsS --max-time 20 https://api.ipify.org || echo unknown)"
+
+      - name: One file, in isolation
+        run: |
+          # Deliberately NOT `set -e`: a non-zero curl is the DATA here, not a
+          # reason to stop. Every earlier version of this kind of check in this
+          # repository failed by treating an error as an absence.
+          #
+          # Same flags as tools/fetch-source.sh, minus the output file. No -A.
+          url=https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.16.0.tar.xz
+          code=$(curl -sSL --retry 3 --connect-timeout 20 --max-time 900 \
+                      -o /dev/null -w '%{http_code}' "$url" 2>/dev/null || echo "000")
+          echo "isolated fetch: HTTP $code"
+          echo "ISOLATED=$code" >>"$GITHUB_ENV"
+
+      - name: A burst, as a climb would
+        run: |
+          # Six files back to back from one address, which is what a level of
+          # the build matrix does. If the isolated fetch worked and this does
+          # not, the answer is rate rather than address.
+          fail=0
+          for u in \
+            https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.16.0.tar.xz \
+            https://www.freedesktop.org/software/appstream/releases/AppStream-1.0.4.tar.xz \
+            https://www.freedesktop.org/software/harfbuzz/release/harfbuzz-11.2.1.tar.xz \
+            https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.16.0.tar.xz \
+            https://www.freedesktop.org/software/appstream/releases/AppStream-1.0.4.tar.xz \
+            https://www.freedesktop.org/software/fontconfig/release/fontconfig-2.16.0.tar.xz
+          do
+            code=$(curl -sSL --retry 3 --connect-timeout 20 --max-time 900 \
+                        -o /dev/null -w '%{http_code}' "$u" 2>/dev/null || echo "000")
+            printf '  %s  %s\n' "$code" "${u##*/}"
+            case "$code" in 2*) ;; *) fail=$((fail + 1)) ;; esac
+          done
+          echo "burst: $fail of 6 failed"
+          echo "BURST_FAILED=$fail" >>"$GITHUB_ENV"
+
+      - name: What this means
+        run: |
+          # Stated in the job rather than left to whoever reads the log, because
+          # the whole point is that two outcomes imply two different fixes.
+          if [ "${ISOLATED#2}" != "$ISOLATED" ] && [ "$BURST_FAILED" = 0 ]; then
+            echo "::notice::${{ matrix.arch }}: isolated OK, burst OK -- neither hypothesis reproduces here"
+          elif [ "${ISOLATED#2}" != "$ISOLATED" ]; then
+            echo "::notice::${{ matrix.arch }}: isolated OK, $BURST_FAILED/6 burst failed -- RATE or VOLUME; fix is spacing and backoff"
+          else
+            echo "::notice::${{ matrix.arch }}: isolated fetch returned $ISOLATED -- ADDRESS or client; fix is a mirror"
+          fi
