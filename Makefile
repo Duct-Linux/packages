@@ -154,8 +154,18 @@ GTK_PKGS := \
 	gsettings-desktop-schemas \
 	gtk4 libadwaita adwaita-icon-theme cantarell-fonts
 
+# Filesystem creation. Not part of the session and not part of the boot chain:
+# nothing already here calls them, and nothing boots without them either. They
+# exist because the graphical installer creates a root filesystem and an EFI
+# system partition, and no other package in the tree can do either.
+#
+# After SESSION_PKGS because e2fsprogs links against util-linux's libuuid and
+# libblkid -- it is configured to refuse its own private copies, since
+# util-linux already owns those libraries and the programs that come with them.
+FS_PKGS := e2fsprogs
+
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
-	$(TOOLS_PKGS) $(SESSION_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
+	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(GTK_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
