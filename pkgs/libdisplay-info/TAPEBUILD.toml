@@ -1,0 +1,40 @@
+[package]
+name = "libdisplay-info"
+description = "EDID and DisplayID parsing library"
+version = "0.2.0"
+subversion = "1"
+authors = ["Simon Ser and contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+# Its own, to assert the PNP vendor table actually reached the library. The
+# generator exits 0 on an empty pnp.ids and emits a table with no entries, so a
+# truncated input produces a library that builds and installs and names no
+# monitor manufacturer. See install.sh.
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+# Runs tool/gen-search-table.py during the build.
+python = ">=3.13.0"
+# BUILD-ONLY -- pnp.ids is compiled into the library, so nothing reads hwdata at
+# run time. Declared even though meson takes it with required:false, because
+# meson tolerating an absence is a statement about the build system's politeness
+# rather than about the artefact: without pnp.ids this package builds and then
+# names no monitor manufacturer. The dependency graph should express what the
+# build actually needs, not what meson will proceed without.
+hwdata = ">=0.394.0"

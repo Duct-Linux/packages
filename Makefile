@@ -160,7 +160,8 @@ GRAPHICS_PKGS := \
 	libXrandr libXi libXinerama libXcursor libXtst \
 	libpciaccess libdrm wayland wayland-protocols \
 	mtdev libevdev libinput libxkbcommon \
-	llvm mesa
+	llvm mesa \
+	libdisplay-info
 
 GTK_PKGS := \
 	harfbuzz cairo pango \
