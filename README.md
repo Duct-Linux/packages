@@ -33,12 +33,12 @@ assembly of `duct/base` and `duct/builder` -- is not handled here yet.
 Package recipes, and the build that turns them into a signed repository and two
 `FROM scratch` images.
 
-## Four ways a publish is wrong while reporting success
+## Five ways a publish is wrong while reporting success
 
 Every one of these has happened. **Every one of them is a publish exiting 0** --
 which is why "the run was green" is not a statement about the repository, and
-why each of the four needs its own check. They are listed together because each
-one is invisible to the other three.
+why each of the five needs its own check. They are listed together because each
+one is invisible to the other four.
 
 **1. Dropped before comparison.** Artefacts that never reached the indexer at
 all. `actions/download-artifact@v4` reported `Found 200 artifact(s)` for a run
@@ -84,7 +84,40 @@ the same fact as correctly on the server.**
 *Checked by* the post-upload size sweep over every entry, not just this run's.
 *Cannot see:* a file that is the right size and the wrong bytes.
 
-The general shape, which is worth more than the four instances: **a check that
+**5. Produced but not publishable.** The build is green, the artefact exists, and
+nothing will ever index it -- because its identity `(name, version, subversion,
+arch)` is already published with different bytes. The publish keeps the published
+file and warns; the new package is rebuilt and discarded on every climb
+thereafter. Caught on the kernel: `CONFIG_FUSE_FS=y` changed what `linux`
+contains while `subversion` stayed at 1, so a FUSE-enabled kernel would have been
+built forever and never shipped, on the package that decides whether `fuse3`
+works at all.
+*Checked by* comparing the produced artefact's filename against the index before
+merging a recipe change.
+*Cannot see:* anything the other four catch. It is the earliest link, and every
+later check passes cleanly on a package that will never move -- the collection is
+complete, the index is consistent, the server matches it. All true, all about the
+previous kernel.
+
+That last one is a rung below where the other four look. **A green build says a
+package was produced. It says nothing about whether its output can ever reach a
+user.** Build-succeeded is not published, published is not indexed, indexed is
+not on the server -- and before all of them, produced is not publishable.
+
+### A warning class is not benign just because it is usually benign
+
+Class 5 announces itself through `rebuilt with different content; keeping the
+published bytes` -- the same warning that fires routinely for `file`, `gettext`,
+`perl` and `uutils-coreutils`, which embed build paths and timestamps and are
+very likely just non-reproducible. Seven in a single log.
+
+So the class is not benign; it is **mostly** benign, and the exception is
+indistinguishable from the rest without reading each name. The kernel's would
+have been message eight in a list nobody reads. **Frequency is not a property of
+the individual instance** -- a warning being usually noise is an argument for
+reading the names, not for skipping them.
+
+The general shape, which is worth more than the five instances: **a check that
 derives its expectation from the same traversal it is checking cannot fail.**
 `collect-artefacts.sh` takes its total from the server for exactly that reason --
 otherwise it asserts "I enumerated everything I enumerated", which is the precise
