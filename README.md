@@ -125,6 +125,25 @@ shape of the failure it exists to stop. The same rule is why a zero needs a
 control beside it: a scan that finds nothing has told you nothing until you have
 watched it find something.
 
+### And the control needs a control
+
+**A control whose expected output is absent from the population is
+inconclusive, not passing.** A control returning zero has not confirmed
+anything -- it failed to fire, and "fired and found nothing" is
+indistinguishable from "never had anything to match" by the number alone.
+
+Reached the hard way while counting publish warnings. The first count matched
+the workflow's own `echo` source lines and reported one of each; filtering those
+out gave zero, and the control run to validate that filter *also* returned zero
+-- because a two-package publish has no `unchanged:` lines for it to match. Zero
+was the answer being hoped for, which is exactly when an inconclusive control
+reads as a passing one. Re-controlling against three lines known to be present
+turned the zeros back into measurements.
+
+So a control has to be chosen for a property the population is **known** to have,
+not for the property under test. If you cannot say in advance what the control
+should match and why it must be there, it is not yet a control.
+
 And two distinctions that keep collapsing back together, both of which cost real
 time here: **"it is gone" must not read as "nothing matched"**, and **absent must
 not read as cannot-answer**.
