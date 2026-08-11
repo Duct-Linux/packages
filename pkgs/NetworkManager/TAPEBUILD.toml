@@ -1,0 +1,80 @@
+[package]
+name = "NetworkManager"
+description = "Network connection manager: the daemon gnome-control-center's Network and Wi-Fi panels drive over D-Bus"
+version = "1.54.0"
+subversion = "1"
+authors = ["The NetworkManager developers"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+# Both unconditional hard dependencies, with no required:false and no option to
+# turn them off: meson.build 262 (uuid) and 264 (libudev >= 175). libuuid comes
+# from util-linux.
+util-linux = ">=2.41.0"
+eudev = ">=3.2.14"
+# IPv6 router advertisement handling. NetworkManager's one hard external
+# network library -- see pkgs/libndp/pkg.env.
+libndp = ">=1.9.0"
+# -Dovs=true. NetworkManager reads the SONAME at build time and dlopens it at
+# run time, which is why it is a runtime dependency rather than only a build
+# one -- see pkgs/jansson/pkg.env.
+jansson = ">=2.14.0"
+# -Dconcheck=true. Connectivity checking is how the panel distinguishes "has an
+# address" from "has internet", and it is libcurl that performs it.
+curl = ">=8.13.0"
+# -Dlibpsl=true, the public suffix list, for cookie domain rules.
+libpsl = ">=0.21.0"
+# THE AUTHORIZATION LAYER, and the reason -Dpolkit=false is forbidden here:
+# without it NM compiles in main.auth-polkit=false and performs no
+# authorization on its D-Bus API at all. See pkg.env.
+polkit = ">=126.0.0"
+# -Dsession_tracking=elogind. meson.build 417-419 asserts libelogind >= 229.
+# pkgs/elogind's post-install.sh is what guarantees libelogind.pc exists.
+elogind = ">=255.17.0"
+# nmcli's line editing, and NOT optional despite appearing so: meson.build 803
+# asserts readline is present whenever nmcli is enabled, and -Dreadline=auto
+# resolves to 'none' when neither libreadline nor libedit is installed -- which
+# fails the build rather than degrading. This recipe cannot be built until
+# readline is published.
+#
+# Per finding 28 this declaration is inert until readline enters ALL_PKGS, and
+# activates on that merge. It is in BUILDER_PKGS, which precedes NETWORK_PKGS,
+# so the ordering is right by construction rather than by luck.
+readline = ">=8.3.0"
+# The bus the entire API is exposed on, and where the activation policy this
+# package installs is read from.
+dbus = ">=1.16.0"
+# NOT A BUILD DEPENDENCY AT ALL -- nothing here links it and no meson option
+# mentions it -- and a runtime dependency of the strongest kind. NetworkManager
+# contains no 802.11 authentication code: it drives wpa_supplicant over D-Bus,
+# and dbus-daemon activates it on demand. Without this package installed the
+# Wi-Fi panel lists networks and connects to none of them.
+#
+# Declared rather than left to the image build, because a NetworkManager
+# installed alone is a package that appears to work and cannot do the one thing
+# it is here for.
+wpa_supplicant = ">=2.11.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+# -Dintrospection=true. g-ir-scanner comes from gobject-introspection and the
+# GObject typelibs it reads come from glib-introspection; a package with one and
+# not the other links successfully and then dies.
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.0"
