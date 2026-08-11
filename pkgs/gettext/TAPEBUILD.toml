@@ -2,7 +2,7 @@
 name = "gettext"
 description = "GNU internationalisation utilities"
 version = "0.26.0"
-subversion = "3"
+subversion = "4"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 
