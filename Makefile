@@ -283,10 +283,33 @@ SERVICES_PKGS := \
 NETWORK_PKGS := \
 	libnl jansson libndp
 
+# The GNOME desktop tier: everything between "a GTK 4 application platform" and
+# "a GNOME session". Added in waves, in dependency order, and this is the first
+# of them -- the leaves that depend only on what is already here.
+#
+# A new list rather than an extension of GTK_PKGS, for two reasons. The tiers in
+# this file are already the unit the README describes the desktop stack in, so a
+# named group per tier is the existing convention. And four workers are building
+# this stack in parallel against the same Makefile; a group of one's own means
+# the only line any two of us touch is ALL_PKGS.
+#
+# Placed after CRYPTO_PKGS so that every prerequisite precedes it no matter how
+# the earlier lists are rearranged -- the same argument CRYPTO_PKGS makes for
+# its own position, and one fewer thing to get wrong as this list grows.
+#
+# The internal order is the dependency order, and only one edge here is real:
+# libgusb needs libusb. lcms2 wants libjpeg-turbo and libtiff from GTK_PKGS,
+# libnotify wants gdk-pixbuf from the same, at-spi2-core wants dbus from
+# SESSION_PKGS and libxml2 from TOOLS_PKGS -- all of which are already earlier.
+GNOME_PKGS := \
+	lcms2 xdg-user-dirs gnome-backgrounds \
+	libnotify at-spi2-core \
+	libusb libgusb
+
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
-	$(SERVICES_PKGS) $(NETWORK_PKGS) $(BOOT_PKGS)
+	$(SERVICES_PKGS) $(NETWORK_PKGS) $(GNOME_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #

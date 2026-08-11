@@ -1,0 +1,25 @@
+[package]
+name = "xdg-user-dirs"
+description = "Creates and maintains the well-known user directories"
+version = "0.18.0"
+subversion = "1"
+authors = ["Alexander Larsson"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]
+gettext = ">=0.26.0"

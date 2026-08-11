@@ -1,0 +1,39 @@
+[package]
+name = "libgusb"
+description = "GObject wrapper around libusb"
+version = "0.4.9"
+subversion = "1"
+authors = ["Richard Hughes"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+libusb = ">=1.0.9"
+json-glib = ">=1.10.0"
+hwdata = ">=0.394.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.1"
+# diffutils: gusb/meson.build:185 calls find_program('diff') -- a bare call with
+# no required:false, so meson fails at configure if diff is absent. It is inside
+# `if get_option('introspection')` (line 108), which this recipe ENABLES, not
+# inside the tests block it disables. check-recipes flagged it and the flag is
+# correct: the guarding option is one we turn on.
+diffutils = ">=3.10.0"

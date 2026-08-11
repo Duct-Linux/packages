@@ -1,0 +1,26 @@
+[package]
+name = "libusb"
+description = "Userspace USB device access library"
+version = "1.0.29"
+subversion = "1"
+authors = ["The libusb Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+eudev = ">=3.2.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
