@@ -110,6 +110,26 @@ Both are worth holding in mind because they are independent: the first is why a
 name check is not enough, the second is why an arch check on a name is not
 enough either.
 
+WHICH BUILD AN UNPINNED CHECK IS ABOUT, since a name usually has several.
+
+The one tape would INSTALL -- highest semver version, ties broken on highest
+semver subversion, rows whose version or subversion will not parse skipped.
+That is not a design choice here; it is a copy of daemon/utils/queryPkg.go
+selectLatest(), read out of tape rather than assumed, because a resolver that
+disagrees with the installer answers about a build nobody will run.
+
+It is deliberately NOT "the most recently indexed row", which is what an
+earlier version used. The two diverge, and reachably: publish indexes foo
+1.0-3, then a later run reconciles a cancelled publish carrying foo 1.0-2,
+which has never been indexed. 1.0-2 is a fresh identity so it is inserted with
+a HIGHER id -- newest by insertion order, while tape still installs 1.0-3. In
+the bad direction that reads READY off 1.0-2 while 1.0-3 is the truncated one.
+
+The chosen identity is printed on every line, and when resolution and insertion
+order disagree a NOTE names both -- that divergence means something happened on
+the publish side and is worth seeing whatever the verdict is. A caveat that
+lives only in this docstring is a caveat nobody reads.
+
 So a completeness check belongs on the PUBLISH side, where the expected count
 is known. What this tool can do is let a caller who knows which build they want
 say so: pass `name=version-subversion` and READY additionally requires that
@@ -140,6 +160,7 @@ So:
 """
 
 import os
+import re
 import sqlite3
 import ssl
 import sys
@@ -180,6 +201,43 @@ REQUIRED = {"x86_64", "aarch64"}
 # floor in fetch(). A wiped repository is not small, it is empty of everything
 # that matters, and size is only a proxy for populated.
 FLOOR = ("glibc", "bash", "gcc", "binutils")
+
+
+SEMVER_RE = re.compile(
+    r"^v?(\d+)(?:\.(\d+))?(?:\.(\d+))?(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$")
+
+
+def _semver(text):
+    """Parse as Masterminds/semver v3 NewVersion does, or return None.
+
+    That library is what tape uses (daemon/go.mod), and it is LENIENT: "3"
+    parses as 3.0.0 and "1.2" as 1.2.0, which matters because every subversion
+    in this index is a bare integer and would fail a strict three-part parse.
+
+    Returns a tuple ordered the way semver orders, so plain comparison works.
+    Build metadata is stripped because semver excludes it from precedence. A
+    prerelease sorts BELOW the same version without one, which is what the
+    empty-tuple/one-tuple pair encodes.
+
+    None means "tape could not parse this either", and the caller must then
+    skip the row rather than guess -- see selectLatest().
+    """
+    if text is None:
+        return None
+    m = SEMVER_RE.match(text.strip())
+    if m is None:
+        return None
+    major, minor, patch, pre = m.groups()
+    core = (int(major), int(minor or 0), int(patch or 0))
+    if pre is None:
+        return (core, (1,))          # no prerelease sorts ABOVE any prerelease
+    parts = []
+    for ident in pre.split("."):
+        # Numeric identifiers compare numerically and rank below alphanumeric
+        # ones; the (0, int) / (1, str) pair keeps the two kinds from being
+        # compared against each other, which Python would refuse to do.
+        parts.append((0, int(ident), "") if ident.isdigit() else (1, 0, ident))
+    return (core, (0, tuple(parts)))
 
 
 def _open(url):
@@ -268,15 +326,49 @@ def main(names):
     # complete -- but had -4 been the truncated one, the union would have
     # reported READY off the back of -2.
     #
-    # It also explains the shape observed the night of the truncation: the
-    # visibility of the damage was inversely proportional to how long a package
-    # had existed. That was not a property of the damage. IT WAS THIS BUG.
+    # This is a SECOND way to miss the damage seen on the night of the
+    # truncation, not the explanation of it. An earlier version of this comment
+    # claimed the observed gradient -- damage less visible the longer a package
+    # had existed -- WAS this bug. It is not: that gradient is a version-level
+    # property of the index (a dropped package keeps an older row, so a name
+    # check passes) and it was derived from direct sqlite queries by someone who
+    # never ran this program. Reconstructed later from created_at, the index at
+    # that hour held 44 names over 163 rows, ten stale, a hundred absent.
+    # The two mechanisms are independent and sit one axis apart.
     per_identity = defaultdict(set)
-    latest = {}
+    newest_indexed = {}
     for name, ver, sub, arch in rows:
         identity = "%s-%s" % (ver, sub)
         per_identity[(name, identity)].add(arch)
-        latest[name] = identity          # last by id == most recently indexed
+        newest_indexed[name] = identity   # last by id == most recently INDEXED
+
+    # WHICH BUILD tape WOULD ACTUALLY INSTALL, which is not the same thing.
+    #
+    # "Most recently indexed" and "the one that gets installed" diverge, and the
+    # divergence is reachable rather than theoretical: publish indexes foo 1.0-3,
+    # then a later run reconciles a cancelled publish carrying foo 1.0-2, which
+    # has never been indexed. 1.0-2 is a fresh identity, so it is INSERTED WITH A
+    # HIGHER id -- and by insertion order it is "newest" while tape still installs
+    # 1.0-3. Unpinned, this program would then report on a build nobody will ever
+    # install, and in the bad direction it reads READY off 1.0-2 while 1.0-3 is
+    # the truncated one.
+    #
+    # So resolution is done the way tape does it, read out of the source rather
+    # than assumed: daemon/utils/queryPkg.go selectLatest() takes the highest
+    # semver VERSION, breaks ties on the highest semver SUBVERSION, and SKIPS any
+    # row whose version or subversion will not parse rather than failing. All
+    # three behaviours are copied here, including the skip -- a row tape cannot
+    # parse is a row tape cannot install, so counting it would answer about a
+    # build that is not a candidate.
+    resolved = {}
+    unparseable = defaultdict(list)
+    for name, ver, sub, arch in rows:
+        key = (_semver(ver), _semver(sub))
+        if key[0] is None or key[1] is None:
+            unparseable[name].append("%s-%s" % (ver, sub))
+            continue
+        if name not in resolved or key > resolved[name][0]:
+            resolved[name] = (key, "%s-%s" % (ver, sub))
 
     # Kept only for the floor check and the ABSENT test, both of which are
     # genuinely questions about the NAME rather than about a build.
@@ -307,18 +399,50 @@ def main(names):
             continue
 
         # WHICH BUILD IS BEING JUDGED, decided before anything is measured.
-        # Pinned means that exact one; unpinned means the most recently
-        # indexed. Every check below then reads the arches of THAT identity
-        # alone, so no other build can lend it coverage.
-        identity = want if want is not None else latest[name]
+        # Pinned means that exact one; unpinned means THE ONE tape WOULD
+        # INSTALL, not the one most recently added to the index. Every check
+        # below reads the arches of THAT identity alone, so no other build can
+        # lend it coverage.
+        installable = resolved[name][1] if name in resolved else None
+        identity = want if want is not None else installable
+
+        if identity is None:
+            # Every row for this name was unparseable, so tape has no candidate
+            # at all. Not ABSENT -- the name is in the index -- and not a build
+            # question either, so it gets its own answer rather than being
+            # forced into one of the others.
+            print("  UNUSABLE    %-14s present, but no row tape can parse (%s)"
+                  % (name, ", ".join(unparseable[name])))
+            print("              selectLatest() skips rows whose version or")
+            print("              subversion will not parse, so there is nothing")
+            print("              here it would install.")
+            verdicts.append("%s UNUSABLE" % name)
+            ready = False
+            continue
+
+        # The choice, and its basis, IN THE OUTPUT rather than in a comment.
+        # Anyone reading a READY line is entitled to know which build it is
+        # about without having read this file.
+        if want is None and installable != newest_indexed[name]:
+            print("  NOTE        %-14s judging %s (highest version), NOT %s"
+                  % (name, installable, newest_indexed[name]))
+            print("              The most recently INDEXED build is not the one")
+            print("              tape resolves. That happens when a reconcile")
+            print("              inserts an older build after a newer one, and it")
+            print("              means something is worth looking at on the")
+            print("              publish side regardless of the verdict below.")
+        if unparseable[name]:
+            print("  NOTE        %-14s ignoring %d row(s) tape cannot parse: %s"
+                  % (name, len(unparseable[name]), ", ".join(unparseable[name])))
+
         have = per_identity.get((name, identity), set())
 
         if want is not None and not have:
             # Asked for a build the index does not contain. The name IS
             # present, and older builds of it may be perfectly complete --
             # which is exactly what a discarded upload leaves behind.
-            print("  STALE       %-14s index has %s, you asked for %s"
-                  % (name, latest[name], want))
+            print("  STALE       %-14s index resolves to %s, you asked for %s"
+                  % (name, installable, want))
             print("              The name is published and its other builds may be")
             print("              complete. THIS build is not in the index at all.")
             print("              A publish discarded for a duplicate identity, or")
@@ -329,7 +453,9 @@ def main(names):
             print("  READY       %-14s %s  (any)" % (name, identity))
             verdicts.append("%s READY" % name)
         elif REQUIRED <= have:
-            print("  READY       %-14s %s  (%s)" % (name, identity, ", ".join(sorted(have))))
+            print("  READY       %-14s %s  (%s)%s"
+                  % (name, identity, ", ".join(sorted(have)),
+                     "" if want is not None else "   [highest version]"))
             verdicts.append("%s READY" % name)
         else:
             missing = ", ".join(sorted(REQUIRED - have))
