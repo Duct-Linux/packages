@@ -1,0 +1,37 @@
+[package]
+name = "colord"
+description = "System colour management daemon"
+version = "1.4.8"
+subversion = "1"
+authors = ["Richard Hughes"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+lcms2 = ">=2.17.0"
+libgusb = ">=0.4.9"
+libgudev = ">=238.0.0"
+polkit = ">=126.0.0"
+sqlite = ">=3.49.0"
+dbus = ">=1.16.0"
+eudev = ">=3.2.14"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.1"

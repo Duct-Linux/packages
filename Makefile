@@ -360,13 +360,18 @@ NETWORK_PKGS := \
 # the earlier lists are rearranged -- the same argument CRYPTO_PKGS makes for
 # its own position, and one fewer thing to get wrong as this list grows.
 #
-# The internal order is the dependency order, and three edges here are real:
-# libgusb needs libusb, libjxl needs highway, and libjxl needs lcms2 -- which is
-# why lcms2 stays first in this list even though the wave that added it is done.
+# The internal order is the dependency order, and five edges here are real:
+# libgusb needs libusb, libjxl needs highway, libjxl needs lcms2, and colord
+# needs BOTH lcms2 and libgusb -- which is why lcms2 stays first in this list
+# even though the wave that added it is long done, and why colord is last.
 # The rest resolve outside the group: lcms2 wants libjpeg-turbo and libtiff from
 # GTK_PKGS, libnotify and libjxl want gdk-pixbuf from the same, libjxl also
 # wants brotli from FONT_PKGS and libpng from there too, and at-spi2-core wants
 # dbus from SESSION_PKGS and libxml2 from TOOLS_PKGS -- all already earlier.
+#
+# colord additionally needs libgudev and polkit from SERVICES_PKGS and sqlite
+# from CRYPTO_PKGS. Both of those lists precede this one in ALL_PKGS, which is
+# the whole reason this group sits where it does.
 #
 # highway and libjxl are the second wave, and they are one unit: highway is
 # packaged for no other reason than that libjxl's own copy of it is an empty
@@ -376,7 +381,8 @@ GNOME_PKGS := \
 	lcms2 xdg-user-dirs gnome-backgrounds \
 	libnotify at-spi2-core \
 	libusb libgusb \
-	highway libjxl
+	highway libjxl \
+	colord
 
 # The GTK 3 island, and it is an island on purpose.
 #
