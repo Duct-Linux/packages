@@ -1,0 +1,58 @@
+[package]
+name = "libei"
+description = "Emulated input library for Wayland compositors and clients"
+version = "1.4.1"
+subversion = "1"
+authors = ["The libinput project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# sd-bus, taken through -Dsd-bus-provider=libelogind. liboeffis talks to the
+# RemoteDesktop portal over D-Bus and this is the client library it uses.
+elogind = ">=255.17.0"
+# libevdev IS declared and libxkbcommon is NOT, which looks inconsistent until
+# you follow which binaries actually ship.
+#
+# Both are taken with a bare `dependency(..., required: false)` at
+# meson.build:78-80, with no option to control either, so in this tree both are
+# always found -- there is no flag to make that deterministic, only a
+# declaration to make it honest.
+#
+# The difference is what links them. ei-debug-events is the ONLY tool marked
+# `install: true`, and it takes dep_libevdev. libxkbcommon is used by
+# ei-demo-client and eis-demo-server, neither of which is installed -- so it is
+# compiled against and never shipped. That is the same distinction pipewire's
+# recipe records for libcap and libdrm: "configure found it" and "the artefact
+# links it" are different facts, and only the second belongs here.
+libevdev = ">=1.13.4"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+# proto/meson.build runs ei-scanner, a Jinja2 template renderer, to generate the
+# protocol source. It is declared here rather than assumed because Duct's python
+# is built --without-ensurepip and has no third-party modules at all unless one
+# is packaged.
+#
+# BLFS LISTS attrs AS REQUIRED FOR THIS PACKAGE AND IT IS NOT. libei 1.4.1 never
+# imports attrs anywhere; the book is carrying a requirement that upstream's own
+# CI dates -- .gitlab-ci.yml has `pip install attrs  # required by libei 1.0.0`.
+# The near-miss is worth recording: grepping for "attrs" DOES hit
+# proto/ei-scanner, in `def startElement(self, element, attrs: dict)` -- a SAX
+# handler's local variable. A grep hit that appears to confirm the book is the
+# most dangerous kind, because a confirmation is what nobody re-reads.
+python-jinja2 = ">=3.1.6"

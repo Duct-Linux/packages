@@ -161,7 +161,8 @@ GRAPHICS_PKGS := \
 	libpciaccess libdrm wayland wayland-protocols \
 	mtdev libevdev libinput libxkbcommon \
 	llvm mesa \
-	libdisplay-info
+	libdisplay-info \
+	libei
 
 # The audio stack, and the reason it is not optional even though sound is the
 # visible half of it.
