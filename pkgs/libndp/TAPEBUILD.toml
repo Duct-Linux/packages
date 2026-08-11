@@ -1,0 +1,28 @@
+[package]
+name = "libndp"
+description = "IPv6 Neighbor Discovery Protocol library, a hard dependency of NetworkManager"
+# UPSTREAM CALLS THIS 1.9, with two components. It is written 1.9.0 here because
+# tape's resolver requires three-component semver and SKIPS a package that is not,
+# silently -- the package builds, indexes, and then never resolves for anything
+# depending on it. check-recipes.sh's version_forms() strips the trailing .0 when
+# it looks for the version in the source URL, which is why the pin below can
+# still say 1.9 and match.
+version = "1.9.0"
+subversion = "1"
+authors = ["Jiri Pirko and contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"

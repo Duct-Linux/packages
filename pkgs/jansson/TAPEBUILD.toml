@@ -1,0 +1,25 @@
+[package]
+name = "jansson"
+description = "C library for encoding, decoding and manipulating JSON, used by NetworkManager"
+version = "2.14.1"
+subversion = "1"
+authors = ["Petri Lehtinen and contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+# libc only. jansson has no dependencies of its own and its configure calls no
+# PKG_CHECK_MODULES at all, so there is not even a pkgconf entry to make -- it
+# ships a jansson.pc without ever consulting pkg-config to build one.
+[dependencies]
+glibc = ">=2.42.0"
