@@ -2,7 +2,7 @@
 name = "eudev"
 description = "Device manager for the Linux kernel"
 version = "3.2.14"
-subversion = "1"
+subversion = "2"
 authors = ["The eudev project"]
 packagers = ["ItzYanick"]
 
