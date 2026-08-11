@@ -105,8 +105,26 @@ done
 # upstream no longer produces would hide exactly the change worth knowing
 # about, and the version is pinned, so this can only fire when a human is
 # already bumping it.
+#
+# THERE ARE FOUR, AND THE GUARD BELOW IS WHY THIS LIST IS RIGHT. The first
+# version of this loop named three. libss.a was missing from it, the guard
+# caught it on both architectures, and the reason it was missing is worth
+# keeping: the list was built by grepping a build log for the staged archives,
+# and lib/ss logs its install with the ABSOLUTE staging path
+#
+#     INSTALL_DATA /tmp/pkgs/e2fsprogs/work/install/usr/lib/libss.a
+#
+# where the other three log a /usr/lib/-relative one. A pattern anchored on
+# /usr/lib/ matched three of four and looked like a complete enumeration.
+#
+# So do not rebuild this list by grepping. If it needs to change, let the guard
+# below name what is missing -- it reads the staging tree, which cannot format
+# itself inconsistently.
+#
+# libsupport.a is built (GEN_LIB) and never staged, which is why it is absent
+# here and why the guard does not report it either.
 # ---------------------------------------------------------------------------
-for a in libcom_err.a libe2p.a libext2fs.a; do
+for a in libcom_err.a libe2p.a libext2fs.a libss.a; do
 	[ -e "$DESTDIR/usr/lib/$a" ] ||
 		die "$a was not staged, so this recipe is deleting something that is no
        longer there. Upstream changed what the install target produces -- find
@@ -121,8 +139,9 @@ done
 for a in "$DESTDIR"/usr/lib/*.a; do
 	[ -e "$a" ] || continue
 	die "static archive $(basename "$a") was staged; nothing here links it, and it
-       is not one of the three this recipe knows about. Decide whether it ships
-       before this package does."
+       is not one of the four this recipe knows about. Decide whether it ships
+       before this package does -- and add it to the loop above rather than
+       widening this one, so the next new archive is still caught."
 done
 
 # mke2fs.conf decides what features a filesystem gets when no -O is passed, and

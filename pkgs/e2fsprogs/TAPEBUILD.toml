@@ -8,7 +8,7 @@ version = "1.47.2"
 # an upload whose name=version-subversion already exists and DISCARDS IT
 # QUIETLY. A package that is silently not republished looks exactly like one
 # that was.
-subversion = "2"
+subversion = "3"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 
