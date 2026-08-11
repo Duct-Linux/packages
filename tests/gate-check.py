@@ -2,6 +2,7 @@
 """Is a package COMPLETE in the published repository, not merely present?
 
     gate-check.py util-linux [more names...]
+    gate-check.py util-linux=2.41.1-1        # and it must be THIS build
 
 WHY THIS IS NOT `grep name repo.db`. On 2026-08-10 four packages merged within
 two minutes, each triggering its own publish run, and publish has a concurrency
@@ -68,6 +69,33 @@ with the number.
 Two channels that can be read independently is a design where one can be
 dropped silently. So the text now REPORTS the status: whichever channel you
 read, you get the same statement, and a pipeline cannot separate them.
+
+WHAT READY DOES NOT MEAN, AND THIS COST A DECLARED-OPEN GATE ON 2026-08-11.
+
+READY means: this name is in the index, covering both architectures. IT DOES
+NOT MEAN THE PUBLISH THAT PUT IT THERE WAS COMPLETE, AND IT DOES NOT MEAN THE
+ROW IS THE BUILD YOU ARE WAITING FOR.
+
+A publish truncated at 200 of 258 artefacts and exited 0. The resulting index
+was INTERNALLY CONSISTENT -- a correct description of a set missing its
+foundation. This tool reported util-linux READY, and it was; an arch-pair sweep
+reported 128 names over 322 rows, and it did. Both verifications were sound and
+both were blind, because neither asks "did the publish get everything", and
+that question CANNOT BE ANSWERED FROM THE INDEX: completeness is defined by how
+many artefacts the publisher was handed, which the index does not record.
+
+The damage hid in an unexpected place. Most dropped packages still had an OLDER
+row from an earlier publish, so they read READY at a stale version; only the
+genuinely new ones -- gperf, attr -- showed ABSENT, having no older row to hide
+behind. THE VISIBILITY OF THE DAMAGE WAS INVERSELY PROPORTIONAL TO HOW LONG A
+PACKAGE HAD EXISTED.
+
+So a completeness check belongs on the PUBLISH side, where the expected count
+is known. What this tool can do is let a caller who knows which build they want
+say so: pass `name=version-subversion` and READY additionally requires that
+exact row. That puts the expectation in the only place that holds it, and it is
+the difference between "glibc is present" and "glibc is the one this climb
+produced".
 
 WHAT THIS ANSWER IS AND IS NOT, because the distinction cost a wrong prediction
 on 2026-08-10. This reports the index AS OF NOW. A CI job does not use "now":
@@ -150,6 +178,14 @@ def fetch(url):
     return handle.name
 
 
+def parse_request(arg):
+    """`name` or `name=version-subversion`. The second form asserts the build."""
+    if "=" in arg:
+        name, want = arg.split("=", 1)
+        return name, want
+    return arg, None
+
+
 def main(names):
     path = fetch(REPO)
     rows = sqlite3.connect(path).execute(
@@ -176,7 +212,8 @@ def main(names):
 
     ready = True
     verdicts = []
-    for name in names:
+    for request in names:
+        name, want = parse_request(request)
         have = arches.get(name)
         if not have:
             print("  ABSENT      %-14s — not published at all; wait" % name)
@@ -185,6 +222,16 @@ def main(names):
         elif have == {"any"}:
             print("  READY       %-14s %s  (any)" % (name, version[name]))
             verdicts.append("%s READY" % name)
+        elif want is not None and version[name] != want:
+            # Present, complete, and NOT the build the caller is waiting for.
+            # This is exactly the state a truncated publish leaves behind: an
+            # older row survives and reads healthy.
+            print("  STALE       %-14s index has %s, you asked for %s"
+                  % (name, version[name], want))
+            print("              Present and complete, but not this build. A publish")
+            print("              that dropped it would look exactly like this.")
+            verdicts.append("%s STALE" % name)
+            ready = False
         elif REQUIRED <= have:
             print("  READY       %-14s %s  (%s)" % (name, version[name], ", ".join(sorted(have))))
             verdicts.append("%s READY" % name)
