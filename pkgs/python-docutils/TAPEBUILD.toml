@@ -1,0 +1,18 @@
+[package]
+name = "python-docutils"
+description = "Text processing system for reStructuredText, and the rst2man command"
+version = "0.21.2"
+subversion = "1"
+authors = ["David Goodger"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+python = ">=3.13.0"
+
+[dependencies.build]
