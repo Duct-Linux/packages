@@ -23,9 +23,24 @@ zlib = ">=1.3.1"
 # happily and then cargo cannot start: "libssl.so.3: cannot open shared object
 # file". rustc itself is fine, which is what makes it easy to miss.
 #
-# The constraint has to move with the pin, not merely be loosened: tape reads
-# ">=3.5.0" as >=3.5.0, <3.6.0, so the old ">=4.0.0" would have admitted
-# nothing at all against a 3.5 package rather than quietly still matching.
+# The constraint has to move with the pin, not merely be loosened: the old
+# ">=4.0.0" admitted nothing at all against a 3.5 package rather than quietly
+# still matching -- because 3.5.7 is below the floor, NOT because ">=" implies
+# a ceiling.
+#
+# THAT DISTINCTION IS NOT PEDANTRY, AND THIS COMMENT USED TO GET IT WRONG. It
+# claimed tape reads ">=3.5.0" as ">=3.5.0, <3.6.0". It does not. Measured
+# against github.com/Masterminds/semver/v3 v3.2.1 -- the exact version pinned
+# in tape's daemon/go.mod -- ">=3.5.0" admits 4.0.1, while ">=3.5.0,<4.0.0"
+# rejects it. An explicit operator is an OPEN FLOOR; only a bare "3.5" is a
+# range. check-recipes' own constraint_bounds() documents the same semantics,
+# having been corrected for the identical mistake.
+#
+# The wrong version of this comment was load-bearing: it says an unbounded
+# ">=3.5.0" is self-limiting, which would make bounding unnecessary -- and
+# glib-networking, libarchive and ostree were all written with unbounded
+# openssl constraints. glib-networking's genuinely resolved to 4.0.1.
+#
 # Bounded, not an open floor. tape resolves with Masterminds/semver and adds no
 # range logic, so ">=3.5.0" alone would admit 4.0.1 -- and published openssl
 # 4.0.1 ships libssl.so.4 while 3.5.7 ships libssl.so.3. Resolution could then

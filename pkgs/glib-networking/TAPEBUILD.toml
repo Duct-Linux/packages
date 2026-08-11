@@ -2,7 +2,7 @@
 name = "glib-networking"
 description = "TLS and proxy backends for GLib, without which libsoup has no HTTPS"
 version = "2.80.1"
-subversion = "1"
+subversion = "2"
 authors = ["The GNOME Project"]
 packagers = ["ItzYanick"]
 
@@ -25,7 +25,30 @@ script = "install.sh"
 glibc = ">=2.42.0"
 glib = ">=2.84.0"
 # The TLS backend itself. This is the dependency the whole recipe argues about.
-openssl = ">=3.5.0"
+#
+# BOUNDED, AND THE BOUND IS ABOUT THIS ARTEFACT RATHER THAN ABOUT UPSTREAM.
+# openssl 3.5.7-2 (libssl.so.3) and 4.0.1-1 (libssl.so.4) are BOTH published
+# with deleted_at null. tape resolves with Masterminds/semver and adds no range
+# logic, so ">=3.5.0" is an open floor that selects the highest published
+# major -- 4.0.1. Measured, not reasoned: the published
+# glib-networking-2.80.1-1 libgioopenssl.so carries DT_NEEDED libssl.so.3 and
+# libcrypto.so.3 on both arches, because CI seeds 3.5.7. So the unbounded form
+# installed a module against an openssl that cannot load it.
+#
+# This was the ONLY one of the three unbounded consumers that actually
+# resolved wrong: libarchive and ostree each happen to pull a bounded openssl
+# consumer through their own dependencies, and this one's closure (glib,
+# gsettings-desktop-schemas, ca-certificates) contains none. It was not
+# theoretical here.
+#
+# THE CEILING IS NOT A CLAIM THAT THE SOURCE NEEDS 3.x. Built against openssl
+# 4.0.1 headers with exactly the MESON_ARGS in pkg.env, this backend configures
+# and compiles clean -- and the libgioopenssl.so it produces then carries
+# DT_NEEDED libssl.so.4. Same source, either SONAME, decided entirely by what
+# was present at build time. That is the whole point: the constraint describes
+# the artefact this recipe SHIPS, not what upstream can be made to compile
+# against. Moving to 4.x means a rebuild and a new bound, not a wider one.
+openssl = ">=3.5.0,<4.0.0"
 # -Dgnome_proxy=enabled reads proxy configuration from GSettings, whose schemas
 # live here.
 gsettings-desktop-schemas = ">=48.0.0"
