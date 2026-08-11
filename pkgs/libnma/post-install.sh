@@ -50,11 +50,18 @@ else
 fi
 
 # --- what is absent, and why it is not a defect -----------------------------
-log "note: -Dgcr=false, so there is no advanced certificate chooser. That is"
-log "note: consistent rather than merely missing: NetworkManager here is built"
-log "note: -Dcrypto=null and cannot load or verify a certificate at all, so an"
-log "note: 802.1X connection with a certificate cannot be configured whatever"
-log "note: widget offers to choose one."
-log "note: -Dmobile_broadband_provider_info=false, so the mobile broadband"
-log "note: wizard has no APN database -- and NetworkManager is built"
-log "note: -Dmodem_manager=false, so there is no mobile broadband panel yet."
+# THESE NOTES WENT STALE ONCE AND WERE CORRECTED BY RUNNING THE BUILD. They
+# used to say the gcr loss was "consistent" because NetworkManager could not
+# read a certificate at all under -Dcrypto=null, and that there was no mobile
+# broadband panel under -Dmodem_manager=false. Both were true when written and
+# both stopped being true when the NetworkManager recipe changed beside this
+# one -- so a note describing a NEIGHBOUR is a note that can rot without this
+# file being touched. Kept, but stated as of what NetworkManager is now.
+log "note: -Dgcr=false, so there is no advanced certificate chooser widget."
+log "note: NetworkManager IS built -Dcrypto=gnutls, so certificates themselves"
+log "note: work -- what is missing is the browse-and-inspect UI, not the"
+log "note: capability. gcr belongs to another chain and is not packaged."
+log "note: -Dmobile_broadband_provider_info=false, so the wizard cannot prefill"
+log "note: APN and credentials from an operator list. NetworkManager DOES have"
+log "note: mobile broadband (-Dmodem_manager=true); the database is a separate"
+log "note: data package nobody has yet, and it needs no rebuild to add."
