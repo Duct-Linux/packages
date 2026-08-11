@@ -895,7 +895,14 @@ def check_every_recipe_is_listed() -> None:
                             capture_output=True, text=True, timeout=120).stdout
     except (OSError, subprocess.SubprocessError):
         return
-    for var in ("ALL_PKGS", "RUST_PKGS", "TAPE_PKGS"):
+    # RUST_LATE_PKGS is listed here for the same reason RUST_PKGS is, and adding
+    # it was NOT optional: this tuple is the whole definition of "in a build
+    # list", so a new list the Makefile builds from but this does not name makes
+    # every recipe in it fail as unlisted -- a false failure -- while a list
+    # nobody builds from would pass silently. The two lists differ only in WHEN
+    # they run (RUST_LATE_PKGS after packages-native, for Rust packages that
+    # link natively built libraries); to this check they are the same thing.
+    for var in ("ALL_PKGS", "RUST_PKGS", "RUST_LATE_PKGS", "TAPE_PKGS"):
         for m in re.finditer(rf"^{var} *:?= *(.*)$", db, re.M):
             listed |= set(m.group(1).split())
     if not listed:

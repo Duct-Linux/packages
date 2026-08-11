@@ -115,22 +115,37 @@ BUILDER_PKGS := \
 # standard build image. Cross-linked against Duct's own glibc, so the result is
 # bound to the libc that ships -- see docker/Dockerfile.rust.
 #
-# cbindgen joins uutils here, and it is a different KIND of member: uutils is a
-# shipped userland, cbindgen is a build-time-only tool that mozjs's configure
-# refuses to run without. That makes it the first entry in this list that
-# something in ALL_PKGS depends on, which is what the `packages` target's
-# ordering comment below is about. CI is told the same thing separately, in the
-# per-package image case in .github/workflows/build.yml -- two places, because
-# the local build and CI decide the image by different mechanisms.
-# cargo-c joins them for the same reason cbindgen did: it is a build-time-only
-# tool that another package's configure refuses to run without. librsvg's
-# meson.build:27 calls find_program('cargo-cbuild', version:'>= 0.10.0') with no
-# required:false, so librsvg cannot configure without it.
+# THIS LIST IS SPECIFICALLY FOR RUST PACKAGES THAT NEED NOTHING BUILT LOCALLY.
+# It runs BEFORE packages-native (see the `packages` target), which is what lets
+# cbindgen exist before mozjs configures against it -- so an entry added here
+# that LINKS a native library would build against an empty seed. Those go in
+# RUST_LATE_PKGS below.
 #
-# It belongs in THIS list rather than RUST_LATE_PKGS even though its consumer is
-# late: cargo-c itself links nothing built here, so it satisfies this list's
-# stated invariant, and it must precede librsvg.
+# cbindgen and cargo-c are both a different KIND of member from uutils: uutils
+# is a shipped userland, those two are build-time-only tools that another
+# package's configure refuses to run without -- mozjs for cbindgen, librsvg for
+# cargo-c (meson.build:27, find_program('cargo-cbuild') with no required:false).
+# They are the entries in this list that something in ALL_PKGS depends on, which
+# is what the `packages` target's ordering comment below is about. CI is told
+# the same thing separately, in the per-package image case in
+# .github/workflows/build.yml -- two places, because the local build and CI
+# decide the image by different mechanisms.
+#
+# Both still belong HERE rather than in RUST_LATE_PKGS even though their
+# consumers are late: neither links anything built in this tree, so both satisfy
+# this list's stated invariant, and both must PRECEDE their consumers.
 RUST_PKGS := uutils-coreutils cbindgen cargo-c
+
+# Rust packages that DO link libraries built by packages-native, and therefore
+# run after it.
+#
+# librsvg is the first: it links cairo, pango, gdk-pixbuf, glib and libxml2 --
+# read from DT_NEEDED on the built artefacts rather than from its meson
+# dependency() calls, which additionally name freetype2 and harfbuzz that
+# nothing in the output actually links. It is here rather than in GNOME_PKGS
+# because it needs a Rust toolchain, and in its own list rather than in
+# RUST_PKGS because that list runs before the libraries it links exist.
+RUST_LATE_PKGS := librsvg
 
 # Everything the live ISO needs and a container image does not.
 #
@@ -580,7 +595,7 @@ DOCKER_ARGS = --rm \
 DOCKER      = docker run $(DOCKER_ARGS) --entrypoint /bin/bash $(IMAGE) -c
 DOCKER_REPO = docker run $(DOCKER_ARGS) --entrypoint /bin/bash $(REPO_IMAGE) -c
 
-.PHONY: all packages packages-native packages-tape packages-rust repo key clean clean-repo dirs stage pin toolchain check-sources check-recipes program-index
+.PHONY: all packages packages-native packages-tape packages-rust packages-rust-late repo key clean clean-repo dirs stage pin toolchain check-sources check-recipes program-index
 
 all: repo
 
@@ -628,9 +643,28 @@ stage: dirs
 # chains are editing this Makefile right now and a global build-order change
 # arriving inside a five-package pull request is one nobody would see.
 #
-# Nothing else moves: packages-rust needs no locally built package, so running
-# it first is free today and correct afterwards.
-packages: packages-rust packages-native packages-tape
+# THAT ORDER IS ONLY CORRECT FOR RUST PACKAGES WITH NO NATIVE DEPENDENCIES, and
+# this comment used to claim it without the qualifier: "packages-rust needs no
+# locally built package, so running it first is free". True of uutils-coreutils
+# and cbindgen, which need nothing but glibc. NOT true of librsvg, which links
+# cairo, pango, gdk-pixbuf, glib, harfbuzz, freetype and libxml2 -- every one of
+# them built by packages-native, which under this order has not run yet.
+#
+# BUILD_IN_CONTAINER seeds each container from /pkgs/*.tape.tar.gz, which is
+# out/pkgs -- the LOCALLY BUILT artefacts, not the published repository. So a
+# from-scratch `make repo` would start librsvg with an empty seed and its
+# configure would stop on a missing cairo.
+#
+# Note how narrow that failure is, because it is why nobody would have caught
+# it: CI schedules by tools/dep-levels.sh rather than by this line, and any
+# worktree with a warm out/pkgs already has cairo. It breaks ONLY the cold
+# from-scratch build -- the exact case this ordering exists to protect.
+#
+# Hence two lists rather than one stretched list. RUST_PKGS keeps its original
+# meaning and its original position, so the cbindgen argument above still holds
+# unchanged; RUST_LATE_PKGS is for Rust packages that link native libraries and
+# runs after packages-native has produced them.
+packages: packages-rust packages-native packages-rust-late packages-tape
 
 # Every package already built is unpacked into the container before the next one
 # is compiled.
@@ -795,6 +829,21 @@ packages-tape: stage check-sources
 # on a 1.5 GB toolchain image that only one of them needs.
 packages-rust: stage check-sources
 	@set -e; $(foreach p,$(RUST_PKGS), \
+		echo "==> $(p) ($(call pkg_target,$(p)), in $(RUST_IMAGE))"; \
+		docker run $(DOCKER_ARGS) -v $(CARGO_CACHE):/cargo -e CARGO_HOME=/cargo \
+			--entrypoint /bin/bash $(RUST_IMAGE) -c \
+			"$(call BUILD_IN_CONTAINER,$(p))"; )
+
+# The other half of the Rust island: same image, same cargo cache, but run after
+# packages-native so the C libraries these link have been built.
+#
+# Identical to packages-rust apart from the list, and deliberately NOT merged
+# with it by making the list a variable -- the two differ in WHEN they run, and
+# that is the whole point of having two. A single target parameterised by list
+# would make it easy to add a package to the wrong one and see no difference
+# until a cold from-scratch build.
+packages-rust-late: stage check-sources
+	@set -e; $(foreach p,$(RUST_LATE_PKGS), \
 		echo "==> $(p) ($(call pkg_target,$(p)), in $(RUST_IMAGE))"; \
 		docker run $(DOCKER_ARGS) -v $(CARGO_CACHE):/cargo -e CARGO_HOME=/cargo \
 			--entrypoint /bin/bash $(RUST_IMAGE) -c \

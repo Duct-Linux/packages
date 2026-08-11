@@ -1,0 +1,61 @@
+[package]
+name = "librsvg"
+description = "SVG rendering library and gdk-pixbuf SVG loader"
+version = "2.61.0"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "./build.sh"
+
+[install]
+script = "./install.sh"
+
+# Read from DT_NEEDED on the built artefacts, not from librsvg's meson
+# dependency() calls -- and the two disagree in BOTH directions.
+#
+# meson.build asks for freetype2 and harfbuzz (lines 80 and 105), so declaring
+# them looked right. Neither appears in DT_NEEDED of librsvg-2.so.2.61.0,
+# libpixbufloader_svg.so or rsvg-convert: they are compile-time resolution that
+# ends up satisfied through pango, which IS linked and IS declared. Conversely
+# libgcc_s.so.1 is linked by all three and is named nowhere in meson.build,
+# because it comes from rustc rather than from a declared dependency.
+#
+# Measured in duct/rust-cargoc:aarch64 on 2026-08-11, over every ELF file the
+# package installs:
+#   librsvg-2.so.2.61.0    glib gio gobject gdk_pixbuf cairo cairo-gobject
+#                          xml2 pangocairo pango gcc_s c m
+#   libpixbufloader_svg.so librsvg-2 gio gobject glib gdk_pixbuf gcc_s c
+#   rsvg-convert           cairo cairo-gobject gio xml2 pangocairo pango
+#                          gobject glib gcc_s m c
+# No libssl or libcrypto in any of them, which matters because the build image
+# carries openssl 4.0.1 while the seed installs 3.5.7 -- a package linking
+# either would produce a local build whose SONAME does not match CI's.
+[dependencies]
+glibc = ">=2.42.0"
+gcc = ">=15.2.0"
+glib = ">=2.84.0"
+cairo = ">=1.18.0"
+pango = ">=1.56.0"
+gdk-pixbuf = ">=2.42.0"
+libxml2 = ">=2.13.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.1"
+# cargo-c provides cargo-cbuild, which meson.build:27 requires with no
+# required:false. Declared rather than assumed from the image: [dependencies.build]
+# is what tools/dep-levels.sh reads to assign CI levels, so an undeclared cargo-c
+# could be scheduled at the same level as librsvg or later -- which is the exact
+# failure the README records for ncurses, patch, gettext, file and perl.
+cargo-c = ">=0.10.24"
