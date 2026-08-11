@@ -127,7 +127,8 @@ TOOLS_PKGS := \
 SESSION_PKGS := \
 	libxcrypt attr acl libcap expat pcre2 \
 	util-linux linux-pam shadow kmod eudev \
-	dbus duktape iso-codes xkeyboard-config hwdata elogind
+	dbus duktape iso-codes xkeyboard-config hwdata elogind \
+	seatd
 
 FONT_PKGS := \
 	libpng brotli freetype fontconfig fribidi pixman
