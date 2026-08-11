@@ -182,6 +182,16 @@ if [ -d "$DESTDIR/usr/share/doc/xwayland" ]; then
 	die "documentation was built and staged despite -Ddocs=false"
 fi
 
+# -Dglx=false, asserted as the CAPABILITY GAP it is rather than as a tidy-up.
+# glx/meson.build:43 takes dependency('gl', '>= 1.2') unguarded inside
+# `if build_glx`, and mesa here is -Dglx=disabled with no libGL, so this cannot
+# currently be true -- setting it stops the build at configure. The assertion is
+# here so that the day libglvnd is packaged and someone flips the flag, the
+# expected outcome is written down next to the check that changes.
+if grep -qE '^#define GLXEXT( |$)' "$dix"; then
+	die "GLXEXT is defined; -Dglx=false did not take effect, which means dependency('gl') resolved -- if libGL is now packaged this assertion is what needs updating, not the flag"
+fi
+
 # ===========================================================================
 # WHAT THIS PACKAGE DOES NOT DO
 # ===========================================================================
@@ -194,3 +204,5 @@ fi
 	|| die "the Xwayland desktop file was not installed"
 log "note: nothing starts Xwayland. mutter launches it with -displayfd/-listenfd; the desktop file is the rootful path."
 log "note: xkbcomp and xkeyboard-config are declared dependencies and are used only at run time -- no build check here can see them."
+log "note: NO GLX. X11 clients calling glX* get no visual, because mesa ships no libGL and glx/meson.build requires it."
+log "note: glamor is unaffected and X11 drawing is still accelerated -- it reaches GL through epoxy and GLES, not through libGL."

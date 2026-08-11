@@ -364,10 +364,12 @@ Three decisions worth knowing before reading the recipes:
   and no GLX, gtk4 with no X11 backend, cairo with no xlib surface. The X
   *client* libraries were packaged because several GNOME components link them
   regardless of backend — and because Xwayland needed them first. Xwayland is
-  now here (`XORG_PKGS`), so X11 applications do run; nothing else does. Note
-  that mesa's `-Dglx=disabled` is the *client* GLX, and Xwayland's `-Dglx=true`
-  is the server side built from its own sources through epoxy: the two are
-  different things and do not contradict each other.
+  now here (`XORG_PKGS`), so X11 applications do run; nothing else does. **They
+  run without GLX**, and that follows from mesa rather than from a preference:
+  `glx/meson.build` takes `dependency('gl')` unguarded, mesa is `-Dglx=disabled`
+  and ships no libGL, so `-Dglx=true` does not configure. X11 drawing is still
+  accelerated — glamor reaches GL through epoxy and GLES — but an X11 client
+  that calls `glX*` itself gets no visual until `libglvnd` is packaged.
 - **elogind, not systemd.** mutter cannot open a DRM device or an input device
   on a seat-managed system without asking logind; gnome-shell will not draw
   until logind says the session is active. elogind installs a `libsystemd.pc`
