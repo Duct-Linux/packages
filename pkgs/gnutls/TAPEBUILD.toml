@@ -1,0 +1,46 @@
+[package]
+name = "gnutls"
+description = "TLS stack: NetworkManager's 802.1X crypto backend, reading the system trust store"
+version = "3.8.10"
+subversion = "1"
+authors = ["The GnuTLS project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# The crypto backend. Both halves: nettle for symmetric, hogweed for
+# public-key. Verified as DT_NEEDED on libgnutls rather than assumed.
+nettle = ">=3.10.2"
+# GMP arrives through hogweed, and is declared because hogweed links it.
+gmp = ">=6.3.0"
+# ASN.1 parsing, system copy. gnutls bundles lib/minitasn1 and would use it if
+# told to; install.sh asserts the DT_NEEDED so it cannot happen silently.
+libtasn1 = ">=4.20.0"
+# Unicode normalisation for certificate name checking, system copy. The book
+# calls this "recommended"; gnutls hard-errors without it.
+libunistring = ">=1.3.0"
+# The trust store. --with-default-trust-store-pkcs11 makes every CA lookup go
+# through p11-kit's trust module rather than a path compiled in here.
+p11-kit = ">=0.25.5"
+# Compression, LINKED rather than dlopened (--with-*=link). Left at their
+# defaults these would be dlopened by soname and carry no DT_NEEDED at all --
+# real runtime dependencies that no linkage check could see.
+zlib = ">=1.3.1"
+brotli = ">=1.1.0"
+zstd = ">=1.5.7"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"

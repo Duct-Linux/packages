@@ -1,0 +1,25 @@
+[package]
+name = "libunistring"
+description = "Unicode string functions: the normalisation behind GnuTLS certificate name checking"
+version = "1.3.0"
+subversion = "1"
+authors = ["The GNU Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"

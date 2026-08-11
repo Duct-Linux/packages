@@ -1,0 +1,30 @@
+[package]
+name = "nettle"
+description = "Low-level crypto: the ciphers and public-key algorithms GnuTLS computes with"
+version = "3.10.2"
+subversion = "1"
+authors = ["Niels Möller"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# hogweed, the public-key half of this tarball, is built against GMP and links
+# it -- checked as DT_NEEDED on libhogweed rather than inferred from the
+# dependency list. Without it there is no RSA and no ECDSA, which is to say no
+# certificate authentication in TLS.
+gmp = ">=6.3.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
