@@ -374,9 +374,21 @@ SERVICES_PKGS := \
 #            so it has to precede NetworkManager or NetworkManager gets built
 #            without modem support and needs a rebuild later. It needs libgudev
 #            from SERVICES_PKGS, which is the group immediately before this one.
+#   NetworkManager
+#            last in the group and last for a reason: it needs something from
+#            almost every tier before it -- polkit from SERVICES, curl from
+#            GTK, libpsl from CRYPTO, elogind and eudev from SESSION, gnutls
+#            from CRYPTO for the 802.1X certificate path, and readline from
+#            BUILDER_PKGS, which is where readline sits precisely so that it
+#            precedes this. wpa_supplicant and ModemManager are above it
+#            because NetworkManager declares both: wpa_supplicant is not a
+#            build input at all, but a NetworkManager without it connects to no
+#            Wi-Fi network, and mm-glib from ModemManager is what its WWAN
+#            plugin links.
 NETWORK_PKGS := \
 	libnl jansson libndp \
-	wpa_supplicant ModemManager
+	wpa_supplicant ModemManager \
+	NetworkManager
 
 # The GNOME desktop tier: everything between "a GTK 4 application platform" and
 # "a GNOME session". Added in waves, in dependency order, and this is the first
