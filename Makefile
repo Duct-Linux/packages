@@ -382,7 +382,7 @@ GNOME_PKGS := \
 	libnotify at-spi2-core \
 	libusb libgusb \
 	highway libjxl \
-	colord
+	colord gnome-desktop
 
 # The GTK 3 island, and it is an island on purpose.
 #
