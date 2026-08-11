@@ -125,10 +125,35 @@ fi
 # Every entry here is looked up in a way that does NOT fail the build when it is
 # missing, or is reached through one that does not -- so configure reporting
 # success says nothing about any of them.
-for lib in libgcrypt libei liboeffis libgbm libepoxy libxshmfence libxcvt libXfont2 libxkbfile; do
-	echo "$needed" | grep -q "NEEDED.*$lib\.so" \
-		|| die "Xwayland does not link $lib; it was not found at build time and nothing about the build said so"
+#
+# THE FULL LIST IS LOGGED BEFORE ANYTHING IS ASSERTED, and that is not
+# decoration. The linkage of this binary is the fact these checks are about, it
+# is not recoverable from the build log otherwise, and two beliefs about it have
+# already turned out to be wrong here. Printing it means the next surprise is
+# diagnosable from one run instead of one library per run.
+log "NEEDED entries in the shipped Xwayland:"
+echo "$needed" | grep 'NEEDED' | sed 's/^[[:space:]]*/  /' >&2
+
+# ACCUMULATED RATHER THAN FAILING ON THE FIRST MISS. A loop that dies on entry
+# one tells you about entry one; with a six-minute build behind it, that turns a
+# wrong list into a wrong list discovered one element at a time. This reports
+# every miss in a single run.
+#
+# libxkbfile IS DELIBERATELY NOT IN THIS LIST even though xwayland takes
+# dependency('xkbfile') as a hard requirement. The server VENDORS the .xkm
+# reader: xkb/meson.build compiles its own xkmread.c, xkbfmisc.c and xkbout.c,
+# and xkb/ddxLoad.c includes "xkbfile.h" -- the local header, in quotes. So
+# XkmReadFile resolves to a definition inside the binary, nothing is imported
+# from the library, and --as-needed drops it. Grepping for the symbol finds it
+# in ddxLoad.c and is misleading; it is DEFINED in xkmread.c one directory over.
+# It is declared under [dependencies.build] instead, which is what it is.
+missing=
+for lib in libgcrypt libei liboeffis libgbm libepoxy libxshmfence libxcvt libXfont2; do
+	echo "$needed" | grep -q "NEEDED.*$lib\.so" || missing="$missing $lib"
 done
+if [ -n "$missing" ]; then
+	die "Xwayland does not link:$missing -- each was found at configure time and is absent from the artefact, and nothing about the build said so. See the NEEDED list above"
+fi
 
 # libgcrypt is asserted a second time, from the other direction: the sha1
 # provider search is a first match over eight candidates, and the runner-up is a
