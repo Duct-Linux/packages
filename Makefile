@@ -327,14 +327,23 @@ NETWORK_PKGS := \
 # the earlier lists are rearranged -- the same argument CRYPTO_PKGS makes for
 # its own position, and one fewer thing to get wrong as this list grows.
 #
-# The internal order is the dependency order, and only one edge here is real:
-# libgusb needs libusb. lcms2 wants libjpeg-turbo and libtiff from GTK_PKGS,
-# libnotify wants gdk-pixbuf from the same, at-spi2-core wants dbus from
-# SESSION_PKGS and libxml2 from TOOLS_PKGS -- all of which are already earlier.
+# The internal order is the dependency order, and three edges here are real:
+# libgusb needs libusb, libjxl needs highway, and libjxl needs lcms2 -- which is
+# why lcms2 stays first in this list even though the wave that added it is done.
+# The rest resolve outside the group: lcms2 wants libjpeg-turbo and libtiff from
+# GTK_PKGS, libnotify and libjxl want gdk-pixbuf from the same, libjxl also
+# wants brotli from FONT_PKGS and libpng from there too, and at-spi2-core wants
+# dbus from SESSION_PKGS and libxml2 from TOOLS_PKGS -- all already earlier.
+#
+# highway and libjxl are the second wave, and they are one unit: highway is
+# packaged for no other reason than that libjxl's own copy of it is an empty
+# submodule directory in the release tarball. Nothing else in the tree links
+# highway today.
 GNOME_PKGS := \
 	lcms2 xdg-user-dirs gnome-backgrounds \
 	libnotify at-spi2-core \
-	libusb libgusb
+	libusb libgusb \
+	highway libjxl
 
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \

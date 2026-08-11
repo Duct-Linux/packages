@@ -1,0 +1,27 @@
+[package]
+name = "highway"
+description = "Portable SIMD/vector intrinsics library"
+version = "1.3.0"
+subversion = "1"
+authors = ["Google"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-cmake.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+gcc = ">=15.2.0"
+
+[dependencies.build]
+cmake = ">=4.4.0"
+ninja = ">=1.13.0"

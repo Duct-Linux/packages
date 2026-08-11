@@ -1,0 +1,35 @@
+[package]
+name = "libjxl"
+description = "JPEG XL reference implementation and gdk-pixbuf loader"
+version = "0.11.1"
+subversion = "1"
+authors = ["The JPEG XL Project Authors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-cmake.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+gcc = ">=15.2.0"
+highway = ">=1.3.0"
+brotli = ">=1.1.0"
+lcms2 = ">=2.17.0"
+libjpeg-turbo = ">=3.1.0"
+libpng = ">=1.6.0"
+gdk-pixbuf = ">=2.42.0"
+glib = ">=2.84.0"
+
+[dependencies.build]
+cmake = ">=4.4.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
