@@ -26,6 +26,32 @@
 [ -s "$DESTDIR/etc/bluetooth/main.conf" ] \
 	|| die "/etc/bluetooth/main.conf is missing; --sysconfdir=/etc did not take effect"
 
+# --enable-client. bluetoothctl is the reason this package was rebuilt at
+# subversion 2, so its absence would make the whole rebuild pointless while
+# every other check still passed. Until gnome-bluetooth exists it is the only
+# way to pair, trust or connect a device at all.
+[ -x "$DESTDIR/usr/bin/bluetoothctl" ] && [ -s "$DESTDIR/usr/bin/bluetoothctl" ] \
+	|| die "bluetoothctl was not installed; --enable-client did not take effect and there is no way to pair a device without a GUI"
+
+# The readline linkage, which is the outcome rather than the flag. bluetoothctl
+# builds against readline or not at all (configure.ac 333), so a binary that
+# does not link it was not built the way this recipe claims. Guarded, and it
+# says so when it cannot run.
+if command -v readelf >/dev/null 2>&1; then
+	readelf -d "$DESTDIR/usr/bin/bluetoothctl" 2>/dev/null | grep -q "libreadline.so" \
+		|| die "bluetoothctl does not link libreadline; it was not built against the readline this package now declares"
+else
+	log "warning: readelf is unavailable, so the bluetoothctl linkage check DID NOT RUN."
+fi
+
+# The zsh completion is no longer an orphan. It ships unconditionally, and for
+# the two previous versions it completed a binary that was not installed; the
+# recipe left it in place on the grounds that it would correct itself when the
+# client came back. This asserts that it did, so the pair cannot silently
+# separate again.
+[ -s "$DESTDIR/usr/share/zsh/site-functions/_bluetoothctl" ] \
+	|| die "the zsh completion for bluetoothctl is missing, though the binary is installed"
+
 # --enable-library, asserted because it is on for a consumer in ANOTHER chain
 # (pipewire's bluez5 plugin includes <bluetooth/bluetooth.h> and links
 # libbluetooth). Nothing in this chain would notice its absence, which is
