@@ -1,0 +1,38 @@
+[package]
+name = "gnupg"
+description = "The GNU Privacy Guard, providing the gpg binary gpgme drives"
+version = "2.4.8"
+subversion = "1"
+authors = ["The GnuPG Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+# Its own, to make the --disable-tofu pin loud rather than silent: it asserts
+# the built gpg does not link sqlite3, which it would only do with TOFU
+# compiled in. See install.sh.
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+libgpg-error = ">=1.55.0"
+libgcrypt = ">=1.11.2"
+libassuan = ">=3.0.2"
+libksba = ">=1.6.7"
+npth = ">=1.8.0"
+zlib = ">=1.3.1"
+bzip2 = ">=1.0.8"
+# libksba stays declared even with --disable-gpgsm: dirmngr uses it too, and
+# dirmngr is kept. Removing gpgsm alone does not remove the dependency.
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"
