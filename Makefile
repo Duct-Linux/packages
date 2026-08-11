@@ -133,7 +133,8 @@ FONT_PKGS := \
 	libpng brotli freetype fontconfig fribidi pixman
 
 GLIB_PKGS := \
-	glib gobject-introspection glib-introspection
+	glib gobject-introspection glib-introspection \
+	json-glib
 
 GRAPHICS_PKGS := \
 	xorg-util-macros xorgproto xtrans xcb-proto \
