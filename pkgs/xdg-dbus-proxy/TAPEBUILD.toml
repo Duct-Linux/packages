@@ -1,0 +1,28 @@
+[package]
+name = "xdg-dbus-proxy"
+description = "Filtering D-Bus proxy, the session-bus half of flatpak's sandbox"
+version = "0.1.6"
+subversion = "1"
+authors = ["Alexander Larsson and contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
