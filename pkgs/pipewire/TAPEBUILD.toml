@@ -1,0 +1,57 @@
+[package]
+name = "pipewire"
+description = "Multimedia server for audio, video and screen capture"
+version = "1.4.7"
+subversion = "1"
+authors = ["The PipeWire project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# The ALSA device backend, and the reason alsa-lib is packaged first.
+alsa-lib = ">=1.2.14"
+# -Ddbus=enabled. pipewire talks to the session bus for device reservation and
+# for the portal handshake screen sharing goes through.
+dbus = ">=1.16.2"
+# libudev, for device discovery. Duct's eudev advertises Version: 251 in
+# libudev.pc despite being package version 3.2.14 -- see the weston recipe,
+# which explains the same apparent mismatch.
+eudev = ">=3.2.14"
+# libelogind, taken through -Dlogind-provider=libelogind. pipewire asks logind
+# whether the session is active before it will touch a device on a seat.
+elogind = ">=255.17.0"
+# -Dflatpak=enabled and -Dgsettings=enabled both take glib: the first to
+# recognise a client running inside a sandbox, the second for the
+# pulse-compatibility schema.
+glib = ">=2.84.0"
+# ncursesw, for pw-top. meson takes it with required:false and it is packaged,
+# so configure finds it and pw-top is built and links it -- declaring it is what
+# makes that a property of the recipe rather than of the builder image.
+#
+# libcap AND libdrm ARE DELIBERATELY ABSENT FROM THIS LIST, and the reason is
+# worth keeping because both looked obviously right. meson takes each with
+# required:false, both are packaged, and configure duly finds them -- so an
+# earlier draft declared them. Reading DT_NEEDED across the whole staged payload
+# says otherwise: neither appears anywhere in it. libcap is referenced only by
+# test/meson.build and libdrm only by src/examples/meson.build, and this recipe
+# passes -Dtests=disabled and -Dexamples=disabled, so the only consumers of
+# either are not built. "configure found it" and "the artefact links it" are
+# different facts, and only the second one belongs here.
+ncurses = ">=6.5.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"

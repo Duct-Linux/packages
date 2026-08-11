@@ -177,7 +177,7 @@ GRAPHICS_PKGS := \
 # nothing here needs anything from GTK_PKGS. alsa-lib itself needs only glibc
 # and is first because pipewire's ALSA device backend is built against it.
 MEDIA_PKGS := \
-	alsa-lib
+	alsa-lib pipewire
 
 GTK_PKGS := \
 	harfbuzz cairo pango \
