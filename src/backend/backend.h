@@ -83,6 +83,30 @@ char *duct_disk_describe (const DuctDisk *disk);
  * rather than pretending. */
 GPtrArray *duct_disk_probe (gboolean *simulated, GError **error);
 
+/* The parse, separated from the command that produces the text.
+ *
+ * This decides EVERY FIELD THE USER READS IN THE CONFIRMATION DIALOG -- node,
+ * size, model, serial -- and it sets is_boot_medium, which decides whether the
+ * disk the installer booted from is offered as a target. It is a hand-rolled
+ * parser rather than json-glib, because json-glib is not packaged and adding a
+ * package to parse one command's output is a poor trade.
+ *
+ * It touches no filesystem, so it is testable anywhere, and it was not tested
+ * at all until this was exported -- it sat behind an lsblk spawn and inherited
+ * that command's untestability without having any of its own.
+ *
+ * WHAT TESTS OF THIS DO AND DO NOT PROVE. They exercise the parser against a
+ * MODEL of lsblk's output, not against lsblk. A field this model does not
+ * anticipate -- a null model, a name containing a space, a size emitted as a
+ * quoted string by a version that does it differently -- passes every test here
+ * and still misparses in the guest. THE SPLIT SHRINKS THE VM-ONLY SURFACE; IT
+ * DOES NOT ELIMINATE IT, and what remains is exactly the seam between this
+ * function and the command feeding it. A green suite here is not coverage of
+ * the parser end to end. */
+GPtrArray *duct_disk_parse_lsblk (const char *json,
+                                  const char *boot_disk,
+                                  GError    **error);
+
 /* The disk the live medium was booted from, or NULL.
  *
  * /proc/self/mountinfo gives the source device of /run/live/medium -- the

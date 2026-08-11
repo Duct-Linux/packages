@@ -145,6 +145,95 @@ log_line (const char *line, gpointer user_data)
 /* A refusal must be classifiable as one. The CLI prints REFUSED rather than
  * FAIL on the strength of this, and the difference is what a user reads when
  * the installer correctly declines their too-small disk. */
+/* --- the lsblk parser, which had never been tested ------------------------- */
+
+static const DuctDisk *
+find_disk (GPtrArray *disks, const char *node)
+{
+	for (guint i = 0; i < disks->len; i++) {
+		const DuctDisk *d = g_ptr_array_index (disks, i);
+		if (g_strcmp0 (d->node, node) == 0)
+			return d;
+	}
+	return NULL;
+}
+
+static void
+test_lsblk_parsing (void)
+{
+	g_print ("parsing lsblk output\n");
+
+	/* The shape `lsblk -J -b -d -n -o NAME,SIZE,MODEL,SERIAL,TYPE,RM` produces,
+	 * as modelled here. See the header: this is a model, not lsblk. */
+	const char *two_disks =
+		"{\n   \"blockdevices\": [\n"
+		"      {\"name\":\"nvme0n1\", \"size\":2000398934016, \"model\":\"Samsung SSD 990 PRO 2TB\", "
+		"\"serial\":\"S6B0NJ0T512345\", \"type\":\"disk\", \"rm\":false},\n"
+		"      {\"name\":\"sdb\", \"size\":31037849600, \"model\":\"SanDisk Ultra\", "
+		"\"serial\":\"4C53000123\", \"type\":\"disk\", \"rm\":true}\n"
+		"   ]\n}\n";
+
+	g_autoptr (GError) e = NULL;
+	g_autoptr (GPtrArray) disks = duct_disk_parse_lsblk (two_disks, "/dev/sdb", &e);
+
+	CHECK (disks != NULL, "a normal listing parses");
+	if (disks == NULL)
+		return;
+	CHECK (disks->len == 2, "both disks are returned");
+
+	const DuctDisk *nvme = find_disk (disks, "/dev/nvme0n1");
+	const DuctDisk *usb  = find_disk (disks, "/dev/sdb");
+
+	CHECK (nvme != NULL && usb != NULL, "both nodes are named /dev/<name>");
+	if (nvme == NULL || usb == NULL)
+		return;
+
+	/* Every field the confirmation dialog shows. A wrong size or serial here
+	 * is a wrong disk described to the user in the one place they check. */
+	CHECK (nvme->size == 2000398934016ULL, "size parses exactly, not approximately");
+	CHECK (g_strcmp0 (nvme->model, "Samsung SSD 990 PRO 2TB") == 0, "a model with spaces survives");
+	CHECK (g_strcmp0 (nvme->serial, "S6B0NJ0T512345") == 0, "serial parses");
+	CHECK (nvme->removable == FALSE, "rm:false is not removable");
+	CHECK (usb->removable == TRUE, "rm:true is removable");
+
+	/* THE FLAG THAT DECIDES WHETHER THE LIVE DISK IS OFFERED. */
+	CHECK (usb->is_boot_medium == TRUE, "the boot disk is flagged");
+	CHECK (nvme->is_boot_medium == FALSE, "a non-boot disk is not flagged");
+
+	/* Partitions and other non-disk rows must not become install targets. */
+	const char *with_partitions =
+		"{\"blockdevices\": ["
+		"{\"name\":\"sda\",\"size\":500107862016,\"model\":\"WDC\",\"serial\":\"X\",\"type\":\"disk\",\"rm\":false},"
+		"{\"name\":\"sda1\",\"size\":1073741824,\"model\":null,\"serial\":null,\"type\":\"part\",\"rm\":false},"
+		"{\"name\":\"sr0\",\"size\":1073741824,\"model\":\"DVD\",\"serial\":\"Y\",\"type\":\"rom\",\"rm\":true}"
+		"]}";
+	g_autoptr (GError) e2 = NULL;
+	g_autoptr (GPtrArray) filtered = duct_disk_parse_lsblk (with_partitions, NULL, &e2);
+	CHECK (filtered != NULL && filtered->len == 1, "partitions and roms are excluded");
+	if (filtered != NULL && filtered->len == 1) {
+		const DuctDisk *only = g_ptr_array_index (filtered, 0);
+		CHECK (g_strcmp0 (only->node, "/dev/sda") == 0, "only the whole disk survives");
+	}
+
+	/* A row whose size cannot be trusted must be dropped rather than guessed:
+	 * a disk we cannot size is a disk we cannot describe, and offering it
+	 * breaks the rule that every target is named in full. */
+	const char *bad_size =
+		"{\"blockdevices\": ["
+		"{\"name\":\"sdx\",\"size\":\"unknown\",\"model\":\"M\",\"serial\":\"S\",\"type\":\"disk\",\"rm\":false},"
+		"{\"name\":\"sdy\",\"size\":0,\"model\":\"M\",\"serial\":\"S\",\"type\":\"disk\",\"rm\":false}"
+		"]}";
+	g_autoptr (GError) e3 = NULL;
+	g_autoptr (GPtrArray) sized = duct_disk_parse_lsblk (bad_size, NULL, &e3);
+	CHECK (sized == NULL || sized->len == 0, "an unparseable or zero size is dropped, not guessed");
+
+	/* No disks at all is an error rather than an empty list, because the
+	 * caller cannot tell "no disks" from "the parse failed" otherwise. */
+	g_autoptr (GError) e4 = NULL;
+	g_autoptr (GPtrArray) none = duct_disk_parse_lsblk ("{\"blockdevices\": []}", NULL, &e4);
+	CHECK (none == NULL && e4 != NULL, "an empty listing is reported as an error");
+}
+
 /* --- the boot-medium fallback, which had never executed -------------------- */
 
 /* A resolver backed by a table instead of /sys, so the branch that decides
@@ -324,6 +413,7 @@ main (void)
 	test_partition_naming ();
 	test_stage_weights ();
 	test_real_backend_refuses ();
+	test_lsblk_parsing ();
 	test_boot_medium_detection ();
 	test_refusals_are_classified ();
 	test_dry_run_writes_nothing ();

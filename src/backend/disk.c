@@ -253,7 +253,7 @@ run_lsblk (char **stdout_out, GError **error)
 }
 
 static void
-parse_lsblk (const char *json, const char *boot_disk, GPtrArray *disks, GError **error)
+parse_lsblk_into (const char *json, const char *boot_disk, GPtrArray *disks, GError **error)
 {
 	/* Deliberately not pulling in json-glib: it is not packaged, and adding a
 	 * package to parse one command's output would be a poor trade when the
@@ -263,7 +263,26 @@ parse_lsblk (const char *json, const char *boot_disk, GPtrArray *disks, GError *
 	 * wrong disk in a confirmation dialog.
 	 *
 	 * If json-glib is ever packaged for another reason, replace this. */
-	const char *p = json;
+	/* Start INSIDE the array, not at the first brace in the document.
+	 *
+	 * The first `{` in lsblk's output is the top-level wrapper, and the first
+	 * `}` is the end of the first DEVICE. Scanning from the document start
+	 * therefore made the first "object" span the wrapper plus device one, so
+	 * its "name" key parsed as `{ "blockdevices"` and the device was dropped
+	 * for having no name -- SILENTLY, because a row without a name is exactly
+	 * what this parser is supposed to skip.
+	 *
+	 * The result was that the FIRST BLOCK DEVICE ON EVERY MACHINE WAS INVISIBLE
+	 * to the installer. It survived a day undetected because the only test of
+	 * the probe used the simulated fixtures, which never reach this function.
+	 */
+	const char *p = strchr (json, '[');
+
+	if (p == NULL) {
+		g_set_error_literal (error, G_IO_ERROR, G_IO_ERROR_INVALID_DATA,
+		                     "lsblk output has no device array");
+		return;
+	}
 
 	while ((p = strchr (p, '{')) != NULL) {
 		const char *end = strchr (p, '}');
@@ -336,6 +355,23 @@ parse_lsblk (const char *json, const char *boot_disk, GPtrArray *disks, GError *
 }
 
 GPtrArray *
+duct_disk_parse_lsblk (const char *json, const char *boot_disk, GError **error)
+{
+	GPtrArray *disks = g_ptr_array_new_with_free_func ((GDestroyNotify) duct_disk_free);
+	g_autoptr (GError) parse_error = NULL;
+
+	parse_lsblk_into (json, boot_disk, disks, &parse_error);
+
+	if (parse_error != NULL) {
+		g_propagate_error (error, g_steal_pointer (&parse_error));
+		g_ptr_array_unref (disks);
+		return NULL;
+	}
+
+	return disks;
+}
+
+GPtrArray *
 duct_disk_probe (gboolean *simulated, GError **error)
 {
 	g_autofree char *json = NULL;
@@ -357,7 +393,7 @@ duct_disk_probe (gboolean *simulated, GError **error)
 	GPtrArray *disks = g_ptr_array_new_with_free_func ((GDestroyNotify) duct_disk_free);
 	g_autoptr (GError) parse_error = NULL;
 
-	parse_lsblk (json, boot_disk, disks, &parse_error);
+	parse_lsblk_into (json, boot_disk, disks, &parse_error);
 
 	if (parse_error != NULL) {
 		g_propagate_error (error, g_steal_pointer (&parse_error));
