@@ -1,0 +1,54 @@
+[package]
+name = "libarchive"
+description = "Multi-format archive and compression library"
+version = "3.8.1"
+subversion = "1"
+authors = ["Tim Kientzle and contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+# Its own, to assert that the linked set matches the declared set. This recipe
+# argues that the dependency list is the specification; the assertion is what
+# makes that enforceable rather than aspirational. See install.sh.
+[install]
+script = "install.sh"
+
+# THIS LIST IS THE SPECIFICATION, NOT A DESCRIPTION. libarchive's backends have
+# no --with- flags; configure link-probes for each one and takes whatever it
+# finds. So what is declared here is what gets seeded, which is what gets
+# detected, which is what the shipped library can read. Under-declaring does not
+# fail the build -- it produces a libarchive quietly missing a format. See
+# pkg.env.
+[dependencies]
+glibc = ">=2.42.0"
+zlib = ">=1.3.1"
+bzip2 = ">=1.0.8"
+xz = ">=5.8.1"
+zstd = ">=1.5.7"
+openssl = ">=3.5.0"
+libxml2 = ">=2.13.0"
+acl = ">=2.3.2"
+attr = ">=2.5.2"
+# pcre2 IS DELIBERATELY ABSENT, and this note is here because its absence looks
+# like an oversight: pcre2's probe is UNGATED and pcre2 is packaged, so configure
+# does find it, and an earlier version of this recipe declared it for that reason
+# while recording that it was unverified.
+#
+# IT IS NOW MEASURED RATHER THAN ARGUED. The first build that ever completed
+# printed, on BOTH architectures:
+#     pcre2 is NOT linked despite being probed and present
+# The CLI tools that would use it are disabled, so nothing pcre2 provides reaches
+# libarchive.so. install.sh no longer permits libpcre2 in the linked set either,
+# so if a future change does pull it in, the assertion fails rather than the
+# declaration silently becoming load-bearing again.
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
