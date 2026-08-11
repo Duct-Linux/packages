@@ -77,14 +77,32 @@ seconds; `libksba` and `libgcrypt` were built, uploaded and lost.
 that one drops artefacts within a run, this one drops entire runs between
 publishes, and a publish can suffer either without the other.
 
-> **Before merging something that will publish, look at in-flight BUILDS, not
-> publishes.** A merge does not create a publish; it creates a *build*, and the
-> publish appears only when that build finishes. So a run list filtered to
-> `publish.yml` can show everything complete while a merge from a minute ago is
-> already committed to producing one. Three of us read exactly that list and
+> **Before merging something that will publish, check for in-flight builds
+> `build.yml` ON BRANCH `main` WITH STATUS NOT COMPLETED.** Run the query rather
+> than reading a run list by eye — the filter is the part that does the work.
+>
+> ```sh
+> gh run list --workflow=build.yml --branch main --limit 10 \
+>   --json databaseId,status -q '.[] | select(.status != "completed")'
+> ```
+>
+> **A PR-branch build is not contention** — `publish.yml` triggers on
+> `workflow_run` restricted to `branches: [main]`, so a pull-request build
+> produces artefacts and never a publish. An unfiltered run list shows the two
+> kinds indistinguishably.
+>
+> *Why builds and not publishes:* a merge does not create a publish, it creates a
+> build, and the publish appears only when that build finishes. A list filtered
+> to `publish.yml` can show everything complete while a merge from a minute ago
+> is already committed to producing one. Three of us read exactly that list and
 > cleared a second merge from it.
-> Filter `build.yml` to `main` and non-completed. A PR-branch build is not
-> contention -- `publish.yml` triggers on `workflow_run` restricted to `main`.
+>
+> This paragraph used to lead with that reasoning and end with the filter, and it
+> was then followed to the wrong answer: a fully green PR was held for twenty
+> minutes against a **pull-request** build, by someone applying the rule as
+> written. THE INSIGHT IS WHAT MAKES A RULE WORTH WRITING AND THE FILTER IS WHAT
+> MAKES IT USABLE, AND THEY COMPETE FOR THE FRONT OF THE SENTENCE. Put the
+> operative form first; whoever needs the reasoning will read on.
 
 **4. Indexed but wrong on the server.** The row is correct and the file behind it
 is not. `findutils` arrived as 65536 bytes against an index saying 365768:
