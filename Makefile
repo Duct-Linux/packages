@@ -180,7 +180,6 @@ GTK_PKGS := \
 CRYPTO_PKGS := \
 	zstd npth libgpg-error \
 	libassuan libksba libgcrypt \
-	libassuan libksba libgcrypt \
 	gnupg gpgme \
 	libseccomp
 
