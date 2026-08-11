@@ -23,11 +23,12 @@ is a test that decays into a green tick.
 Every database here is built from empty, in a temp directory, and the arch pair
 and version ordering are stated in the fixture rather than inherited.
 
-WHAT THIS DOES NOT COVER, said here rather than implied by silence: it does not
-fetch over the network, so the certifi retry is exercised only in that the
-file:// path shares the code beneath it. A certificate failure cannot be
-reproduced offline, and a test that pretended to would be asserting on its own
-mock.
+WHAT THIS DOES NOT COVER, said here rather than implied by silence: THE certifi
+RETRY IS NOT TESTED. A certificate failure cannot be reproduced offline, and a
+test that mocked one would be asserting on its own mock. The curl fallback IS
+tested, by putting a stub curl first on PATH -- that is a real subprocess with a
+real exit status, so what is asserted is gate-check's handling of it rather than
+a simulation of curl.
 """
 
 import os
@@ -233,6 +234,66 @@ def main():
         check("the printed exit code matches the real one (%s -> %d)" % (args[0], expect),
               bool(last) and ("exit %d" % expect) in last[-1] and r.returncode == expect,
               "rc=%d last=%r" % (r.returncode, last[-1] if last else None))
+
+    # ------------------------------------------------- the curl fallback
+    #
+    # urllib is tried first, then certifi on a certificate error, then curl.
+    # The certificate path cannot be reproduced offline and a test that mocked
+    # it would be asserting on its own mock, so what is tested here is the part
+    # that CAN go wrong silently: curl succeeding partially.
+    #
+    # A stub curl is put first on PATH. It writes a plausible number of bytes
+    # and exits non-zero, which is exactly what a transfer that dies mid-body
+    # does -- measured against the real index, `curl --limit-rate 20k
+    # --max-time 2` exits 28 having written 62189 of 180224 bytes.
+    stub_dir = tempfile.mkdtemp(prefix="gate-check-test-curl.")
+    stub = os.path.join(stub_dir, "curl")
+
+    # THE STUB EMITS A VALID, COMPLETE INDEX AND STILL EXITS NON-ZERO.
+    #
+    # An earlier version of this fixture emitted 64K of zeros, and it did not
+    # discriminate: the bytes are not a database, so sqlite refused them and
+    # exit 2 arrived anyway, WITH OR WITHOUT the returncode check. It asserted
+    # the right outcome for the wrong reason, which is the defect this whole
+    # file exists to catch, committed inside the test for it.
+    #
+    # A partial transfer that happens to be parseable is the dangerous case:
+    # with the check, exit 2 -- cannot answer. Without it, the tool ANSWERS,
+    # from an index that is missing whatever had not arrived yet. Here the
+    # payload carries the floor but not the requested package, so the
+    # unchecked path produces ABSENT and exit 1: a confident wrong answer in
+    # the "keep waiting" direction, which is the direction nobody investigates.
+    payload = make_index([("somethingelse", "1.0.0", "1", "x86_64"),
+                          ("somethingelse", "1.0.0", "1", "aarch64")])
+    with open(stub, "w") as fh:
+        fh.write("#!/bin/sh\n"
+                 "# a transfer that died mid-body: usable stdout, non-zero exit\n"
+                 "cat %s\n"
+                 "exit 28\n" % payload)
+    os.chmod(stub, 0o755)
+
+    env = dict(os.environ,
+               PATH=stub_dir + os.pathsep + os.environ.get("PATH", ""),
+               DUCT_REPO_DB="https://gate-check-test.invalid/repo.db")
+    r = subprocess.run([sys.executable, GATE, "wanted"],
+                       capture_output=True, text=True, env=env)
+    check("a PARSEABLE partial curl body is still refused, exit 2 not a verdict",
+          r.returncode == 2 and "ABSENT" not in r.stdout,
+          "rc=%d -- a partially transferred index is not a smaller index: %s"
+          % (r.returncode, (r.stdout + r.stderr)[-300:]))
+    check("...and the message names curl's exit code",
+          "28" in r.stderr, r.stderr[-300:])
+
+    # The same stub succeeding with an empty body -- exit 0, nothing on stdout
+    # -- which must not become "every package is ABSENT" either.
+    with open(stub, "w") as fh:
+        fh.write("#!/bin/sh\nexit 0\n")
+    os.chmod(stub, 0o755)
+    r = subprocess.run([sys.executable, GATE, "glibc"],
+                       capture_output=True, text=True, env=env)
+    check("an empty curl body is exit 2, not ABSENT",
+          r.returncode == 2 and "ABSENT" not in r.stdout,
+          "rc=%d %s" % (r.returncode, (r.stdout + r.stderr)[-200:]))
 
     print("gate-check-test: %d checks, %d failure(s)" % (checks, len(failures)))
     for f in failures:

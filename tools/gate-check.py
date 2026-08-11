@@ -163,6 +163,7 @@ import os
 import re
 import sqlite3
 import ssl
+import subprocess
 import sys
 import tempfile
 import urllib.error
@@ -294,8 +295,50 @@ def fetch(url):
     a confident wrong answer in the direction of "keep waiting", which is the
     direction nobody investigates.
     """
-    with _open(url) as response:
-        body = response.read()
+    try:
+        with _open(url) as response:
+            body = response.read()
+    except Exception as urllib_failure:
+        # LAST RESORT: curl. Copied from duct-5's tools/index-vs-tree.py rather
+        # than re-derived, because they hit this first and their reason is the
+        # right one: certifi fixes the machine that has certifi installed, curl
+        # fixes the machine that has curl. Their tool's DEFAULT invocation had
+        # never once worked on the machine it is mostly run from, and nobody
+        # noticed because they always passed a file they had already curled.
+        #
+        # This tool degrades to exit 2 rather than to a wrong answer, so a
+        # certificate failure here was never unsafe -- but it is a gate people
+        # are gating merges on, and a gate that cannot answer is still a gate
+        # that has stopped working.
+        if not url.startswith(("http://", "https://")):
+            raise
+        done = subprocess.run(["curl", "-fsSL", url], capture_output=True, timeout=120)
+
+        # THE RETURN CODE, WHICH THE VERSION THIS WAS COPIED FROM DOES NOT READ.
+        # `-f` covers HTTP errors, and an empty body covers most of the rest --
+        # but a transfer that dies mid-body exits non-zero WITH PARTIAL STDOUT.
+        # Measured, not supposed: `curl -fsSL --limit-rate 20k --max-time 2`
+        # against the real index exits 28 having written 62189 of 180224 bytes,
+        # which clears the 4096-byte floor below.
+        #
+        # sqlite does reject every truncation of this file that was tried, so
+        # today the partial body is caught one layer down. That is a downstream
+        # accident rather than a check, AND IT NAMES THE WRONG SUBJECT: the
+        # operator is told "database disk image is malformed", which reads as a
+        # corrupt PUBLISHED index rather than as a download that stopped early.
+        if done.returncode != 0:
+            raise RuntimeError(
+                "curl exited %d after urllib failed (%s). %d bytes were received; "
+                "they are NOT being used, because a partially transferred index "
+                "is not a smaller index."
+                % (done.returncode, urllib_failure, len(done.stdout)))
+        body = done.stdout
+        if not body:
+            raise RuntimeError("curl exited 0 with an empty body after urllib "
+                               "failed (%s)" % urllib_failure)
+        print("gate-check: urllib could not fetch the index (%s); used curl instead"
+              % urllib_failure, file=sys.stderr)
+
     if len(body) < 4096:
         raise RuntimeError("index is %d bytes; that is not a populated repo.db" % len(body))
     handle = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
