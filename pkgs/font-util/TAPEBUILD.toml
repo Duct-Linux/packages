@@ -1,0 +1,25 @@
+[package]
+name = "font-util"
+description = "Font utilities and the font root directory every X font path is resolved from"
+version = "1.4.1"
+subversion = "1"
+authors = ["The X.Org Foundation"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+# NOTHING BUT LIBC. bdftruncate and ucs2any are two self-contained C files that
+# include only the standard headers; configure runs XORG_DEFAULT_OPTIONS and
+# nothing that reaches for a library. This is the leaf of the X11 set.
+glibc = ">=2.42.0"

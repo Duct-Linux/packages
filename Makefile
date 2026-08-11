@@ -171,6 +171,26 @@ GLIB_PKGS := \
 	glib gobject-introspection glib-introspection \
 	json-glib
 
+# THE LAST SEVEN ENTRIES ARE NOT CLIENT LIBRARIES, and the distinction is worth
+# keeping as this list grows. Everything above libei is something a Wayland
+# client links because GNOME components include the X headers regardless of
+# backend. libxcvt through xkbcomp are the X SERVER's support libraries: they
+# exist here only because Xwayland is being packaged, and nothing else in the
+# tree links or runs any of them.
+#
+# They are in this group rather than in a group of their own because their
+# dependencies are all here or earlier -- zlib and linux-headers from
+# BASE_PKGS, freetype from FONT_PKGS, libX11 and xorgproto from this list, and
+# xkeyboard-config from SESSION_PKGS. Xwayland itself is NOT here for exactly
+# that reason: it needs libepoxy from GTK_PKGS and libgcrypt from CRYPTO_PKGS,
+# both of which come later. See XORG_PKGS.
+#
+# The internal order is the dependency order and two edges in it are real:
+# libfontenc before libXfont2, and libxkbfile before xkbcomp. font-util is
+# placed ahead of libfontenc for reading order rather than for a declared edge
+# -- libfontenc passes --with-fontrootdir explicitly so it never queries
+# fontutil.pc, and its recipe says so rather than declaring an edge that check-
+# build-order.sh would then enforce for a reason that is not true.
 GRAPHICS_PKGS := \
 	xorg-util-macros xorgproto xtrans xcb-proto \
 	libXau libXdmcp libxcb libX11 \
@@ -180,7 +200,10 @@ GRAPHICS_PKGS := \
 	mtdev libevdev libinput libxkbcommon \
 	llvm mesa \
 	libdisplay-info \
-	libei
+	libei \
+	libxcvt libxshmfence \
+	font-util libfontenc libXfont2 \
+	libxkbfile xkbcomp
 
 # The audio stack, and the reason it is not optional even though sound is the
 # visible half of it.

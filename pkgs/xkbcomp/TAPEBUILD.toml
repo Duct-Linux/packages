@@ -1,0 +1,48 @@
+[package]
+name = "xkbcomp"
+description = "XKB keymap compiler, which the X server runs as a child process"
+version = "1.4.7"
+subversion = "1"
+authors = ["The X.Org Foundation"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# PKG_CHECK_MODULES(XKBCOMP, [x11 xkbfile xproto >= 7.0.17]) at
+# configure.ac:58 -- one call, all three required.
+libX11 = ">=1.8.12"
+libxkbfile = ">=1.1.3"
+xorgproto = ">=2024.1.0"
+# THE RULES DIRECTORY, AND IT IS A RUNTIME DEPENDENCY OF EXACTLY THE SAME KIND
+# THIS PACKAGE IS TO XWAYLAND. Nothing at build time touches it: -R and
+# DFLT_XKB_CONFIG_ROOT are strings, and a string compiles whether or not the
+# directory exists. It is read the first time a keymap is compiled, which on a
+# desktop is the first time a key is pressed in an X11 window.
+#
+# No cycle: xkeyboard-config declares no dependencies at all, and its meson's
+# request for xkbcli is satisfied by libxkbcommon, which is a different package
+# from this one.
+xkeyboard-config = ">=2.44.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
+# AC_PROG_YACC at configure.ac:45. The tarball ships a pre-generated
+# xkbparse.c, so the guard below it -- `if test ! -f "$srcdir/xkbparse.c"` --
+# does not fire and the build does not actually run yacc. Declared anyway
+# because configure still SEARCHES for it, and because automake's .y rule will
+# regenerate the parser if the shipped timestamps ever come out of order: a
+# build dependency that is usually unused is still one that is sometimes used,
+# and the failure when it is missing names bison rather than this declaration.
+bison = ">=3.8.2"
