@@ -122,7 +122,15 @@ BUILDER_PKGS := \
 # ordering comment below is about. CI is told the same thing separately, in the
 # per-package image case in .github/workflows/build.yml -- two places, because
 # the local build and CI decide the image by different mechanisms.
-RUST_PKGS := uutils-coreutils cbindgen
+# cargo-c joins them for the same reason cbindgen did: it is a build-time-only
+# tool that another package's configure refuses to run without. librsvg's
+# meson.build:27 calls find_program('cargo-cbuild', version:'>= 0.10.0') with no
+# required:false, so librsvg cannot configure without it.
+#
+# It belongs in THIS list rather than RUST_LATE_PKGS even though its consumer is
+# late: cargo-c itself links nothing built here, so it satisfies this list's
+# stated invariant, and it must precede librsvg.
+RUST_PKGS := uutils-coreutils cbindgen cargo-c
 
 # Everything the live ISO needs and a container image does not.
 #
