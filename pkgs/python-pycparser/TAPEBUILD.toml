@@ -2,7 +2,7 @@
 name = "python-pycparser"
 description = "C parser in pure Python"
 version = "2.22.0"
-subversion = "1"
+subversion = "2"
 authors = ["Eli Bendersky"]
 packagers = ["ItzYanick"]
 

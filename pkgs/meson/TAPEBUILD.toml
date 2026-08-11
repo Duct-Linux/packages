@@ -2,7 +2,7 @@
 name = "meson"
 description = "High productivity build system"
 version = "1.8.2"
-subversion = "1"
+subversion = "2"
 authors = ["The Meson development team"]
 packagers = ["ItzYanick"]
 

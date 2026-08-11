@@ -2,7 +2,7 @@
 name = "uutils-coreutils"
 description = "GNU coreutils reimplemented in Rust"
 version = "0.10.0"
-subversion = "3"
+subversion = "4"
 authors = ["uutils"]
 packagers = ["ItzYanick"]
 
