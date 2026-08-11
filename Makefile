@@ -176,8 +176,14 @@ GRAPHICS_PKGS := \
 # SESSION_PKGS and glib from GLIB_PKGS, both of which precede GRAPHICS_PKGS, and
 # nothing here needs anything from GTK_PKGS. alsa-lib itself needs only glibc
 # and is first because pipewire's ALSA device backend is built against it.
+#
+# sbc precedes pipewire although nothing yet makes it a dependency: pipewire is
+# built -Dbluez5=disabled today, and the follow-up that enables it makes sbc a
+# build input. Ordering it now costs nothing -- sbc needs only glibc -- and
+# means the re-enable is a flag change rather than a flag change plus a
+# reordering of this list.
 MEDIA_PKGS := \
-	alsa-lib pipewire
+	alsa-lib sbc pipewire
 
 GTK_PKGS := \
 	harfbuzz cairo pango \
