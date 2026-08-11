@@ -1,0 +1,88 @@
+name: tools
+
+# THE ONLY THING THAT RUNS ON tools/.
+#
+# build.yml triggers on pkgs/** and on itself, so until now NOTHING RAN ON THIS
+# DIRECTORY -- not on a pull request, not on a merge. Three of these files decide
+# whether a release is complete (gate-check.py), whether a publish indexed
+# everything it built (collect-artefacts.sh), and what order packages build in
+# (dep-levels.sh, check-build-order.sh). All of them shipped unverified.
+#
+# What that cost, concretely: gate-check.py reached main carrying a comment that
+# asserted a claim its own author had already withdrawn in conversation. No check
+# anywhere could have caught it, because no check anywhere ran. A retraction that
+# lives in a conversation and not in the artefact is not a retraction -- and an
+# artefact nothing reads is where such a claim survives longest.
+#
+# "No checks reported" and "checks not finished" look IDENTICAL in the pull
+# request UI. So the absence of a workflow here did not present as a gap; it
+# presented as a PR that had not finished yet.
+
+on:
+  pull_request:
+    paths: ['tools/**', '.github/workflows/tools.yml']
+  push:
+    branches: [main]
+    paths: ['tools/**', '.github/workflows/tools.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The fixtures are synthetic and built from empty, so this asserts the
+      # same behaviour every run. It reintroduces both historical bugs to prove
+      # the checks can fail: resolve-by-most-recently-indexed and
+      # union-arches-per-name each turn four checks red.
+      - name: gate-check fixtures
+        run: python3 tools/gate-check-test.py
+
+      # Syntax only -- these tools reach the network, the filesystem and the
+      # published index, so running them here would be a side effect rather than
+      # a test. A parse error is still worth catching, because several are
+      # invoked from inside a workflow step where the first sign of one is a
+      # build failing for a reason that names the wrong thing.
+      #
+      # DISPATCHED ON THE SHEBANG, NOT THE EXTENSION. tools/check-recipes.sh is
+      # PYTHON despite its name, and `bash -n` on a Python file is not an error
+      # that reports itself usefully -- it is a pass or a confusing failure,
+      # depending on the source. The extension is not the interpreter.
+      - name: Syntax-check every tool
+        run: |
+          set -euo pipefail
+          rc=0
+          for f in tools/*; do
+            [ -f "$f" ] || continue
+            case "$(head -1 "$f")" in
+              *python3*) python3 -m py_compile "$f" || rc=1 ;;
+              *bash*)    bash -n "$f"              || rc=1 ;;
+              */bin/sh*) sh -n "$f"                || rc=1 ;;
+              *)         echo "  no shebang, not checked: $f" ;;
+            esac
+          done
+          exit $rc
+
+      # Not a formality: this is what proves the step above can fail. A syntax
+      # checker that silently matches nothing passes every file in the tree, and
+      # the loop above would do exactly that if the shebang cases stopped
+      # matching -- every file would fall through to "not checked" and the job
+      # would still be green.
+      - name: Prove the syntax check can fail
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ctl
+          printf '#!/bin/sh\nif [\n' > /tmp/ctl/broken.sh
+          if sh -n /tmp/ctl/broken.sh 2>/dev/null; then
+            echo "::error::sh -n accepted a file with a syntax error; the check above proves nothing"
+            exit 1
+          fi
+          printf '#!/usr/bin/env python3\ndef (\n' > /tmp/ctl/broken.py
+          if python3 -m py_compile /tmp/ctl/broken.py 2>/dev/null; then
+            echo "::error::py_compile accepted a file with a syntax error; the check above proves nothing"
+            exit 1
+          fi
+          echo "both checkers reject known-bad input"
