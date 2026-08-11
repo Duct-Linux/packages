@@ -1,0 +1,42 @@
+[package]
+name = "json-glib"
+description = "JSON parser and generator using GObject types"
+version = "1.10.6"
+subversion = "1"
+authors = ["Emmanuele Bassi and contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# The only dependency() call in meson.build is gio-2.0.
+glib = ">=2.84.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"
+# Required rather than optional here BECAUSE -Dintrospection=enabled is named.
+# At the upstream default of 'auto' this would be a soft dependency whose
+# presence silently changes the artefact; naming the option is what makes it a
+# hard one, and the declaration has to follow the option.
+gobject-introspection = ">=1.84.0"
+# The scanner is not enough on its own. g-ir-scanner resolves json-glib's
+# --include=Gio-2.0 by READING Gio-2.0.gir off disk, and that file is shipped by
+# glib-introspection rather than by glib or by gobject-introspection. Nothing
+# links it and no pkg-config call names it, so it is invisible to every check
+# that works from linkage -- the same class as gpgme spawning gpg. Declared
+# because the build reads a file another package installs.
+glib-introspection = ">=2.84.1"
