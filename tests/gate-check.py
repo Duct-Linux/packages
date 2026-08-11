@@ -90,6 +90,26 @@ genuinely new ones -- gperf, attr -- showed ABSENT, having no older row to hide
 behind. THE VISIBILITY OF THE DAMAGE WAS INVERSELY PROPORTIONAL TO HOW LONG A
 PACKAGE HAD EXISTED.
 
+That was confirmed afterwards rather than left as an impression, and the method
+is worth knowing because it was thought impossible: THE INDEX IS APPEND-ONLY
+AND EVERY ROW CARRIES created_at, so the index as it stood at any past instant
+is `where created_at < T`. Nothing is deleted -- deleted_at is NULL on every
+row -- and ids increase with time. Reconstructed at the hour of the truncation
+the index held 44 names over 163 rows; TEN of those 44 were stale, and 100
+names did not exist at all. A name-level check passed on all ten and correctly
+failed on the hundred. The gradient is real and it is a property of the INDEX.
+
+There is a SECOND way to miss the same damage, on a different axis, and it was
+a bug in this file until 2026-08-11: arch coverage was unioned per NAME across
+every subversion, so a truncated publish landing one arch of a new build read
+as complete because an OLDER build supplied the other arch. Same shape -- older
+good data concealing newer damage -- but at the subversion level rather than
+the version level. Fixed by keying on (name, identity); see main().
+
+Both are worth holding in mind because they are independent: the first is why a
+name check is not enough, the second is why an arch check on a name is not
+enough either.
+
 So a completeness check belongs on the PUBLISH side, where the expected count
 is known. What this tool can do is let a caller who knows which build they want
 say so: pass `name=version-subversion` and READY additionally requires that
@@ -121,8 +141,10 @@ So:
 
 import os
 import sqlite3
+import ssl
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 from collections import defaultdict
 
@@ -160,6 +182,37 @@ REQUIRED = {"x86_64", "aarch64"}
 FLOOR = ("glibc", "bash", "gcc", "binutils")
 
 
+def _open(url):
+    """urlopen, with ONE retry against certifi's bundle on a certificate error.
+
+    Not a convenience. Python installed from python.org does not use the system
+    trust store, so on macOS this program dies with CERTIFICATE_VERIFY_FAILED
+    against a host that `curl` fetches happily. It cost two people time on two
+    separate days before it was worth fixing here.
+
+    THE RETRY IS NARROW ON PURPOSE. It catches SSLCertVerificationError only,
+    and only tries a DIFFERENT SET OF ROOTS -- it never disables verification.
+    An unverified fetch would make this tool answer questions about an index
+    nobody authenticated, which is worse than not answering.
+
+    If certifi is absent the original error is re-raised unchanged, so the
+    failure still names itself rather than becoming a second, vaguer one.
+    """
+    try:
+        return urllib.request.urlopen(url, timeout=60)
+    except urllib.error.URLError as first:
+        if not isinstance(getattr(first, "reason", None), ssl.SSLCertVerificationError):
+            raise
+        try:
+            import certifi
+        except ImportError:
+            raise first
+        context = ssl.create_default_context(cafile=certifi.where())
+        print("gate-check: system trust store rejected the certificate; "
+              "retrying with certifi (verification still ON)", file=sys.stderr)
+        return urllib.request.urlopen(url, timeout=60, context=context)
+
+
 def fetch(url):
     """Download the index, letting failures raise rather than returning empty.
 
@@ -168,7 +221,7 @@ def fetch(url):
     a confident wrong answer in the direction of "keep waiting", which is the
     direction nobody investigates.
     """
-    with urllib.request.urlopen(url, timeout=60) as response:
+    with _open(url) as response:
         body = response.read()
     if len(body) < 4096:
         raise RuntimeError("index is %d bytes; that is not a populated repo.db" % len(body))
