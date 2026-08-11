@@ -76,8 +76,100 @@ grep -qE '^#define XWL_HAS_EI( |$)' "$xwl" \
 	|| die "XWL_HAS_EI is not set; libei was not found and this Xwayland has no XTEST support -- synthetic input into X11 windows, which is remote desktop and every accessibility tool, silently does nothing"
 grep -qE '^#define XWL_HAS_EI_PORTAL( |$)' "$xwl" \
 	|| die "XWL_HAS_EI_PORTAL is not set; liboeffis was not found, so -Dxwayland_ei=portal fell back to the socket route"
-grep -q '^have_enable_ei_portal=true$' "$pc" \
-	|| die "xwayland.pc does not advertise have_enable_ei_portal=true; mutter reads this variable and would not offer the portal path"
+# ===========================================================================
+# THE .pc CAPABILITY VARIABLES, CHECKED AGAINST THE BINARY THAT SHIPS
+# ===========================================================================
+#
+# THIS IS THE CHECK NOTHING DOWNSTREAM WILL REPEAT, and packaging this file is
+# precisely what stops mutter repeating it.
+#
+# mutter reads have_initfd, have_listenfd, have_terminate_delay,
+# have_byte_swapped_clients, have_enable_ei_portal and have_glamor out of this
+# .pc with get_variable(...) == 'true' and bakes a HAVE_* into itself for each.
+# It DOES own a real probe -- run Xwayland -help and grep for the option -- but
+# that probe lives in the ELSE branch, for when xwayland.pc was not found. When
+# the .pc IS found, which is the entire point of this package, the variables are
+# trusted with no probe at all. So a .pc that overstates the server gives mutter
+# a compiled-in capability the binary does not have, and no build check on
+# either side ever notices.
+#
+# hw/xwayland/meson.build 196-213 builds those variables from a MIXTURE:
+#   have_glamor, have_glamor_api   from build_glamor -- THE OPTION, not the
+#                                  outcome. build_xwayland_glamor is
+#                                  `build_glamor and gbm_dep.found()`, so this
+#                                  reports true in exactly the case where
+#                                  glamor was compiled and cannot be used.
+#   have_decorate, have_enable_ei_portal   from real outcomes.
+#   the rest                       hardcoded `true`, asserting the binary
+#                                  accepts an option nobody re-checked.
+#
+# SO THE ORACLE IS THE BINARY'S OWN HELP, which is what mutter's else-branch
+# would have used. It is faithful rather than merely convenient, because the
+# interesting lines are conditionally compiled on the outcome macros:
+# hw/xwayland/xwayland.c wraps "-glamor" in #ifdef XWL_HAS_GLAMOR, "-decorate"
+# in XWL_HAS_LIBDECOR and "-enable-ei-portal" in XWL_HAS_EI_PORTAL. The help
+# text tells the truth about glamor exactly where the .pc does not.
+#
+# Running the staged binary is safe and has precedent here (cmake and cbindgen
+# both do it): os/utils.c:806 handles -help in ProcessCommandLine with
+# UseMsg(); exit(0), which is reached from dix_main long before any Wayland
+# connection, DRM device or screen is touched.
+help_out=$("$xwayland" -help 2>&1) || true
+printf '%s\n' "$help_out" | grep -qF -- '-rootless' \
+	|| die "could not read the option list out of the staged Xwayland (-help produced nothing recognisable), so the .pc capability variables cannot be checked against the binary. This check is not optional: it is the only thing standing between a wrong .pc and mutter compiling in a capability the server does not have"
+
+PKGCONF=$(command -v pkg-config || command -v pkgconf) \
+	|| die "no pkg-config or pkgconf; cannot read the .pc the way mutter will"
+pcv() { PKG_CONFIG_LIBDIR="$DESTDIR/usr/lib/pkgconfig" "$PKGCONF" --variable="$1" xwayland 2>/dev/null; }
+
+# Each pair is `variable:option`. Checked in BOTH directions -- a variable
+# claiming true whose option is absent is the hazard above, and one claiming
+# false whose option is present means the .pc is understating a capability
+# mutter would then refuse to use.
+# MATCHED ON THE OPTION TOKEN, NOT ON A SUBSTRING OF THE LINE. Each help line
+# is "<option><padding><description>", so the first field IS the option name.
+# A plain substring search would be wrong on this very output: the deprecation
+# line reads `-listen fd  deprecated, use "-listenfd" instead`, so the string
+# "-listenfd" occurs on a line that is NOT the -listenfd option -- and a
+# conditionally-compiled option mentioned in another option's prose would read
+# as present after being compiled out. Comparing whole tokens removes the class,
+# and it also lets `+byteswappedclients` be matched literally without its `+`
+# being read as a regex quantifier.
+help_opts=$(printf '%s\n' "$help_out" | awk 'NF {print $1}')
+
+pc_mismatch=
+for pair in \
+	have_glamor:-glamor \
+	have_glamor_api:-glamor \
+	have_decorate:-decorate \
+	have_enable_ei_portal:-enable-ei-portal \
+	have_initfd:-initfd \
+	have_listenfd:-listenfd \
+	have_verbose:-verbose \
+	have_terminate_delay:-terminate \
+	have_no_touch_pointer_emulation:-noTouchPointerEmulation \
+	have_force_xrandr_emulation:-force-xrandr-emulation \
+	have_geometry:-geometry \
+	have_fullscreen:-fullscreen \
+	have_host_grab:-host-grab \
+	have_byteswappedclients:+byteswappedclients \
+	have_hidpi:-hidpi
+do
+	var=${pair%%:*}
+	opt=${pair#*:}
+	claimed=$(pcv "$var")
+	if printf '%s\n' "$help_opts" | grep -qxF -- "$opt"; then
+		actual=true
+	else
+		actual=false
+	fi
+	[ "$claimed" = "$actual" ] \
+		|| pc_mismatch="$pc_mismatch $var(.pc=${claimed:-unset},binary=$actual)"
+done
+if [ -n "$pc_mismatch" ]; then
+	die "xwayland.pc disagrees with the binary it describes:$pc_mismatch -- mutter reads these variables and does NOT probe when this .pc exists, so each disagreement is a capability mutter would compile in and the server would not provide"
+fi
+log "xwayland.pc capability variables all agree with the shipped binary's option list."
 
 # ELOGIND, AND THE ASSERTION THAT REVERSED ITSELF.
 #
@@ -153,6 +245,37 @@ for lib in libgcrypt libei liboeffis libgbm libepoxy libxshmfence libxcvt libXfo
 done
 if [ -n "$missing" ]; then
 	die "Xwayland does not link:$missing -- each was found at configure time and is absent from the artefact, and nothing about the build said so. See the NEEDED list above"
+fi
+
+# AND THE OTHER DIRECTION, WHICH IS THE ONE THAT COSTS A USER RATHER THAN A
+# PACKAGER: every NEEDED entry must be something this recipe declares.
+#
+# The loop above asks "is each library I expected present" and CANNOT, even in
+# principle, notice a library I did not think of. libXau was linked into this
+# binary and undeclared through several revisions of this file for exactly that
+# reason -- os/auth.c calls XauReadAuth to parse .Xauthority, and libXau appears
+# in no dependency() call in meson.build, arriving through xdmcp's pkg-config
+# closure. An undeclared runtime link installs cleanly and fails at startup on a
+# machine that happens not to have the library.
+#
+# So this is a CLOSED-WORLD check: anything outside the list is a question that
+# has to be answered, by declaring it or by explaining it here. A new entry
+# appearing is not necessarily a bug -- it is necessarily a decision.
+unexpected=
+for soname in $(printf '%s\n' "$needed" | sed -n 's/.*Shared library: \[\(.*\)\]/\1/p'); do
+	case $soname in
+		# glibc, declared.
+		libc.so.*|libm.so.*|libdl.so.*|libpthread.so.*|librt.so.*|ld-linux*|ld64.so.*) ;;
+		# Each of these is a declared runtime dependency in TAPEBUILD.toml.
+		libpixman-1.so.*|libXfont2.so.*|libXdmcp.so.*|libXau.so.*) ;;
+		libwayland-client.so.*|libxcvt.so.*|libxshmfence.so.*) ;;
+		libdrm.so.*|libepoxy.so.*|libgbm.so.*) ;;
+		libei.so.*|liboeffis.so.*|libgcrypt.so.*) ;;
+		*) unexpected="$unexpected $soname" ;;
+	esac
+done
+if [ -n "$unexpected" ]; then
+	die "Xwayland links libraries this recipe does not account for:$unexpected -- either add each to [dependencies] in TAPEBUILD.toml, or add it to the case above with the reason it needs no declaration. An undeclared runtime link is a package that installs and then cannot start"
 fi
 
 # libgcrypt is asserted a second time, from the other direction: the sha1

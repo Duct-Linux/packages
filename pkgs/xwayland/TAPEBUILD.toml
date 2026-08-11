@@ -25,6 +25,18 @@ glibc = ">=2.42.0"
 # --- server links whatever else is turned on.
 pixman = ">=0.44.2"
 libXfont2 = ">=2.0.7"
+# THE X AUTHORITY READER, AND IT WAS MISSING FROM THIS LIST UNTIL THE ARTEFACT
+# WAS READ. os/auth.c calls XauReadAuth and XauDisposeAuth to parse the
+# .Xauthority file, so libXau is linked into every Xwayland -- it does not
+# appear in any dependency() call in meson.build, because it arrives through
+# xdmcp's pkg-config closure rather than by name.
+#
+# Nothing caught it: the recipe's own link check asserted a list of libraries
+# someone had written down, and an undeclared-but-linked library is by
+# definition not on that list. It surfaced only when the check began printing
+# the binary's full NEEDED set. That is the direction that costs a user rather
+# than a packager -- a package that installs and then cannot start.
+libXau = ">=1.0.12"
 xorgproto = ">=2024.1.0"
 xtrans = ">=1.6.0"
 # xdmcp_dep, from -Dxdmcp=true. Stated at its default in pkg.env, so this is a
