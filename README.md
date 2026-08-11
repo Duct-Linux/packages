@@ -397,17 +397,19 @@ constraints above.
 
 ### What is not packaged yet
 
-The tiers above stop at libadwaita. That is a complete GTK 4 application
-platform — a GTK program will build, run and draw against a Wayland compositor
-— but it is **not yet a GNOME session**: there is no compositor and no shell.
-What is still missing, in dependency order:
+How far the tiers reach is recorded in exactly one place: `ALL_PKGS` in the
+Makefile, which is the authoritative order and grows as each chain lands. This
+section deliberately does not restate it. The sentence that used to stand here
+said the tiers stopped at libadwaita — true the day it was written, false
+within the day, and false silently, because prose has nothing to check it
+against. A pointer at the living structure cannot rot that way; a description
+of the structure becomes wrong at the next merge.
 
-1. **Crypto and network**: `sqlite`, `libgpg-error`, `libgcrypt`, `libtasn1`,
-   `nettle`, `p11-kit`, `gnutls`, `glib-networking`, `json-glib`, `libsoup`.
-2. **Session services**: `polkit` (duktape is already packaged for it),
-   `libgudev`, `upower`, `accountsservice`, `libnotify`, `gnome-desktop`,
-   `gnome-menus`, `gcr`, `libsecret`, `gnome-keyring`.
-3. **The session itself**: `mutter`, `gnome-settings-daemon`, `gnome-session`,
+What that order does not yet reach is a **GNOME session**: there is no
+compositor and no shell. What is still missing, in dependency order:
+
+1. **Session services**: `gnome-menus` and `gnome-keyring`, both in flight.
+2. **The session itself**: `mutter`, `gnome-settings-daemon`, `gnome-session`,
    `gnome-shell`, `gnome-shell-extensions`, and a display manager or an
    autologin path.
 
