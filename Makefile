@@ -176,7 +176,7 @@ GTK_PKGS := \
 CRYPTO_PKGS := \
 	zstd npth libgpg-error \
 	libassuan libksba libgcrypt \
-	gnupg
+	gnupg gpgme
 
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
