@@ -18,6 +18,7 @@ later is free; recovering a deleted directory is not.
 | `DESIGN.md` | screen flow, backend operations, failure handling, and what v1 refuses to do. |
 | `QEMU-TEST-PLAN.md` | how the installer gets tested, what each test proves, what could go wrong. |
 | `src/`, `tests/` | the prototype: GTK 4 / libadwaita, backend stubbed behind an interface. |
+| `DEPENDENT-BLINDNESS.md` | the one hazard class no per-package check can detect, found when it caught this project's own e2fsprogs recipe. |
 
 ## The two-line summary of the gap analysis
 
