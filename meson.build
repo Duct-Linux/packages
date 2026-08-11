@@ -50,7 +50,7 @@ executable('duct-installer',
 # the backend was written with no GTK in it, and it is what makes exercising
 # the installer inside QEMU cheap. It is a test harness, not unattended
 # installation; see the comment at the top of src/cli/main.c.
-executable('duct-install-cli',
+install_cli = executable('duct-install-cli',
   files('src/cli/main.c'),
   dependencies: [dependency('glib-2.0'), dependency('gio-2.0')],
   link_with: backend,
@@ -72,3 +72,15 @@ test('backend', backend_test)
 # Shell syntax, including heredoc bodies a plain `bash -n` cannot see.
 # See tests/check-shell-syntax.sh for why this is not paranoia.
 test('shell-syntax', find_program('tests/check-shell-syntax.py'))
+
+# The CLI's refusals, driven as a subprocess against the built binary.
+#
+# select_target() and load_answers() are static in a translation unit with a
+# main(), so they cannot be linked into backend-test. Extracting them was the
+# obvious alternative and is wrong for select_target: THE REFUSAL IS
+# IMPLEMENTED BY NOT RETURNING -- it exits -- so extracting it would move the
+# refusal into the caller and the test would then assert that a function
+# reports a problem rather than that the program declines to act.
+#
+# The exit status IS the safety property, so the test drives the real binary.
+test('cli', find_program('tests/cli-test.py'), args: [install_cli.full_path()])

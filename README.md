@@ -65,15 +65,31 @@ PATH=/opt/homebrew/bin:$PATH PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig meson s
 Two checks, both passing, neither needing a screen:
 
 ```sh
-meson test -C build              # 30 assertions on the destructive half
+meson test -C build              # backend, CLI and shell-syntax; no display needed
 ./build/duct-installer --self-test   # constructs all 9 screens, runs an install
 ```
 
-`meson test` exercises the safety model directly: the live medium cannot be
+`meson test` runs three suites. `backend` exercises the safety model directly: the live medium cannot be
 planned for, a too-small disk is refused, every disk description names its node
 and exact byte count, partition naming is right for `sda`/`nvme0n1`/`mmcblk0`,
 the real backend refuses to exist, and a complete dry run logs 49 commands and
 writes nothing.
+
+`cli` drives the built `duct-install-cli` as a subprocess, 24 checks: the live
+medium and unenumerated devices are refused by name and with a non-zero exit, a
+missing or unparseable answers file fails without being mistaken for a refusal,
+seven malformed usernames and hostnames are rejected, a dry run leaves its
+working directory empty, and `--execute` declines rather than degrading.
+
+It drives the binary rather than linking the functions because `select_target()`
+**implements its refusal by not returning** — it exits. Extracting it to return
+an error would move the refusal into the caller, and the test would then be
+checking that a function reports a problem rather than that the program declines
+to act. The exit status is the safety property.
+
+Verified by breaking it: disabling hostname validation in `main.c` turns three
+of those checks red and the suite with them. A test that has never failed is not
+known to run.
 
 `--self-test` walks the flow without a human, because this machine cannot take
 a screenshot and "it links" is not evidence that nine screens construct. It

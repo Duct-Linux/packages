@@ -374,8 +374,17 @@ main (int argc, char *argv[])
 
 	g_autoptr (GError) answers_error = NULL;
 	DuctInstallConfig *cfg = load_answers (opt_answers, &answers_error);
-	if (cfg == NULL)
-		fail ("answers", answers_error->message);
+	if (cfg == NULL) {
+		/* The PATH, not just the reason. GLib's message for a missing file is
+		 * "No such file or directory" with no subject, which read as
+		 * `answers: No such file or directory` -- true, and useless to the
+		 * only caller there is. This program is driven by a harness that
+		 * passes the path in, so the path is the one thing the operator does
+		 * not already have in front of them. */
+		g_autofree char *why = g_strdup_printf ("%s: %s", opt_answers,
+		                                        answers_error->message);
+		fail ("answers", why);
+	}
 
 	/* VALIDATE THE ANSWERS. The GUI has always checked these on its account
 	 * page; this path never did, so a username straight out of a file reached
