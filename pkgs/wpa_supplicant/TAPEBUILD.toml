@@ -1,0 +1,69 @@
+[package]
+name = "wpa_supplicant"
+description = "IEEE 802.11 supplicant: the WPA/WPA2/WPA3 authentication NetworkManager drives over D-Bus"
+version = "2.11.0"
+subversion = "1"
+authors = ["Jouni Malinen and contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+# Both stages are this recipe's own. There is no configure: the build is driven
+# by a hand-written .config read by src/build.rules, and it happens in the
+# wpa_supplicant/ subdirectory rather than at the top of the tree. The install
+# stage exists because `make install` handles only the binaries and leaves the
+# two D-Bus files that make the daemon reachable in the build tree.
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# Netlink. Pulled in by CONFIG_DRIVER_NL80211 rather than declared in .config:
+# drivers.mak asks pkg-config for libnl-3.0 and sets CONFIG_LIBNL32 itself, then
+# links -lnl-3, -lnl-genl-3 and -lnl-route-3 (the last because it sets
+# CONFIG_LIBNL3_ROUTE for nl80211). pkgs/libnl ships and asserts all three.
+libnl = ">=3.11.0"
+# TLS. CONFIG_TLS defaults to openssl and is deliberately not set in .config;
+# this is the package that default resolves to, and EAP-TLS, PKCS#12 and the
+# SAE group arithmetic all go through it.
+#
+# BOUNDED BELOW 4, WHICH IS NOT THE HOUSE STYLE AND IS NOT CAUTION. Two openssl
+# versions are published and live at once -- 3.5.7-2 and 4.0.1-1 -- because the
+# `linux` recipe requires >=4.0.1 while `curl`, `python` and `rust` require
+# >=3.5.0,<4.0.0. wpa_supplicant 2.11 belongs firmly in the second group, and
+# not by preference: it does not COMPILE against 4.0.1.
+#
+# src/crypto/tls_openssl.c reaches into gen->d.ia5->length and ->data directly.
+# openssl 3.5.7 defines struct asn1_string_st in asn1.h (line 166); 4.0.1 only
+# forward-declares it, so the same code is 30-odd "invalid use of incomplete
+# typedef" errors. Established by building it both ways, not by reading a
+# changelog.
+#
+# An unbounded ">=3.5.0" would be satisfied by 4.0.1, and the two ship
+# DIFFERENT SONAMES -- libcrypto.so.3 against libcrypto.so.4 -- so resolving to
+# the wrong one is not a subtle incompatibility, it is a binary that will not
+# start.
+openssl = ">=3.5.0,<4.0.0"
+# The bus the whole D-Bus control interface is exposed on.
+dbus = ">=1.16.0"
+# CONFIG_CTRL_IFACE_DBUS_INTRO links libxml2 -- dbus/Makefile adds
+# `xml2-config --libs` to DBUS_LIBS -- so this is a RUNTIME dependency, not just
+# a build one. Checked against the linked binary rather than assumed from the
+# flag.
+libxml2 = ">=2.13.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
+# xml2-config, which the dbus/ subdirectory calls directly for the introspection
+# build. libxml2 ships it (tools/program-index.tsv), and it is named here as
+# well as above because the two are different requirements that happen to share
+# a package: one is a program the build runs, the other is a library the result
+# links.
+libxml2 = ">=2.13.0"

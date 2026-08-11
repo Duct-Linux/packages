@@ -311,8 +311,16 @@ SERVICES_PKGS := \
 # nothing in this group. pipewire built -Dbluez5=enabled links it, and pipewire
 # is in MEDIA_PKGS, so leaving bluez here built it 49 positions AFTER its own
 # consumer. See MEDIA_PKGS for the rest of the reasoning.
+#
+#   wpa_supplicant
+#            the 802.11 supplicant. After libnl, which its nl80211 driver links
+#            through pkg-config, and after openssl and dbus from earlier
+#            groups. NetworkManager drives it over D-Bus and contains no
+#            authentication code of its own, so this is what makes the Wi-Fi
+#            panel able to connect rather than merely able to list.
 NETWORK_PKGS := \
-	libnl jansson libndp
+	libnl jansson libndp \
+	wpa_supplicant
 
 # The GNOME desktop tier: everything between "a GTK 4 application platform" and
 # "a GNOME session". Added in waves, in dependency order, and this is the first
