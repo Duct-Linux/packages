@@ -18,7 +18,7 @@ later is free; recovering a deleted directory is not.
 | `DESIGN.md` | screen flow, backend operations, failure handling, and what v1 refuses to do. |
 | `QEMU-TEST-PLAN.md` | how the installer gets tested, what each test proves, what could go wrong. |
 | `src/`, `tests/` | the prototype: GTK 4 / libadwaita, backend stubbed behind an interface. |
-| `DEPENDENT-BLINDNESS.md` | a hazard class no per-package check can detect — **and a correction: the worked example in it never happened.** Read the banner before the argument. |
+| `DEPENDENT-BLINDNESS.md` | two hazards that report success. One: a justification that expires silently (**with a correction — its worked example never happened**). Two: a guard satisfied by something adjacent to its subject, with the six instances from one day. |
 
 ## The two-line summary of the gap analysis
 

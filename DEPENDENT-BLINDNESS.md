@@ -134,3 +134,96 @@ caught the real problem. **A wrong comment beside a correct assertion is how a
 future reader talks themselves into deleting the assertion**, which is why the
 comment has to be fixed in the same change as the archives, whichever way that
 decision goes.
+
+---
+
+# The second hazard: a guard satisfied by something that is not the subject
+
+Written 2026-08-11, after a day in which this happened six times to three
+people. It is the most common way a check on this project has been wrong, and
+it is worth separating from ordinary bugs because **the check reports success**.
+There is no symptom. The only thing that ever finds it is asking why a correct
+answer was correct.
+
+## The shape
+
+A check names a subject. What it actually reads is something *adjacent* to the
+subject — something that is usually equal to it, and quietly is not. When they
+diverge, the check keeps answering, and it answers about the adjacent thing.
+
+The instances from one day, in the order they were found:
+
+| the check believed it was reading | it was actually reading |
+|---|---|
+| whether the disk probe parses `lsblk` | a fixture set, on a host with no `lsblk` |
+| whether e2fsprogs stages headers | one Makefile target, not the staging tree |
+| which static archives are staged | a build log that formats one of four differently |
+| whether a package published completely | the union of *every* build of that name |
+| whether the restored source passes | a binary `ninja` never rebuilt |
+| whether the publish window is clear | publishes, not the builds that become them |
+
+Six different layers — a GUI probe, a recipe, a log, an index, a build system,
+a CI dashboard. The same shape each time, which is why it is worth naming
+rather than fixing six times.
+
+## Why the adjacent thing is always so plausible
+
+Because it is *usually* the same. The fixture set really does look like a disk
+list. The Makefile target really does control most of the install. The union of
+builds really does equal the one build, until a package is republished. **The
+substitute is not a wrong answer — it is a right answer to a question one step
+to the left**, and one step is invisible when you already believe the two
+questions are the same.
+
+This is also why "be more careful" does not help. Every one of the six was
+written carefully. What failed was not attention; it was that nothing in the
+output distinguished the subject from the substitute.
+
+## What actually separates them
+
+Three things, in descending order of how well they work.
+
+**1. Make the check unable to reach the substitute.** The strongest, and rarely
+available. `gate-check` keying on `(name, identity)` cannot read another build's
+arches — not because it is careful, but because the other build's rows are not
+in the dictionary it looks in. Structure beats vigilance.
+
+**2. Read the thing, not a description of it.** The staging tree cannot format
+itself inconsistently; the build log can, and did. An index cannot tell you
+about time; the run list can. **A formatted artefact cannot be trusted to
+enumerate itself, and the thing it describes can.** Where both are available,
+the artefact is the convenient one and the subject is the correct one.
+
+**3. Make the check fail on demand.** If a check has never failed, it is not
+known to run. Disabling hostname validation turned three CLI assertions red;
+until that was done, "24 checks passed" was compatible with 24 checks that
+never executed. This is the cheapest of the three and the one most often
+skipped, because a passing suite feels like evidence.
+
+And one that does not work, listed because it is the tempting one: **asserting
+harder**. A stricter check on the substitute is still a check on the substitute.
+
+## The tell, and it is checkable in advance
+
+> **If the thing being described has never run, the description is of what is
+> expected rather than of what happens.**
+
+That is applicable by anyone, in one question, before any evidence exists —
+which is exactly when the reasoning feels most complete, because nothing has
+contradicted it and nothing has contradicted it *because nothing has run*.
+
+The e2fsprogs headers claim was written when the recipe had never once survived
+`configure`. The fact was unavailable, and a conclusion was reported anyway. No
+amount of care with the Makefile would have reached it; only a build would, and
+a build was exactly what did.
+
+## Relationship to the first hazard
+
+The first half of this document is about a justification that expires when the
+world changes around it. This half is about a check that was never measuring
+its subject in the first place. They meet in one place: **both are invisible
+while the world happens to cooperate**, and both surface at the moment someone
+depends on them.
+
+A justification that expires still described something true once. A guard on
+the wrong subject never did.
