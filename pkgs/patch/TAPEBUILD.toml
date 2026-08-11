@@ -2,7 +2,7 @@
 name = "patch"
 description = "GNU patch"
 version = "2.8.0"
-subversion = "2"
+subversion = "3"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 

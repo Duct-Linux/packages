@@ -2,7 +2,7 @@
 name = "perl"
 description = "Practical Extraction and Report Language"
 version = "5.42.0"
-subversion = "2"
+subversion = "3"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 
