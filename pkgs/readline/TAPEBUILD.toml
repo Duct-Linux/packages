@@ -1,0 +1,28 @@
+[package]
+name = "readline"
+description = "Command line editing and history library"
+version = "8.3.0"
+subversion = "1"
+authors = ["Chet Ramey"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# Not optional and not merely recommended: SHLIB_LIBS="-lncursesw" links
+# libreadline.so against libncursesw directly, so this is a DT_NEEDED entry
+# rather than a build-time convenience. install.sh asserts the entry is there.
+ncurses = ">=6.5.0"
+
+[dependencies.build]

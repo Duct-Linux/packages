@@ -81,9 +81,27 @@ BASE_PKGS := \
 	pkgconf attr acl libxcrypt zstd \
 	ncurses bash
 
+# readline sits here rather than with the JavaScript chain it was written for,
+# and the position is the whole point of it being a separate change.
+#
+# It is an LFS chapter 8 package -- 8.12, literally between File (8.11) and M4
+# (8.13) -- so this list is where the book puts it, and it needs nothing beyond
+# ncurses, which BASE_PKGS builds first of all. That makes it placeable at
+# almost the earliest point in the tree.
+#
+# WHY THAT MATTERS RATHER THAN BEING TIDY: four packages in three other chains
+# need it, and every one of them is built EARLIER than the JavaScript group
+# where it started life. NetworkManager is the sharp case -- its meson.build
+# leaves -Dnmcli defaulting true, and -Dreadline=auto probes readline and then
+# libedit with both required:false, so with NEITHER packaged it does not
+# degrade quietly, it trips an assert and FAILS THE BUILD. NETWORK_PKGS runs
+# well before the JavaScript tier, so readline living there would have made
+# nmcli unbuildable no matter how correct the recipe was. bluez's
+# --enable-client and wpa_supplicant's wpa_cli completion are the same shape,
+# one tier apart.
 BUILDER_PKGS := \
 	m4 bison flex make gawk sed grep findutils diffutils \
-	tar gzip xz bzip2 patch file perl texinfo
+	tar gzip xz bzip2 patch file readline perl texinfo
 
 # Built in duct/rust rather than duct/chroot, because there is no Rust compiler
 # in the Duct package set. Cross-linked against Duct's own glibc, so the result
