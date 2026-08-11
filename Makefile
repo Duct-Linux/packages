@@ -163,6 +163,22 @@ GRAPHICS_PKGS := \
 	llvm mesa \
 	libdisplay-info
 
+# The audio stack, and the reason it is not optional even though sound is the
+# visible half of it.
+#
+# mutter takes pipewire for screencast and remote desktop, so the compositor
+# will not build with the desktop's screen-sharing features without this group
+# -- the Sound panel is what a user sees, and the screencast path is what breaks
+# first if it is missing.
+#
+# Placed after GRAPHICS_PKGS rather than with the other libraries because the
+# order is the dependency order: pipewire needs dbus and eudev from
+# SESSION_PKGS and glib from GLIB_PKGS, both of which precede GRAPHICS_PKGS, and
+# nothing here needs anything from GTK_PKGS. alsa-lib itself needs only glibc
+# and is first because pipewire's ALSA device backend is built against it.
+MEDIA_PKGS := \
+	alsa-lib
+
 GTK_PKGS := \
 	harfbuzz cairo pango \
 	libsass sassc \
@@ -241,7 +257,8 @@ NETWORK_PKGS := \
 
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
-	$(GRAPHICS_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) $(NETWORK_PKGS) $(BOOT_PKGS)
+	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
+	$(NETWORK_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #

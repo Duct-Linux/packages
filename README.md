@@ -353,6 +353,7 @@ than what the packages are about:
 | 0 | `TOOLS_PKGS` | meson, cmake, gperf, libxml2/libxslt, three pure-Python modules |
 | 1 | `SESSION_PKGS` | PAM, shadow, udev, dbus, **elogind**, and the libraries under them |
 | 2 | `GRAPHICS_PKGS` | wayland, libdrm, libinput, libxkbcommon, X client libraries, llvm, mesa |
+| 2½ | `MEDIA_PKGS` | the audio stack, alsa-lib upwards. Between graphics and GTK because pipewire needs dbus, eudev and glib and nothing above them |
 | 3–4 | `DESKTOP_PKGS` | freetype through pango, then glib through gtk4 and libadwaita |
 
 Three decisions worth knowing before reading the recipes:
