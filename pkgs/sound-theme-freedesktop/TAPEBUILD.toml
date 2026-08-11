@@ -1,0 +1,26 @@
+[package]
+name = "sound-theme-freedesktop"
+description = "Freedesktop XDG sound theme"
+version = "0.8.0"
+subversion = "1"
+authors = ["freedesktop.org"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "./build.sh"
+
+[install]
+script = "./install.sh"
+
+# No runtime dependencies, following gnome-backgrounds: this package installs no
+# ELF file at all, so there is nothing to link and DT_NEEDED is empty. It is
+# TEMPTING to declare libcanberra here, since the sounds are useless without a
+# player -- but that inverts the relationship. The theme does not require the
+# player; the desktop requires both, and mutter is where that belongs.
+[dependencies]

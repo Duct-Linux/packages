@@ -1,0 +1,28 @@
+[package]
+name = "startup-notification"
+description = "Startup notification protocol library"
+version = "0.12.0"
+subversion = "1"
+authors = ["freedesktop.org"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+libxcb = ">=1.17.0"
+xcb-util = ">=0.4.1"
+libX11 = ">=1.8.12"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
