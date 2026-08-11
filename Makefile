@@ -214,9 +214,34 @@ CRYPTO_PKGS := \
 	dconf libpsl nghttp2 sqlite glib-networking \
 	flatpak libsoup
 
+# Networking and Bluetooth: the daemons and libraries gnome-control-center's
+# Network, Wi-Fi and Bluetooth panels talk to. A tier of its own rather than an
+# addition to an existing list, because the README describes the desktop tiers
+# AS the Makefile lists and none of the others is about this: CRYPTO_PKGS is
+# where a network library would land by default, and it would be the wrong name
+# on the wrong list.
+#
+# Placed after CRYPTO_PKGS and before BOOT_PKGS because NetworkManager needs
+# curl for connectivity checking (GTK_PKGS) and libpsl (CRYPTO_PKGS), so this
+# group has to follow both no matter how the earlier lists are rearranged --
+# the same argument CRYPTO_PKGS makes for its own position.
+#
+# The order within is the dependency order. libnl, jansson and libndp need
+# nothing but libc and are the prerequisites of what follows:
+#
+#   libnl    netlink, for wpa_supplicant's nl80211 driver. NOT for
+#            NetworkManager, which has contained no reference to libnl since it
+#            grew its own netlink layer -- see pkgs/libnl/pkg.env.
+#   jansson  JSON, which NetworkManager dlopens by SONAME at runtime and reads
+#            the SONAME of at BUILD time.
+#   libndp   IPv6 neighbour discovery. NetworkManager's one hard external
+#            dependency that nothing else here provides.
+NETWORK_PKGS := \
+	libnl jansson libndp
+
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
-	$(GRAPHICS_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) $(BOOT_PKGS)
+	$(GRAPHICS_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) $(NETWORK_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #
