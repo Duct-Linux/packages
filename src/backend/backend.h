@@ -46,6 +46,29 @@ typedef struct {
 	char *root_password; /* only when !lock_root */
 } DuctInstallConfig;
 
+/* What the installer will accept for an account and a machine name.
+ *
+ * These lived in the GUI's account page, which meant the COMMAND-LINE PATH
+ * NEVER APPLIED THEM: duct-install-cli read a username straight out of an
+ * answers file and passed it to the backend unchecked. That is the path a
+ * script uses unattended, so it is the one least likely to have a human notice
+ * a bad value before it reaches useradd on the target.
+ *
+ * They belong beside the thing they constrain rather than beside one front
+ * end, for the same reason duct_error_is_refusal() lives beside the code that
+ * sets those errors. Both front ends now use these.
+ *
+ * `why` receives a sentence suitable for showing to a person. It is set only
+ * when the answer is FALSE.
+ *
+ * Deliberately stricter than useradd. useradd accepts names that later tools
+ * disagree about -- a dot makes a name ambiguous with an FQDN -- and the cost
+ * of refusing a legal-but-unwise name is an annoyed user, while the cost of
+ * accepting one is a broken account on a machine that has already been
+ * erased. */
+gboolean duct_username_is_valid (const char *name, const char **why);
+gboolean duct_hostname_is_valid (const char *name, const char **why);
+
 DuctInstallConfig *duct_install_config_new  (void);
 void               duct_install_config_free (DuctInstallConfig *cfg);
 

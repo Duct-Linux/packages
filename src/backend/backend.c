@@ -6,6 +6,70 @@
 #include <gio/gio.h>
 #include <string.h>
 
+/* Deliberately stricter than useradd would be. useradd will accept a name with
+ * a dot in it and then several other tools will disagree about whether it is a
+ * user or a FQDN; this is the portable subset. */
+gboolean
+duct_username_is_valid (const char *name, const char **why)
+{
+	if (name == NULL || *name == '\0') {
+		*why = "Choose a username.";
+		return FALSE;
+	}
+	if (strlen (name) > 32) {
+		*why = "Usernames can be at most 32 characters.";
+		return FALSE;
+	}
+	if (!g_ascii_islower (name[0])) {
+		*why = "A username must start with a lower-case letter.";
+		return FALSE;
+	}
+	for (const char *p = name; *p != '\0'; p++) {
+		if (!g_ascii_islower (*p) && !g_ascii_isdigit (*p) && *p != '-' && *p != '_') {
+			*why = "A username can contain only lower-case letters, digits, - and _.";
+			return FALSE;
+		}
+	}
+
+	/* The accounts duct-filesystem's /etc/passwd already ships. useradd would
+	 * refuse these too, but it would do it two screens later and in a log. */
+	static const char *reserved[] = { "root", "bin", "daemon", "nobody", NULL };
+	for (guint i = 0; reserved[i] != NULL; i++) {
+		if (g_strcmp0 (name, reserved[i]) == 0) {
+			*why = "That name already belongs to a system account.";
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
+/* RFC 1123: letters, digits and hyphens, not starting or ending with one. */
+gboolean
+duct_hostname_is_valid (const char *name, const char **why)
+{
+	if (name == NULL || *name == '\0') {
+		*why = "Choose a name for this computer.";
+		return FALSE;
+	}
+	if (strlen (name) > 63) {
+		*why = "A computer name can be at most 63 characters.";
+		return FALSE;
+	}
+	if (name[0] == '-' || name[strlen (name) - 1] == '-') {
+		*why = "A computer name cannot start or end with a hyphen.";
+		return FALSE;
+	}
+	for (const char *p = name; *p != '\0'; p++) {
+		if (!g_ascii_isalnum (*p) && *p != '-') {
+			*why = "A computer name can contain only letters, digits and hyphens.";
+			return FALSE;
+		}
+	}
+
+	return TRUE;
+}
+
 DuctInstallConfig *
 duct_install_config_new (void)
 {

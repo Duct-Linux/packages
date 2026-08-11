@@ -145,6 +145,81 @@ log_line (const char *line, gpointer user_data)
 /* A refusal must be classifiable as one. The CLI prints REFUSED rather than
  * FAIL on the strength of this, and the difference is what a user reads when
  * the installer correctly declines their too-small disk. */
+/* --- account and machine names: the negatives are the substance ------------ */
+
+static void
+test_name_validation (void)
+{
+	g_print ("account and machine names\n");
+
+	const char *why = NULL;
+
+	/* The positives exist only to license the negatives -- a validator that
+	 * rejects everything would pass every negative arm below. */
+	CHECK (duct_username_is_valid ("yanick", &why), "an ordinary username is accepted");
+	CHECK (duct_username_is_valid ("a", &why), "a single letter is accepted");
+	CHECK (duct_username_is_valid ("user_2-x", &why), "digits, underscore and hyphen are accepted");
+	CHECK (duct_hostname_is_valid ("duct", &why), "an ordinary hostname is accepted");
+	CHECK (duct_hostname_is_valid ("duct-01", &why), "a hyphen inside a hostname is accepted");
+
+	/* THE DIRECTION THAT MATTERS. A rejected valid name is visible and
+	 * annoying; an ACCEPTED INVALID ONE reaches useradd on a machine whose
+	 * disk has already been erased. Every case below must be refused. */
+	struct { const char *name; const char *what; } bad_users[] = {
+		{ "",            "empty" },
+		{ "Yanick",      "an initial capital" },
+		{ "2fast",       "a leading digit" },
+		{ "-lead",       "a leading hyphen" },
+		{ "has space",   "a space" },
+		{ "has.dot",     "a dot, which later tools confuse with an FQDN" },
+		{ "sla/sh",      "a slash" },
+		{ "semi;colon",  "a shell metacharacter" },
+		{ "root",        "a reserved system account" },
+		{ "daemon",      "another reserved account" },
+		{ "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "33 characters, over the limit" },
+	};
+	for (guint i = 0; i < G_N_ELEMENTS (bad_users); i++) {
+		why = NULL;
+		gboolean accepted = duct_username_is_valid (bad_users[i].name, &why);
+		if (!accepted && why != NULL) {
+			g_print ("  ok    username with %s is refused\n", bad_users[i].what);
+		} else {
+			g_print ("  FAIL  username with %s was ACCEPTED%s\n", bad_users[i].what,
+			         (!accepted && why == NULL) ? " (refused with no reason given)" : "");
+			failures++;
+		}
+	}
+
+	struct { const char *name; const char *what; } bad_hosts[] = {
+		{ "",            "empty" },
+		{ "-lead",       "a leading hyphen" },
+		{ "trail-",      "a trailing hyphen" },
+		{ "has space",   "a space" },
+		{ "under_score", "an underscore, which RFC 1123 does not allow" },
+		{ "dot.ted",     "a dot" },
+		{ "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+		  "64 characters, over the limit" },
+	};
+	for (guint i = 0; i < G_N_ELEMENTS (bad_hosts); i++) {
+		why = NULL;
+		gboolean accepted = duct_hostname_is_valid (bad_hosts[i].name, &why);
+		if (!accepted && why != NULL) {
+			g_print ("  ok    hostname with %s is refused\n", bad_hosts[i].what);
+		} else {
+			g_print ("  FAIL  hostname with %s was ACCEPTED%s\n", bad_hosts[i].what,
+			         (!accepted && why == NULL) ? " (refused with no reason given)" : "");
+			failures++;
+		}
+	}
+
+	/* NULL is not a name. The CLI can reach these with a missing answers key,
+	 * so this is a path rather than a hypothetical. */
+	why = NULL;
+	CHECK (!duct_username_is_valid (NULL, &why) && why != NULL, "a NULL username is refused with a reason");
+	why = NULL;
+	CHECK (!duct_hostname_is_valid (NULL, &why) && why != NULL, "a NULL hostname is refused with a reason");
+}
+
 /* --- the lsblk parser, which had never been tested ------------------------- */
 
 static const DuctDisk *
@@ -413,6 +488,7 @@ main (void)
 	test_partition_naming ();
 	test_stage_weights ();
 	test_real_backend_refuses ();
+	test_name_validation ();
 	test_lsblk_parsing ();
 	test_boot_medium_detection ();
 	test_refusals_are_classified ();

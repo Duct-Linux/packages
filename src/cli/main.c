@@ -377,6 +377,23 @@ main (int argc, char *argv[])
 	if (cfg == NULL)
 		fail ("answers", answers_error->message);
 
+	/* VALIDATE THE ANSWERS. The GUI has always checked these on its account
+	 * page; this path never did, so a username straight out of a file reached
+	 * useradd on the target unchecked -- and this is the path a script uses
+	 * unattended, which is the one least likely to have a human notice a bad
+	 * value.
+	 *
+	 * A FAIL rather than a REFUSED: a malformed answers file is something
+	 * wrong, not the installer declining to touch a disk. */
+	{
+		const char *why = NULL;
+
+		if (!duct_username_is_valid (cfg->username, &why))
+			fail ("answers", why);
+		if (!duct_hostname_is_valid (cfg->hostname, &why))
+			fail ("answers", why);
+	}
+
 	if (opt_target == NULL)
 		fail ("target", "no --target device given");
 
