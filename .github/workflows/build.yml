@@ -261,8 +261,11 @@ jobs:
                 # Rust too -- and unlike the other two it is a BUILD DEPENDENCY
                 # of a native package (mozjs will not configure without it), so
                 # leaving it off this list does not merely build it in the wrong
-                # image, it fails mozjs at the same level.
-                uutils-coreutils|rust|cbindgen|cargo-c) image=ghcr.io/duct-linux/rust:$a ;;
+                # image, it fails mozjs at the same level. cargo-c is the same
+                # shape for librsvg, and librsvg itself is Rust that also LINKS
+                # native libraries, which is why it is in RUST_LATE_PKGS rather
+                # than RUST_PKGS -- but it still needs this image.
+                uutils-coreutils|rust|cbindgen|cargo-c|librsvg) image=ghcr.io/duct-linux/rust:$a ;;
                 # Likewise Go, which bootstraps from Go.
                 go)                    image=ghcr.io/duct-linux/go:$a ;;
                 # tape is compiled in duct/bootstrap. Built anywhere else the
