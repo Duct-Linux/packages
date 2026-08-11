@@ -59,18 +59,20 @@ This is the specific defect that shipped: `CONFIG_FUSE_FS=m` with nothing loadin
 it, so `/dev/fuse` never appeared. duct-live's `rc` coldplugs by walking sysfs
 modaliases into `modprobe`, and a filesystem module advertises none.
 
-**That is still the state of `main` at the time of writing** — `CONFIG_FUSE_FS=m`
-in `pkgs/linux/config/common.config`, verified rather than assumed. The change to
-`=y` is duct-2's and is held behind the publish.
+**THAT IS NO LONGER THE STATE OF `main`.** `CONFIG_FUSE_FS=y` is now in
+`pkgs/linux/config/common.config` (line 100), landed by duct-2's #35 and
+published as `linux 6.16.1-2` on both architectures — verified in the tree and in
+the index rather than assumed.
 
-**So this whole test is gated on that change, not on this package.** With
-`=m` and nothing loading it there is no `/dev/fuse`, which means the positive arm
-cannot pass and negative 2 is vacuous — it would fail for the reason it is
-supposed to detect, on every run, whether or not anything else is wrong. Running
-the suite before the kernel change would produce a red that means nothing.
+While it was `=m` this whole suite was gated on that change rather than on this
+package: with nothing loading the module there was no `/dev/fuse`, so the
+positive arm could not pass and negative 2 was **vacuous** — it would fail for
+the reason it is supposed to detect, on every run, whether or not anything else
+was wrong. Running the suite then would have produced a red that meant nothing.
 
-Once `=y` lands, this arm is what would notice a regression back to a module
-nothing loads.
+With `=y` the device exists from boot and every arm is meaningful. This arm is
+now what would notice a regression back to a module nothing loads, which is
+precisely how the original defect shipped.
 
 ### Negative 3 — the fallback is available but not silent
 
@@ -105,10 +107,22 @@ payload whose behaviour nobody here controls, to test a mount mechanism.
 
 ## Status
 
-**NOT YET RUN, AND NOT YET RUNNABLE.** `CONFIG_FUSE_FS` is still `=m` on `main`,
-so `/dev/fuse` does not exist on a booted system and no arm of this suite means
-anything yet. The prerequisite is duct-2's kernel change, not anything in this
+**NOT YET RUN — BUT NOW RUNNABLE.** The prerequisite has landed:
+`CONFIG_FUSE_FS=y` on `main`, published as `linux 6.16.1-2` on both arches. That
+was the only thing blocking this suite, and it was never anything in this
 package.
 
-Once it lands: AppImage support should not be reported as working until the
-positive arm shows a `fuse` mount type and negatives 1 and 2 both fail.
+WHAT IS STILL MISSING IS AN EXECUTION, NOT A CONDITION. This needs a booted Duct
+system — the qemu harness, not a build container — and it has not been run there.
+Until it is, **AppImage support is packaged and unverified**: `fusermount3` is
+installed setuid and the kernel can mount FUSE, and nobody has watched a payload
+actually do it.
+
+AppImage support should not be reported as working until the positive arm shows a
+`fuse` mount type in `/proc/self/mountinfo` and negatives 1 and 2 both fail.
+
+A NOTE ON WHY THIS SAT STALE. The status above read "not yet runnable" for
+several hours after `=y` landed, because the condition was recorded here and the
+release was recorded nowhere. A hold that names no discharge mechanism is a
+dropped item with a good reason attached — so if this is deferred again, the
+deferral belongs where the releasing event will be seen, not only here.
