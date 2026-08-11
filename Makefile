@@ -205,7 +205,8 @@ CRYPTO_PKGS := \
 	fuse3 \
 	npth libgpg-error \
 	libassuan libksba libgcrypt \
-	gnupg gpgme
+	gnupg gpgme \
+	libseccomp
 
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
