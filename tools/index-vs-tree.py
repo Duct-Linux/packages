@@ -110,10 +110,29 @@ def load_index(src):
         except Exception as exc:
             why.append("urllib: %s" % exc)
             try:
-                body = subprocess.run(["curl", "-fsSL", src], capture_output=True,
-                                      timeout=120).stdout or None
-                if not body:
-                    why.append("curl: empty response")
+                # READ THE EXIT CODE, not just the body. -f catches HTTP errors
+                # and an empty body catches a total failure, but A TRANSFER THAT
+                # DIES MID-BODY EXITS NON-ZERO WITH PARTIAL STDOUT that sails
+                # past any size floor:
+                #     curl -fsSL --limit-rate 20k --max-time 2
+                #       -> exit 28, 62189 of 180224 bytes
+                # sqlite rejects the truncations tried so far, so this is a
+                # latent weakness rather than a live bug. WHAT IT COSTS IS THE
+                # ATTRIBUTION: the operator is told "database disk image is
+                # malformed", which reads as a corrupt PUBLISHED INDEX rather
+                # than as a download that stopped early -- and on the night the
+                # publish actually truncated, that message would have sent
+                # someone straight at the repository.
+                r = subprocess.run(["curl", "-fsSL", src], capture_output=True,
+                                   timeout=120)
+                if r.returncode != 0:
+                    why.append("curl: exit %d after %d byte(s) -- TRANSFER DID NOT "
+                               "COMPLETE, this is a download failure and not a bad index"
+                               % (r.returncode, len(r.stdout)))
+                elif not r.stdout:
+                    why.append("curl: exit 0 with an empty body")
+                else:
+                    body = r.stdout
             except Exception as exc2:
                 why.append("curl: %s" % exc2)
         if not body:
