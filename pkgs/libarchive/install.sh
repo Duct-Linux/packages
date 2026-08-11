@@ -38,9 +38,21 @@ found=$(grep -ao 'lib[a-z0-9_+-]*\.so\.[0-9]*' "$lib" | sort -u)
 echo "$found" | grep -q '^libc\.so' || \
 	die "the linkage scan found no libc reference; the scan is not working, so its result proves nothing"
 
-# The set this recipe declares, plus the two libc-family names every shared
-# object carries. Anything outside it was acquired by a probe nobody declared.
-expected='^lib\(c\|m\|z\|bz2\|lzma\|zstd\|crypto\|xml2\|acl\|attr\|pcre2[a-z0-9_-]*\)\.so\.'
+# The set this recipe declares, the two libc-family names every shared object
+# carries, AND libarchive ITSELF. Anything outside it was acquired by a probe
+# nobody declared.
+#
+# libarchive is in the list because THE OBJECT BEING SCANNED CARRIES ITS OWN
+# SONAME: libarchive.so's dynamic section contains the string libarchive.so.13,
+# and a scan for library references finds it like any other. It is not a
+# dependency, it is the name of the thing under test.
+#
+# This fired on the assertion's FIRST EVER EXECUTION -- every earlier attempt
+# died at configure, so the check had never once reached a built artefact. Its
+# opening act was to report the package it was guarding as a defect. An
+# assertion that has never run is a hypothesis about what would happen if it
+# did, and this one was wrong.
+expected='^lib\(archive\|c\|m\|z\|bz2\|lzma\|zstd\|crypto\|xml2\|acl\|attr\|pcre2[a-z0-9_-]*\)\.so\.'
 unexpected=$(echo "$found" | grep -v "$expected" || true)
 
 if [ -n "$unexpected" ]; then
