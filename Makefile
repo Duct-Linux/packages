@@ -210,7 +210,8 @@ CRYPTO_PKGS := \
 	npth libgpg-error \
 	libassuan libksba libgcrypt \
 	gnupg gpgme \
-	libseccomp libarchive ostree bubblewrap xdg-dbus-proxy
+	libseccomp libarchive ostree bubblewrap xdg-dbus-proxy \
+	dconf libpsl nghttp2 sqlite glib-networking
 
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
