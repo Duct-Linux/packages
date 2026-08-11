@@ -29,8 +29,13 @@ cd "$BUILD_DIR"
 make DESTDIR="$DESTDIR" install || die "make install failed"
 
 # The bootloader integration, which only an ostree-rooted system uses.
+# Both halves of the hook: the target under libexec and the link in grub.d.
+# The link is at /etc/grub.d only because this recipe now passes
+# --sysconfdir=/etc; without that it lands in /usr/etc and the removal misses
+# it, which is exactly what happened on the first attempt.
 rm -rf "$DESTDIR/usr/libexec/libostree/grub2-15_ostree" \
-       "$DESTDIR/etc/grub.d/15_ostree"
+       "$DESTDIR/etc/grub.d/15_ostree" \
+       "$DESTDIR/usr/etc/grub.d/15_ostree"
 
 finish_install
 
