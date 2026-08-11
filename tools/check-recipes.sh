@@ -419,11 +419,25 @@ def program_index() -> dict[str, set[str]]:
 
     missing = sorted(p for p in live if p not in committed)
     if missing:
+        # DELIBERATELY NOT "run `make program-index`", which is what this said
+        # and which is a destructive instruction after a partial build. That
+        # target regenerates the index WHOLESALE from out/pkgs, so in a fresh
+        # worktree holding one built package it writes nine entries over seven
+        # hundred and exits 0. This warning fires precisely when out/pkgs is
+        # incomplete, so naming the command here recommended it at the exact
+        # moment it was least safe to run.
+        #
+        # gen-program-index.py now refuses a large shrink outright -- advice can
+        # be ignored, a refusal cannot -- but the advice should not have to be
+        # overridden by a guard to be correct.
         warn("tools/program-index.tsv",
              f"{len(missing)} program(s) shipped by built packages are not in "
              f"the committed index ({', '.join(missing[:5])}"
              f"{'...' if len(missing) > 5 else ''}). "
-             "Run `make program-index` to regenerate it.")
+             "Regenerating the index (`make program-index`) is only safe after "
+             "a FULL build -- from a partial out/pkgs it would drop every "
+             "entry it cannot see. Ignore this unless you have built "
+             "everything.")
 
     if not index:
         warn("tools/program-index.tsv",
