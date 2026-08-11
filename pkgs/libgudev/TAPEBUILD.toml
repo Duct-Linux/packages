@@ -1,0 +1,36 @@
+[package]
+name = "libgudev"
+description = "GObject bindings for libudev, the way GNOME reads devices"
+version = "238.0.0"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+# libudev, which in this distribution comes from eudev rather than systemd.
+# meson asks for `libudev >= 251`; eudev's libudev.pc reports exactly 251, so
+# this is a hard floor with no headroom -- see pkg.env.
+eudev = ">=3.2.14"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+# -Dintrospection=enabled. GUdev exists to be used from higher-level code, and
+# gnome-settings-daemon and gnome-control-center reach it through the typelib.
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.0"
