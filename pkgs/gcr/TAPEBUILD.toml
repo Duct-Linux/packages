@@ -1,0 +1,59 @@
+[package]
+name = "gcr"
+description = "Certificate and key display for the GTK4 session, and its ssh-agent"
+# UPSTREAM IS 4.4.0.1, FOUR COMPONENTS, WHICH IS NOT SEMVER.
+#
+# tape's resolver requires a version that parses as semver and SKIPS a package
+# silently when it does not -- the recipe builds, the archive is produced, the
+# index accepts it, and nothing that depends on it ever resolves. Two packages
+# shipped in that state before check-recipes existed to catch it.
+#
+# So the package version is the three-component 4.4.0 and the fourth component
+# lives where it cannot do harm: SRC_URL and SRC_DIR carry the real 4.4.0.1,
+# and fetch.sh verifies the sha256 of that exact tarball. subversion is the
+# packaging revision and is not a place to encode upstream's fourth digit.
+version = "4.4.0"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+# The PKCS#11 layer. gck is gcr's wrapper over it, and the trust module is
+# where the certificates it displays come from.
+p11-kit = ">=0.25.5"
+# -Dcrypto=libgcrypt. Same keyring-stack argument as libsecret: one crypto
+# implementation across libsecret, gcr and gnome-keyring. Asserted as
+# DT_NEEDED rather than trusted, since the combo has a second real value.
+libgcrypt = ">=1.11.2"
+# -Dgtk4=true. This is the generation that exists to draw certificate and key
+# dialogs for the GTK4 session.
+gtk4 = ">=4.18.5"
+# gcr-ssh-agent stores and retrieves keys through the Secret Service.
+libsecret = ">=0.21.7"
+# NOT LINKED. -Dgpg_path bakes /usr/bin/gpg into GPG_EXECUTABLE and gcr EXECS
+# it to read OpenPGP keys -- an exec-time dependency no DT_NEEDED scan can
+# see, the same shape as p11-kit's asn1Parser.
+gnupg = ">=2.4.8"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"
+# -Dintrospection=true. gnome-shell reaches gcr through Gcr-4.
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.0"

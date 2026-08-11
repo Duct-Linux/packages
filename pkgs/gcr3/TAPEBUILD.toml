@@ -1,0 +1,53 @@
+[package]
+name = "gcr3"
+description = "gcr 3 compatibility libraries: the gck-1 and gcr-base-3 gnome-keyring requires"
+version = "3.41.2"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+# The PKCS#11 layer gck-1 wraps.
+p11-kit = ">=0.25.5"
+# gcr-3 takes libgcrypt unconditionally -- it has no -Dcrypto option, unlike
+# gcr-4. The same backend the rest of the keyring stack uses, and it satisfies
+# gnome-keyring's own libgcrypt >= 1.2.2 floor several times over.
+libgcrypt = ">=1.11.2"
+# NOT LINKED. -Dgpg_path bakes /usr/bin/gpg in and gcr EXECS it to read OpenPGP
+# keys -- invisible to any DT_NEEDED scan.
+gnupg = ">=2.4.8"
+#
+# DELIBERATELY ABSENT: gtk3, and libsecret.
+#
+# gtk3 because -Dgtk=false drops the UI library, the viewer and the prompter,
+# which is the whole of this package's GTK surface. That keeps gtk3 at exactly
+# one consumer in the distribution.
+#
+# libsecret because it is a dependency of gcr-ssh-agent, and -Dssh_agent=false
+# means no agent is built here -- gcr-4 owns /usr/libexec/gcr-ssh-agent, the
+# one path the two generations would otherwise both claim.
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"
+# NOT DECLARED: gobject-introspection and glib-introspection. This recipe
+# passes -Dintrospection=false, because gcr-3 ties vapi generation to
+# introspection with no option between them and vala is not packaged. The
+# gtk4 generation (pkgs/gcr) carries the typelibs for the consumers that
+# need them.
