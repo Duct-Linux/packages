@@ -79,14 +79,38 @@ if [ "$listed" -ne "$total" ]; then
     exit 1
 fi
 
-# Expired artefacts cannot be downloaded and must be NAMED, not skipped. A run
-# old enough to have lost artefacts needs a rebuild, and the difference between
-# "nothing matched" and "it is gone" has to survive into the log.
+# Expired artefacts cannot be downloaded and must be NAMED either way. The
+# difference between "nothing matched" and "it is gone" has to survive into the
+# log, because silently skipping an expired artefact is how a subset becomes a
+# publish.
+#
+# WHETHER EXPIRY IS FATAL DEPENDS ON WHO IS ASKING, and the two callers differ:
+#
+#   the triggering build   an expired artefact is a real failure. The run just
+#                          finished; if its own packages are already gone,
+#                          something is badly wrong and publishing a subset of
+#                          it is exactly the accident this script exists to
+#                          prevent.
+#   reconcile              expired is EXPECTED and is not an error. It sweeps
+#                          runs going back to the last successful publish, and
+#                          7-day retention means an old one has legitimately
+#                          lost its artefacts. Those need a rebuild, not a
+#                          failed publish -- failing there would let one aged
+#                          run block every future publish permanently.
+#
+# So the caller states which it is. It is not inferred, because a wrong guess is
+# silent in both directions.
 expired=$(awk -F'\t' '$3 == "true" && $2 ~ /^pkg-/ { print $2 }' "$work/all.tsv")
 if [ -n "$expired" ]; then
-    echo "::error::these artefacts have expired and cannot be collected:" >&2
-    echo "$expired" | sed 's/^/::error::  /' >&2
-    exit 1
+    if [ "${ALLOW_EXPIRED:-0}" = "1" ]; then
+        echo "::warning::run $run has expired artefacts; they cannot be recovered here" >&2
+        echo "$expired" | sed 's/^/::warning::  /' >&2
+        echo "::warning::these packages need a REBUILD -- nothing downstream will retry them" >&2
+    else
+        echo "::error::these artefacts have expired and cannot be collected:" >&2
+        echo "$expired" | sed 's/^/::error::  /' >&2
+        exit 1
+    fi
 fi
 
 awk -F'\t' '$3 != "true" && $2 ~ /^pkg-/ { print $1 "\t" $2 }' "$work/all.tsv" > "$work/want.tsv"

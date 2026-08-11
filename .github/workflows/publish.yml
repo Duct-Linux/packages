@@ -66,6 +66,77 @@ jobs:
           ./tools/collect-artefacts.sh \
             '${{ github.event.workflow_run.id || inputs.run_id || github.run_id }}' incoming
 
+      # RECONCILE, RATHER THAN REPLAY.
+      #
+      # A publish indexes only its TRIGGERING build's artefacts. The concurrency
+      # group holds at most ONE pending run, so when merges land in quick
+      # succession a newly arriving publish CANCELS THE ONE ALREADY QUEUED --
+      # and a cancelled publish never indexes its build's packages, with nothing
+      # anywhere that retries them.
+      #
+      # That is not hypothetical. Four PRs merged in fifty-five seconds one
+      # afternoon; two publishes were cancelled while pending, and libksba and
+      # libgcrypt were built, uploaded, and never indexed.
+      #
+      # The fix is to collect from every build whose publish MAY have been
+      # cancelled, rather than to detect which ones were. A replay mechanism has
+      # to notice that something did not happen, which is the category this
+      # project fails at; reconciling a superset has to notice nothing.
+      #
+      # THE WINDOW IS SELF-LIMITING: everything that completed since the last
+      # SUCCESSFUL publish. A successful publish moves the boundary forward, so
+      # the set empties itself and never grows without bound. No "last N runs"
+      # guess.
+      #
+      # Duplicates are free: the indexer below already skips any package whose
+      # sha256 matches the index, so a re-collected artefact costs one hash.
+      #
+      # THIS IS A DIFFERENT DEFECT FROM THE TRUNCATION ABOVE and must not be
+      # credited with covering it: that one drops artefacts WITHIN a single run,
+      # this one drops entire runs BETWEEN publishes. A publish can suffer
+      # either without the other. They share the collector precisely so the
+      # completeness assertion applies to both -- reconcile's original
+      # implementation used `gh run download --pattern`, which truncates the
+      # same way and would have re-introduced the bug the moment it landed.
+      - name: Collect artefacts whose publish may have been cancelled
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # An aged run that has lost its artefacts is expected here, and must
+          # not fail the publish -- otherwise one old run blocks every future
+          # publish for ever. It is still reported loudly and by name.
+          ALLOW_EXPIRED: '1'
+        run: |
+          set -euo pipefail
+          mkdir -p incoming
+
+          # The last publish that actually finished. Not this one -- it is still
+          # running -- and not a cancelled one, which is the whole point.
+          since=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow=publish.yml \
+                    --status success --limit 1 --json createdAt -q '.[0].createdAt' 2>/dev/null || true)
+          if [ -z "$since" ]; then
+            echo "::notice::no previous successful publish; nothing to reconcile"
+            exit 0
+          fi
+          echo "reconciling builds completed since $since"
+
+          # Successful main builds since then. jq does the comparison because
+          # these are ISO-8601 and string ordering is correct for that format.
+          runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow=build.yml \
+                   --branch main --status success --limit 50 \
+                   --json databaseId,createdAt \
+                   -q "[.[] | select(.createdAt > \"$since\") | .databaseId] | .[]" 2>/dev/null || true)
+
+          trigger='${{ github.event.workflow_run.id || inputs.run_id || github.run_id }}'
+          n=0
+          for r in $runs; do
+            # Already collected above.
+            [ "$r" = "$trigger" ] && continue
+            ./tools/collect-artefacts.sh "$r" incoming
+            echo "  reconciled artefacts from run $r"
+            n=$((n + 1))
+          done
+          echo "reconciled $n build run(s)"
+
       - name: Fetch the current index
         env:
           CREATE_REPO: ${{ inputs.create_repo }}
@@ -122,13 +193,26 @@ jobs:
             exit 0
           fi
 
-          # add-to-repo skips a package already indexed under the same
-          # (name, version, subversion, arch): it logs an error, exits 0 and
-          # leaves the existing row alone. So it cannot be relied on to catch a
-          # changed rebuild -- without the check below, the new bytes would be
-          # uploaded while the index kept the old sha256, and every client would
-          # fail its digest check against a file it is also told to cache for a
-          # year as immutable.
+          # WHY THIS CHECK EXISTS, STATED SO IT SURVIVES add-to-repo CHANGING:
+          # add-to-repo KEYS ON IDENTITY -- (name, version, subversion, arch) --
+          # AND NEVER LOOKS AT CONTENT. So it cannot detect a rebuild whose bytes
+          # changed under an unchanged identity, AT ANY EXIT CODE. That is a
+          # property of what it compares, not of what it returns.
+          #
+          # Said that way deliberately. This comment used to justify the check by
+          # saying add-to-repo "logs an error, exits 0 and leaves the existing row
+          # alone" -- and addToRepo.go has since been changed to exit 1, precisely
+          # so a caller can tell a duplicate from a success. Nothing here broke,
+          # because only the fresh set reaches add-to-repo and repairs are copied
+          # without re-indexing. But anyone tidying up would have read the stale
+          # sentence, checked the current exit code, concluded the workaround was
+          # obsolete, and deleted THE ONLY THING THAT DETECTS A CHANGED REBUILD.
+          # A justification that names an exit code expires when the exit code
+          # changes; one that names what the code compares does not.
+          #
+          # Without the check the new bytes would be uploaded while the index kept
+          # the old sha256, and every client would fail its digest check against a
+          # file it is also told to cache for a year as immutable.
           #
           # A published filename means one set of bytes, forever -- that is what
           # lets the server serve it as immutable for a year. So anything
@@ -173,6 +257,17 @@ jobs:
               # neither is worth overwriting a published file for: the bytes
               # clients already cached stay authoritative, and a real change
               # reaches them by bumping subversion.
+              # KNOWN TO FIRE ROUTINELY, WHICH LIMITS WHAT IT CAN BE USED FOR.
+              # One publish log carried seven of these across four packages --
+              # file, gettext and perl on both arches, uutils-coreutils on
+              # aarch64. Those first three embed build paths and timestamps, so
+              # the likelier reading is non-reproducibility rather than an
+              # unbumped recipe -- meaning the warning fires on every rebuild of
+              # them, for ever. A warning that always fires is noise, and noise
+              # is where a REAL unbumped recipe change would hide. Do not read a
+              # quiet log as "no unbumped changes"; that inference is not
+              # available until the reproducibility question is settled
+              # separately.
               echo "::warning::$b rebuilt with different content; keeping the published bytes." \
                    "If the change is intended, bump subversion in pkgs/$name/TAPEBUILD.toml."
             fi
