@@ -2,7 +2,7 @@
 name = "bluez"
 description = "Bluetooth protocol stack: bluetoothd, the daemon gnome-bluetooth talks to over D-Bus"
 version = "5.83.0"
-subversion = "1"
+subversion = "2"
 authors = ["Marcel Holtmann and the BlueZ project"]
 packagers = ["ItzYanick"]
 
@@ -28,6 +28,11 @@ glibc = ">=2.42.0"
 glib = ">=2.84.0"
 dbus = ">=1.16.0"
 eudev = ">=3.2.14"
+# --enable-client. bluetoothctl links readline, and configure.ac line 333 makes
+# it a hard error rather than a degradation, so the flag and this dependency are
+# one decision. Adding it is what costs the subversion bump above: this reaches
+# TAPEPACKAGE.toml, and bluez 5.83.0-1 is already published.
+readline = ">=8.3.0"
 # NOT DECLARED AND DELIBERATELY SO: polkit. bluez carries its OWN polkit client
 # -- gdbus/polkit.c, which speaks org.freedesktop.PolicyKit1 over the bus and is
 # reached from gdbus/object.c's method dispatch. It links nothing from polkit and
