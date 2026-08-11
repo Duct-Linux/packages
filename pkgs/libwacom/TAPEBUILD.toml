@@ -1,0 +1,43 @@
+[package]
+name = "libwacom"
+description = "Tablet database: what mutter and the Wacom panel ask about a graphics tablet"
+version = "2.16.1"
+subversion = "1"
+authors = ["The linuxwacom project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+# dependency('gudev-1.0') with no `required` argument: unconditional. This is
+# how libwacom reads device properties out of udev to match a tablet against
+# its database.
+libgudev = ">=238.0.0"
+# dependency('libevdev'), also unconditional -- the kernel input protocol the
+# device descriptions are written against.
+libevdev = ">=1.13.4"
+# Not linked. libwacom installs udev rules and hwdb entries into
+# /usr/lib/udev, which is eudev's directory, and they are what tag a tablet so
+# anything above can find it.
+eudev = ">=3.2.14"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+# meson.build:22 runs pymod.find_installation('python3', required: true)
+# UNCONDITIONALLY -- outside the tests block -- to generate the udev rules and
+# the hwdb. A hard build dependency even with -Dtests=disabled.
+python = ">=3.13.7"

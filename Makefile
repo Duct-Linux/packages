@@ -330,7 +330,8 @@ CRYPTO_PKGS := \
 # The internal order is the dependency order.
 SERVICES_PKGS := \
 	polkit libgudev upower accountsservice \
-	libtasn1 nettle libunistring p11-kit gnutls
+	libtasn1 nettle libunistring p11-kit gnutls \
+	libsecret libwacom
 
 # Networking and Bluetooth: the daemons and libraries gnome-control-center's
 # Network, Wi-Fi and Bluetooth panels talk to. A tier of its own rather than an

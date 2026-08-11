@@ -1,0 +1,43 @@
+[package]
+name = "libsecret"
+description = "Secret Service client library: how applications store a password in the keyring"
+version = "0.21.7"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+# -Dcrypto=libgcrypt. The transport encryption between an application and the
+# keyring daemon. Pinned rather than left to the combo default because gnutls
+# is now packaged too and would have been a silent alternative; libgcrypt keeps
+# one crypto backend across libsecret, gcr and gnome-keyring. Asserted as
+# DT_NEEDED in install.sh, since 'disabled' is also a valid value and would
+# look identical in the payload.
+libgcrypt = ">=1.11.2"
+# The Secret Service API is a session-bus interface; without dbus there is
+# nothing for this library to talk to.
+dbus = ">=1.16.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"
+# -Dintrospection=true. gcr, gnome-keyring and the shell's JavaScript reach
+# this library through Secret-1 rather than by linking it.
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.0"
