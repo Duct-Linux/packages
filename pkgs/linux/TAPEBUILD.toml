@@ -33,7 +33,25 @@ perl = ">=5.42.0"
 # CONFIG_SYSTEM_TRUSTED_KEYRING is set, which arm64's defconfig sets by way of
 # CONFIG_INTEGRITY -- so this is a dependency even though Duct signs no
 # modules.
-openssl = ">=4.0.1"
+#
+# ">=4.0.1" UNTIL NOW, WHICH NOTHING IN THIS TREE COULD SATISFY. The tree
+# packages openssl 3.5.7 (repinned from 4.0.1 when python's _ssl and curl both
+# failed to compile against 4.0 -- see pkgs/openssl/pkg.env), so this asked for
+# a version no recipe here builds. It was satisfiable only by openssl 4.0.1-1,
+# a package still being SERVED from the index but no longer built from this
+# tree.
+#
+# Nothing reported it, and nothing would have: check_dependencies() in
+# tools/check-recipes.sh does `table.pop("build")` and then verifies only that
+# each build dependency NAMES a real recipe -- build-dependency CONSTRAINTS are
+# never compared against anything. CI did not report it either, because the
+# seed step has no constraint logic at all: it untars every published package
+# and the build takes whatever lands. So this line was documentation that
+# disagreed with the tree, in the one place nothing checks.
+#
+# Bounded to the packaged series for the same reason as every other openssl
+# consumer here: it names what this package is actually built against.
+openssl = ">=3.5.0,<4.0.0"
 flex = ">=2.6.4"
 bison = ">=3.8.2"
 kmod = ">=33.0.0"
