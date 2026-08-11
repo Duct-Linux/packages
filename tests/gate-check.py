@@ -59,6 +59,16 @@ that cannot tell you it is broken is not.
 Set DUCT_REPO_DB to point at another index, or at a URL that cannot work, to
 exercise the 2 path.
 
+THE LAST LINE OF OUTPUT NAMES THE EXIT CODE, and that is not decoration. The
+author of this file ran it as `gate-check.py util-linux | tail -3`, printed the
+PIPELINE's status -- tail's, which is always 0 -- and would have read a shut
+gate as an open one, on the night it mattered, using the tool written so that
+could not happen. What saved it was that the TEXT said ABSENT and disagreed
+with the number.
+Two channels that can be read independently is a design where one can be
+dropped silently. So the text now REPORTS the status: whichever channel you
+read, you get the same statement, and a pipeline cannot separate them.
+
 WHAT THIS ANSWER IS AND IS NOT, because the distinction cost a wrong prediction
 on 2026-08-10. This reports the index AS OF NOW. A CI job does not use "now":
 it fetches the index once, at job start, and a merge that publishes during the
@@ -165,15 +175,19 @@ def main(names):
             % ", ".join(missing_floor))
 
     ready = True
+    verdicts = []
     for name in names:
         have = arches.get(name)
         if not have:
             print("  ABSENT      %-14s — not published at all; wait" % name)
+            verdicts.append("%s ABSENT" % name)
             ready = False
         elif have == {"any"}:
             print("  READY       %-14s %s  (any)" % (name, version[name]))
+            verdicts.append("%s READY" % name)
         elif REQUIRED <= have:
             print("  READY       %-14s %s  (%s)" % (name, version[name], ", ".join(sorted(have))))
+            verdicts.append("%s READY" % name)
         else:
             missing = ", ".join(sorted(REQUIRED - have))
             print("  INCOMPLETE  %-14s %s  has %s, MISSING %s"
@@ -186,7 +200,11 @@ def main(names):
             print("              was published and lost (remedy: republish) or %s was" % missing)
             print("              never built (remedy: rebuild). The index records what")
             print("              is there, not what should have been. Check the run.")
+            verdicts.append("%s INCOMPLETE" % name)
             ready = False
+
+    # The verdict and the exit code, in the channel that survives a pipe.
+    print("gate-check: %s — exit %d" % ("; ".join(verdicts), 0 if ready else 1))
 
     return 0 if ready else 1
 
@@ -208,4 +226,5 @@ if __name__ == "__main__":
         print("  Nothing above should be read as 'not ready'. Fix the fetch and", file=sys.stderr)
         print("  re-run; `curl -fsSL <index>` is a quick way to tell whether the", file=sys.stderr)
         print("  host or this program is at fault.", file=sys.stderr)
+        print("gate-check: COULD NOT ANSWER — exit 2")
         sys.exit(2)
