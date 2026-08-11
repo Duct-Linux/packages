@@ -1,0 +1,47 @@
+[package]
+name = "ModemManager"
+description = "Mobile broadband modem daemon, and the mm-glib NetworkManager needs for its modem support"
+version = "1.24.2"
+subversion = "1"
+authors = ["Aleksander Morgado and the ModemManager developers"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+# gudev-1.0 >= 232, meson.build 192. The only REQUIRED dependency the book
+# lists, and the one this package waits on: it is how ModemManager notices a
+# modem appearing on the bus at all.
+libgudev = ">=238.0.0"
+# -Dpolkit=strict. The authorization layer, and the same decision
+# NetworkManager's -Dpolkit makes -- 'permissive' would compile in a default
+# policy of "yes" for every caller.
+polkit = ">=126.0.0"
+# The bus its whole API is exposed on, and where the policy this package
+# installs is read from.
+dbus = ">=1.16.0"
+# libudev, underneath libgudev, and directly for the udev rules this installs.
+eudev = ">=3.2.14"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+# -Dintrospection=true. mm-glib's typelib is how anything above C reaches this
+# daemon. Two packages: the scanner from gobject-introspection, the GObject
+# typelibs it reads from glib-introspection.
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.0"
+gettext = ">=0.26.0"
