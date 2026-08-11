@@ -1,0 +1,74 @@
+[package]
+name = "flatpak"
+description = "Application sandboxing and distribution framework"
+version = "1.16.1"
+subversion = "1"
+authors = ["Alexander Larsson and contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+# Every one of these is a dependency() call in flatpak's meson.build with NO
+# option guard, except where noted. This is not a conservative list -- it is the
+# list, and it is why nineteen recipes precede this one.
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+libcap = ">=2.76.0"
+# dependency('libarchive', version : '>=2.8.0')
+libarchive = ">=3.8.1"
+# dependency('libcurl', version : '>=7.29.0') -- and the reason ostree is built
+# --with-curl: this line means curl is in the process regardless, so a second
+# HTTP client would be additive rather than alternative.
+curl = ">=8.13.0"
+# dependency('libxml-2.0', version : '>=2.4')
+libxml2 = ">=2.13.0"
+# dependency('ostree-1')
+ostree = ">=2025.4.0"
+# dependency('json-glib-1.0')
+json-glib = ">=1.10.6"
+# dependency('appstream', version : '>=0.12.0')
+appstream = ">=1.0.4"
+# dependency('gdk-pixbuf-2.0')
+gdk-pixbuf = ">=2.42.12"
+# dependency('gpgme', version : '>=1.8.0') -- the single line that required the
+# whole GnuPG chain. gpgme spawns gpg, so gnupg is a runtime dependency of
+# gpgme rather than a link-time one, and arrives transitively.
+gpgme = ">=2.0.0"
+# fuse3 or fuse2, required: revokefs-fuse and the document portal's
+# /run/user/<uid>/doc mount.
+fuse3 = ">=3.16.2"
+# Named options rather than auto, so all four are hard dependencies here.
+libseccomp = ">=2.6.0"
+zstd = ">=1.5.7"
+dconf = ">=0.40.0"
+wayland = ">=1.23.1"
+# The two sandbox enforcement points, taken from the system rather than built as
+# vendored subprojects. See -Dsystem_bubblewrap and -Dsystem_dbus_proxy.
+bubblewrap = ">=0.11.0"
+xdg-dbus-proxy = ">=0.1.6"
+
+[dependencies.build]
+# The variant-schema compiler is written against it, and meson stops at
+# configure without it -- not a test dependency: it generates C source the
+# build then compiles, so it runs whatever else is disabled.
+#
+# check-recipes named this in advance, by package name, and the line was read
+# past because it is a warning rather than a problem.
+python-pyparsing = ">=3.3.2"
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"
+# wayland-scanner and the protocol XML, for -Dwayland_security_context=enabled.
+wayland-protocols = ">=1.41.0"
