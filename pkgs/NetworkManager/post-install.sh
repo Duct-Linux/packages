@@ -99,9 +99,29 @@ else
 	log "warning: readelf is unavailable, so the crypto-backend check DID NOT RUN."
 fi
 
+# --- the WWAN plugin, which is what -Dmodem_manager=true actually produces ---
+# The flag does not change the daemon: mm-glib is linked into the WWAN plugin
+# (src/core/devices/wwan/meson.build 7 and 43), installed into the plugin
+# directory. So the daemon existing proves nothing about modem support, and the
+# plugin's presence is the outcome.
+#
+# Asserted by glob rather than by a fixed path, because the plugin directory is
+# versioned and a hardcoded 1.54.0 would silently stop matching on the next
+# version bump -- an assertion that quietly tests nothing is worse than none.
+wwan=$(find "$DESTDIR/usr/lib/NetworkManager" -name 'libnm-device-plugin-wwan.so' -print -quit 2>/dev/null || true)
+[ -n "$wwan" ] \
+	|| die "the WWAN device plugin was not installed; -Dmodem_manager=true did not take effect and there would be no mobile broadband panel"
+if command -v readelf >/dev/null 2>&1; then
+	readelf -d "$wwan" 2>/dev/null | grep -q "libmm-glib.so" \
+		|| die "the WWAN plugin does not link libmm-glib; it cannot talk to ModemManager"
+fi
+
 # --- what this package still cannot do, said out loud on every build ---------
-# Not an assertion. A capability absent by decision, invisible in a build log,
-# in the meson summary and in the installed tree -- so this is the only place
-# it can be seen.
-log "note: -Dmodem_manager=false, so there is no mobile broadband panel until"
-log "note: mm-glib exists (ModemManager, which waits on libgudev)."
+# Not an assertion, and not this package's decision. NetworkManager has full
+# mobile broadband support; what it can DRIVE is bounded by ModemManager, which
+# is built without MBIM, QMI and QRTR -- so the AT-command path is what remains,
+# and most current LTE and 5G hardware is not driven. Deferred deliberately.
+# See pkgs/ModemManager/pkg.env; repeated here only because this is the package
+# whose panel the absence shows up in.
+log "note: mobile broadband is built and wired, but ModemManager is compiled"
+log "note: without MBIM/QMI/QRTR, so only AT-command modems will be driven."

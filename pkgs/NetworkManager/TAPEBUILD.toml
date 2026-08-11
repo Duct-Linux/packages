@@ -48,6 +48,15 @@ libpsl = ">=0.21.0"
 # window in which it is free: [dependencies] reaches TAPEPACKAGE.toml, so the
 # same change after publication would cost a subversion bump and a rebuild.
 gnutls = ">=3.8.0"
+# -Dmodem_manager=true. mm-glib comes from ModemManager, and meson.build 610-611
+# is a bare dependency() with no required:false, so this is not optional once
+# the flag is on -- it is the mobile broadband panel's entire backend.
+#
+# Declared while this package was still banked, for the same reason gnutls was:
+# [dependencies] reaches TAPEPACKAGE.toml. The sequencing that made it possible
+# -- libgudev, then ModemManager, then this -- was the point of building
+# ModemManager first rather than turning the flag on later.
+ModemManager = ">=1.24.0"
 # THE AUTHORIZATION LAYER, and the reason -Dpolkit=false is forbidden here:
 # without it NM compiles in main.auth-polkit=false and performs no
 # authorization on its D-Bus API at all. See pkg.env.
