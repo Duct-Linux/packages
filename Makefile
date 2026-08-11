@@ -465,8 +465,14 @@ GNOME_PKGS := \
 # requirement. Placing it in NETWORK_PKGS with the rest of this chain's work is
 # what a topic-based reading would do, and check-build-order rejects it:
 # "out of order: gtk3 (position 163) needs at-spi2-core (position 168)".
+#
+# libnma is the consumer gtk3 was packaged FOR, and it lands here rather than in
+# NETWORK_PKGS for the same reason gtk3 does: it needs gtk3, which needs
+# at-spi2-core from GNOME_PKGS. It also needs NetworkManager, which is in
+# NETWORK_PKGS -- earlier -- so both of its edges point backwards from here,
+# which is the direction that works.
 NETWORK_UI_PKGS := \
-	gtk3
+	gtk3 libnma
 
 # The JavaScript engine chain, and the reason it is a chain rather than a
 # package: gnome-shell and gnome-settings-daemon are GJS applications -- the
