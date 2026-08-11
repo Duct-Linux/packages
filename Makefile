@@ -497,7 +497,7 @@ GNOME_PKGS := \
 	libnotify at-spi2-core \
 	libusb libgusb \
 	highway libjxl \
-	colord gnome-desktop \
+	colord \
 	libogg libvorbis libcanberra sound-theme-freedesktop \
 	xcb-util startup-notification
 
@@ -521,6 +521,29 @@ GNOME_PKGS := \
 # which is the direction that works.
 NETWORK_UI_PKGS := \
 	gtk3 libnma
+
+# The GNOME components that are GTK 3 programs, and therefore cannot be built
+# until gtk3 exists.
+#
+# WHY THIS GROUP HAS TO EXIST, because the obvious question is why these are not
+# in GNOME_PKGS with the rest of the tier. There is a real ordering constraint
+# and no arrangement of the existing groups satisfies it:
+#
+#     gtk3           needs at-spi2-core, which is in GNOME_PKGS
+#     gnome-desktop  needs gtk3, which is therefore after GNOME_PKGS
+#
+# so a gnome-desktop inside GNOME_PKGS is unsatisfiable -- which is exactly what
+# check-build-order says: "out of order: gnome-desktop needs gtk3". That
+# constraint is also why gnome-desktop was briefly built WITHOUT its GTK 3
+# library: turning the library off made the ordering problem disappear, and the
+# ordering problem was the only evidence that anything was wrong.
+#
+# This is the group gnome-session and gnome-settings-daemon join when they land
+# -- both are GTK 3 programs (gnome-session/meson.build:86, and
+# gnome-settings-daemon/meson.build:107 wants gtk+-x11-3.0 specifically) -- and
+# mutter follows them, because it needs gnome-desktop-4 from here.
+GNOME_UI_PKGS := \
+	gnome-desktop
 
 # The JavaScript engine chain, and the reason it is a chain rather than a
 # package: gnome-shell and gnome-settings-daemon are GJS applications -- the
@@ -557,7 +580,7 @@ ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
 	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(XORG_PKGS) $(GNOME_PKGS) \
-	$(NETWORK_UI_PKGS) $(BOOT_PKGS)
+	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #
