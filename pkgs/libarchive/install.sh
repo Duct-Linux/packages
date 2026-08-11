@@ -52,7 +52,7 @@ echo "$found" | grep -q '^libc\.so' || \
 # opening act was to report the package it was guarding as a defect. An
 # assertion that has never run is a hypothesis about what would happen if it
 # did, and this one was wrong.
-expected='^lib\(archive\|c\|m\|z\|bz2\|lzma\|zstd\|crypto\|xml2\|acl\|attr\|pcre2[a-z0-9_-]*\)\.so\.'
+expected='^lib\(archive\|c\|m\|z\|bz2\|lzma\|zstd\|crypto\|xml2\|acl\|attr\)\.so\.'
 unexpected=$(echo "$found" | grep -v "$expected" || true)
 
 if [ -n "$unexpected" ]; then
@@ -61,15 +61,15 @@ if [ -n "$unexpected" ]; then
 	die "undeclared dependencies acquired by configure probe: $(echo $unexpected). Declare them in TAPEBUILD.toml or disable the probe; an undeclared link is what produced the binutils/zstd bootstrap cycle."
 fi
 
-# And the open question this recipe recorded rather than guessed at: pcre2 was
-# declared because its probe is ungated and pcre2 is packaged, while the CLI
-# tools that use it are disabled. Report the answer instead of leaving it to a
-# future reader -- not fatal either way, because a declared-but-unused
-# dependency costs one seed edge and is the safe direction of the two.
-if echo "$found" | grep -q '^libpcre2'; then
-	log "pcre2 IS linked; the declaration in TAPEBUILD.toml is load-bearing"
-else
-	log "pcre2 is NOT linked despite being probed and present; the declaration is unnecessary and can be removed"
-fi
+# The pcre2 question this recipe used to carry is SETTLED and the reporting block
+# is gone with it. It printed "pcre2 is NOT linked despite being probed and
+# present" on both architectures on the first build that ever completed, so the
+# declaration has been removed from TAPEBUILD.toml and libpcre2 has been dropped
+# from `expected` above. The check that used to report it is now the general
+# assertion: if pcre2 ever does reach the linked set, it is undeclared and fails.
+#
+# Kept as a comment rather than deleted outright because "why is pcre2 not
+# declared when configure clearly finds it" is a question the next reader will
+# have, and the answer is a measurement rather than a judgement.
 
 log "installed libarchive; linked set matches the declared set"
