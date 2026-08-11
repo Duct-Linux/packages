@@ -1,0 +1,26 @@
+[package]
+name = "xcb-util"
+description = "Utility functions for the X C Binding"
+version = "0.4.1"
+subversion = "1"
+authors = ["The XCB Developers"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+libxcb = ">=1.17.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"

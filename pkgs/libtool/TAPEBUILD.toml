@@ -1,0 +1,25 @@
+[package]
+name = "libtool"
+description = "Generic library support script and libltdl"
+version = "2.5.4"
+subversion = "1"
+authors = ["Free Software Foundation"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]
+m4 = ">=1.4.20"

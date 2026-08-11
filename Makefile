@@ -99,9 +99,17 @@ BASE_PKGS := \
 # nmcli unbuildable no matter how correct the recipe was. bluez's
 # --enable-client and wpa_supplicant's wpa_cli completion are the same shape,
 # one tier apart.
+# libtool sits here for the same reason readline does, one line above: it is an
+# LFS chapter 8 package that needs nothing beyond what BASE_PKGS already built,
+# so this list is where the book puts it and the earliest point it can go.
+#
+# It is packaged for libltdl rather than for the libtool script. libcanberra
+# dlopens its sound backends through libltdl and its configure raises
+# AC_MSG_ERROR without it -- and libcanberra is six groups later, so a position
+# this early costs nothing and cannot be wrong.
 BUILDER_PKGS := \
 	m4 bison flex make gawk sed grep findutils diffutils \
-	tar gzip xz bzip2 patch file readline perl texinfo
+	tar gzip xz bzip2 patch file readline libtool perl texinfo
 
 # Built in duct/rust rather than duct/chroot, because there is no cargo in the
 # standard build image. Cross-linked against Duct's own glibc, so the result is
@@ -405,10 +413,24 @@ NETWORK_PKGS := \
 # the earlier lists are rearranged -- the same argument CRYPTO_PKGS makes for
 # its own position, and one fewer thing to get wrong as this list grows.
 #
-# The internal order is the dependency order, and five edges here are real:
-# libgusb needs libusb, libjxl needs highway, libjxl needs lcms2, and colord
-# needs BOTH lcms2 and libgusb -- which is why lcms2 stays first in this list
-# even though the wave that added it is long done, and why colord is last.
+# The internal order is the dependency order, and these edges are real:
+# libgusb needs libusb; libjxl needs highway and lcms2; colord needs both lcms2
+# and libgusb; libvorbis needs libogg; libcanberra needs both of those; and
+# startup-notification needs xcb-util. That is why lcms2 stays first in this
+# list even though the wave that added it is long done, and why each pair below
+# is written in the order it is.
+#
+# The last two lines are mutter's prerequisites rather than desktop components
+# in their own right. libogg/libvorbis/libcanberra/sound-theme-freedesktop exist
+# because mutter's -Dsound_player defaults true and resolves libcanberra; the
+# theme is separate from the player and nothing at build time joins them, so
+# both are here or the desktop is silently mute. xcb-util/startup-notification
+# exist because mutter's have_x11_client is `have_x11 or have_xwayland` -- false
+# for x11 and TRUE for xwayland -- so X startup feedback survives even in a tree
+# that runs no X server.
+#
+# libcanberra also needs libltdl, which is NOT in this group: libtool is an LFS
+# chapter 8 package and sits in BUILDER_PKGS, far earlier.
 # The rest resolve outside the group: lcms2 wants libjpeg-turbo and libtiff from
 # GTK_PKGS, libnotify and libjxl want gdk-pixbuf from the same, libjxl also
 # wants brotli from FONT_PKGS and libpng from there too, and at-spi2-core wants
@@ -427,7 +449,9 @@ GNOME_PKGS := \
 	libnotify at-spi2-core \
 	libusb libgusb \
 	highway libjxl \
-	colord gnome-desktop
+	colord gnome-desktop \
+	libogg libvorbis libcanberra sound-theme-freedesktop \
+	xcb-util startup-notification
 
 # The GTK 3 island, and it is an island on purpose.
 #
