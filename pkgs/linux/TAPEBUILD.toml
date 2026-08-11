@@ -2,7 +2,7 @@
 name = "linux"
 description = "The Linux kernel, its modules and its device trees"
 version = "6.16.1"
-subversion = "1"
+subversion = "2"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 
