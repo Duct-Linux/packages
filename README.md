@@ -243,8 +243,28 @@ keep new ones that way.
 - A dependency constraint of `"2.43"` is not exact — it means `>=2.43.0,
   <2.44.0`. Resolution also keys "already visited" on the package name alone, so
   in a diamond the first constraint reached wins. Keep constraints loose.
-- `[dependencies.build]` is discarded at wrap time and installed by nothing. It
-  documents intent; the build **order** lives in `ALL_PKGS` in the Makefile.
+- `[dependencies.build]` is discarded at wrap time and **installed** by nothing,
+  but it is **not** inert and it is not merely documentation. **Declare what a
+  recipe needs.** There are two independent build orders and it feeds one of
+  them:
+  - **CI** — `tools/dep-levels.sh` reads *both* `[dependencies]` and
+    `[dependencies.build]` to assign levels. An undeclared dependency can
+    therefore be scheduled at the same level as its consumer, or later.
+  - **`make repo`** — the order lives in `ALL_PKGS` in the Makefile, which is
+    maintained by hand. `tools/check-build-order.sh` cross-checks the two, so
+    adding a declaration can legitimately *fail* that check until `ALL_PKGS`
+    is reordered to match. That failure is the tool working.
+
+  This bullet used to say the field only "documents intent", full stop. That
+  reading is why five packages went undeclared and were built before the
+  libraries they needed: `ncurses` before `pkgconf` (so it shipped no `.pc`
+  files), `patch` and `gettext` before `attr`/`acl`, `file` before `zstd`,
+  `perl` before `libxcrypt`. Configure found nothing and silently built without
+  the features, and the omission reached the published repository.
+
+  Put a dependency in `[dependencies]` if the built artefact links it at run
+  time — check `DT_NEEDED`, not a string in the binary — and in
+  `[dependencies.build]` if it is only needed to build.
 - Two packages owning the same path is a hard install error with no override.
   The generic `install.sh` drops `usr/share/info/dir` and `*.la` for this reason.
 - `package.arch` cannot be set in the recipe. It comes from `--target`, which

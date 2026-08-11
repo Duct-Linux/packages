@@ -20,5 +20,6 @@ script = "../_scripts/install.sh"
 
 [dependencies]
 glibc = ">=2.42.0"
+attr = ">=2.5.2"
 
 [dependencies.build]

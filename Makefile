@@ -60,14 +60,30 @@ TARGET    ?= $(HOST_ARCH)-linux-gnu
 # Toolchain first, because everything after it links against glibc and is
 # compiled by gcc; then the userland; then the two packages that are not built
 # from an upstream tarball at all.
+#
+# pkgconf, attr, acl, libxcrypt and zstd sit between the toolchain and ncurses
+# because five packages built very early turn out to need them, and each was
+# previously built LATER than its consumer:
+#
+#   ncurses needs pkgconf     or it installs no .pc files at all
+#   patch, gettext need attr  for extended attributes; gettext also needs acl
+#   file needs zstd           or it cannot read zstd archives
+#   perl needs libxcrypt      for libcrypt.so.2
+#
+# None of that was declared, so configure simply did not find them and built
+# without the features, silently -- and the published packages carried that
+# omission until the artefacts were diffed against a rebuild. They need only
+# glibc themselves (acl also needs attr, which precedes it), so this is the
+# earliest point they can go.
 BASE_PKGS := \
 	duct-filesystem linux-headers glibc zlib \
 	gmp mpfr mpc binutils gcc \
+	pkgconf attr acl libxcrypt zstd \
 	ncurses bash
 
 BUILDER_PKGS := \
 	m4 bison flex make gawk sed grep findutils diffutils \
-	tar gzip xz bzip2 patch file pkgconf perl texinfo
+	tar gzip xz bzip2 patch file perl texinfo
 
 # Built in duct/rust rather than duct/chroot, because there is no Rust compiler
 # in the Duct package set. Cross-linked against Duct's own glibc, so the result
@@ -125,7 +141,7 @@ TOOLS_PKGS := \
 	python-setuptools python-pyyaml python-pycparser
 
 SESSION_PKGS := \
-	libxcrypt attr acl libcap expat pcre2 \
+	libcap expat pcre2 \
 	util-linux linux-pam shadow kmod eudev \
 	dbus duktape iso-codes xkeyboard-config hwdata elogind
 
@@ -154,7 +170,9 @@ GTK_PKGS := \
 	gsettings-desktop-schemas \
 	gtk4 libadwaita adwaita-icon-theme cantarell-fonts
 
-# The GnuPG chain, plus zstd, which flatpak and libarchive both want.
+# The GnuPG chain. zstd used to live here -- flatpak and libarchive both want
+# it -- and moved into BASE_PKGS when `file` declared it, because file is built
+# far earlier than this group.
 #
 # Placed after GTK_PKGS rather than near the other libraries, and the reason is
 # dependency order rather than taste: libgpg-error needs gettext at build time,
@@ -164,8 +182,8 @@ GTK_PKGS := \
 # grows -- gnupg and gpgme are next, and gnupg additionally needs zlib and bzip2
 # from BASE_PKGS and BUILDER_PKGS.
 #
-# The internal order is the dependency order. zstd and npth need nothing beyond
-# libc; libgpg-error is the base of the rest; libassuan, libksba and libgcrypt
+# The internal order is the dependency order. npth needs nothing beyond libc;
+# libgpg-error is the base of the rest; libassuan, libksba and libgcrypt
 # each need it and none of them needs the others.
 #
 # Why these six existed unlisted at all: they merged before #11 added the rule
@@ -175,7 +193,7 @@ GTK_PKGS := \
 # found them on its first run against main.
 CRYPTO_PKGS := \
 	fuse3 \
-	zstd npth libgpg-error \
+	npth libgpg-error \
 	libassuan libksba libgcrypt \
 	gnupg
 
