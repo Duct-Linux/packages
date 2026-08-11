@@ -219,6 +219,21 @@ def _semver(text):
     prerelease sorts BELOW the same version without one, which is what the
     empty-tuple/one-tuple pair encodes.
 
+    WHEN YOU CHANGE THIS FUNCTION, RUN IT OVER THE REAL INDEX AS WELL AS THE
+    FIXTURES. The fixtures are synthetic and assert specific cases; only the
+    published index can tell you the parser still covers the whole population:
+
+        curl -fsSL -o /tmp/r.db https://repo.duct.dss-net.de/repo.db
+        # then resolve every name and count how many rows fail to parse
+
+    That check has been run once, by hand, and is recorded here because its
+    result lived only in a session: 144 names resolved, ZERO unparseable rows.
+    Zero is the number that matters -- every subversion in the index is a bare
+    integer, so the leniency above is not covering a corner, it is carrying the
+    entire index. A stricter regex would skip every row and report all 144 names
+    UNUSABLE, which reads as a catastrophic index failure rather than a parser
+    bug.
+
     None means "tape could not parse this either", and the caller must then
     skip the row rather than guess -- see selectLatest().
     """
