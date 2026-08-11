@@ -2,7 +2,7 @@
 name = "libepoxy"
 description = "OpenGL function pointer management library"
 version = "1.5.10"
-subversion = "1"
+subversion = "2"
 authors = ["The libepoxy authors"]
 packagers = ["ItzYanick"]
 
@@ -26,3 +26,20 @@ mesa = ">=25.0.0"
 meson = ">=1.8.0"
 ninja = ">=1.13.0"
 pkgconf = ">=2.5.0"
+# -Dx11=true, which -Dglx=yes cannot be set without. BUILD ONLY, AND THE FIRST
+# DRAFT OF THIS RECIPE HAD IT WRONG: it declared libX11 as a runtime dependency
+# on the assumption that a GLX dispatch library links X11. It does not.
+#
+# The built libepoxy.so.0 carries exactly two NEEDED entries, libc and the
+# loader, and references ZERO undefined X11 symbols -- checked with readelf
+# rather than assumed, which is the rule packages/README.md states: put it in
+# [dependencies] if the artefact links it AT RUN TIME, check DT_NEEDED, not a
+# string in the binary. libepoxy resolves both GL and GLX by dlopen, so it links
+# neither GL nor X11.
+#
+# X11 is needed to COMPILE: the installed epoxy/glx.h includes X11/Xlib.h and
+# X11/Xutil.h, and epoxy.pc carries "Requires.private: x11, egl". So every
+# CONSUMER of the GLX header needs the X11 headers too -- which is gtk4's
+# problem and gtk4 declares it -- and this package needs them to build its own
+# dispatch.
+libX11 = ">=1.8.10"
