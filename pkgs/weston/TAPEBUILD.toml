@@ -1,0 +1,76 @@
+[package]
+name = "weston"
+description = "Reference Wayland compositor"
+version = "14.0.2"
+subversion = "1"
+authors = ["The Wayland project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+wayland = ">=1.23.1"
+libdrm = ">=2.4.124"
+pixman = ">=0.44.2"
+libinput = ">=1.28.1"
+libxkbcommon = ">=1.8.1"
+# EGL, GLES and GBM. libweston requires gbm >= 21.1.1; mesa 25.0.7 clears it.
+# The absent libGL.so is irrelevant here -- see pkg.env.
+mesa = ">=25.0.7"
+# libudev, which weston asks for as ">= 136" and eudev satisfies by advertising
+# Version: 251 in libudev.pc despite being package version 3.2.14.
+eudev = ">=3.2.14"
+# libseat, taken unconditionally whenever backend-drm is on. Not an option in
+# this release: there is no -Dlauncher-libseat to turn it off.
+seatd = ">=0.9.1"
+# Pinned to the 0.2 SERIES rather than to a floor.
+#
+# libweston/backend-drm/meson.build imposes
+#     dependency('libdisplay-info', version: ['>= 0.1.1', '< 0.3.0'])
+# -- an UPPER bound, and 0.3.0 already exists upstream, so a bare ">=0.1.1"
+# would admit a version that fails weston's own configure.
+#
+# The bare "0.2" spelling is neither a typo nor a floor, and it is verified
+# against tape's resolver rather than assumed: daemon/utils/queryPkg.go calls
+# semver.NewConstraint (Masterminds/semver v3.2.1), where a constraint with no
+# operator dispatches to constraintTildeOrEqual, which applies tilde semantics
+# when parseConstraint marks it dirty -- and a two-component constraint is
+# marked dirty exactly there. So "0.2" resolves to >=0.2.0, <0.3.0: a subset of
+# weston's range, pinning the minor series actually built against.
+libdisplay-info = "0.2"
+# cairo and libpng are NOT optional, and this corrects an inference rather than
+# a reading. The reasoning "shell-desktop and demo-clients are off, so the
+# client-side toytoolkit is not built, so cairo is not needed" is wrong:
+# shared/meson.build is entered unconditionally by the top-level meson.build and
+# defines
+#     deps_cairo_shared = [ dep_libshared, dependency('cairo'), dependency('libpng'), ... ]
+# Meson evaluates those dependency() calls where they appear, so both are looked
+# up on every configure regardless of which shells are enabled.
+cairo = ">=1.18.4"
+libpng = ">=1.6.47"
+# Optional to weston and therefore DECIDED HERE rather than left to chance.
+# shared/meson.build takes pango, pangocairo, fontconfig and glib with
+# required:false, and sets HAVE_PANGO only if ALL FOUR are found. All four are
+# packaged, so they will be found and the build will differ from one where they
+# are not. Declaring them makes that outcome a property of the recipe instead of
+# a property of whatever happens to be in the builder image.
+pango = ">=1.56.3"
+fontconfig = ">=2.16.0"
+glib = ">=2.84.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+wayland-protocols = ">=1.41.0"
