@@ -1,0 +1,30 @@
+[package]
+name = "cbindgen"
+description = "Generates C bindings for Rust code; a build dependency of SpiderMonkey"
+version = "0.29.0"
+subversion = "1"
+authors = ["The Mozilla Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# Rust links libgcc_s and, for the panic machinery, libstdc++'s unwinder.
+gcc = ">=15.2.0"
+
+[dependencies.build]
+# Not merely "needs a compiler": this is what tells tools/dep-levels.sh to build
+# rust before cbindgen in CI, which is the only thing that puts a cargo in the
+# job's image.
+rust = ">=1.97.0"

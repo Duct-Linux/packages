@@ -51,6 +51,26 @@ PYTHON_PACKAGE_NAMES = {
     "yaml": "python-pyyaml",
 }
 
+# The point past which reading a source tarball costs more than the two rules
+# that read it are worth.
+#
+# Both tarball-backed rules iterate every member of every cached archive. That
+# was already the slowest thing here -- see scan_tarball's note about the run
+# that passed ten minutes and timed out for other workers -- and mozjs breaks
+# the assumption underneath it. Its source is the WHOLE OF FIREFOX: 601 MB of
+# xz holding 421,000 files, of which this distribution builds js/src and
+# nothing else. Scanning it takes longer than every other recipe in the tree
+# combined, on every local run, to reach a conclusion about the browser.
+#
+# 200 MB is above every other source here (llvm's is the next largest at 130 MB)
+# and far below firefox's, so today it excludes exactly the one archive whose
+# contents are mostly not this package's build.
+#
+# SKIPPED IS REPORTED, NOT SILENT. A rule that quietly stops running on the
+# largest package in the tree is the shape this file's own docstrings keep
+# warning about -- fast, green, and inert where it was most needed.
+MAX_SCAN_BYTES = 200 * 1024 * 1024
+
 problems: list[str] = []
 warnings: list[str] = []
 
@@ -203,7 +223,17 @@ def scan_tarball(archive: pathlib.Path, src_dir: str) -> dict:
     130 MB, so a second pass is not free.
     """
     found = {"meson_options": set(), "pkgconfig": False, "python_modules": set(),
-             "programs": [], "generates_gir": False}
+             "programs": [], "generates_gir": False, "skipped": False}
+
+    # See MAX_SCAN_BYTES. The caller reports this rather than the scan, because
+    # only the caller knows which recipe is being talked about.
+    try:
+        if archive.stat().st_size > MAX_SCAN_BYTES:
+            found["skipped"] = True
+            return found
+    except OSError:
+        return found
+
     try:
         tf = tarfile.open(archive)
     except (OSError, tarfile.TarError):
@@ -345,6 +375,15 @@ def check_declared_tools(recipes: dict[str, dict], versions: dict[str, str]) -> 
         archive = CACHE / tarball if tarball else None
         if src_dir and archive and archive.exists():
             scanned = scan_tarball(archive, src_dir)
+            if scanned["skipped"]:
+                # Said once, here, for both of the rules that read tarballs --
+                # check_tool_dependencies calls the same memoised scan and gets
+                # the same answer, and repeating it would be noise rather than
+                # a second finding.
+                warn(name, f"source archive is over {MAX_SCAN_BYTES // (1024 * 1024)} MB, "
+                           "so the two rules that read tarballs (declared build "
+                           "tools, and tool dependencies) DID NOT RUN for it. "
+                           "That is those rules being skipped, not passing.")
             if scanned["pkgconfig"]:
                 wants.add("pkgconf")
             for module in scanned["python_modules"]:
@@ -690,11 +729,12 @@ def check_meson_options(recipes: dict[str, dict]) -> None:
 def version_forms(version: str) -> list[str]:
     """The spellings of a version that might legitimately appear in a URL.
 
-    Three tolerances, each earned by a real recipe:
+    Four tolerances, each earned by a real recipe:
       - trailing ".0" padding, because a version must be three-component semver
         for tape's resolver but upstream ships "gperf-3.3" and "kmod-33";
       - dashes for dots with zero-padded parts, for ca-certificates, whose
         2026.7.16 arrives as cacert-2026-07-16.pem;
+      - underscores for dots, for icu (see below);
       - the version as written.
     """
     forms = [version]
@@ -717,6 +757,20 @@ def version_forms(version: str) -> list[str]:
     for form in list(forms):
         bits = form.split(".")
         forms.append("-".join(b.zfill(2) if i else b for i, b in enumerate(bits)))
+
+    # icu's spelling, and it is the same shape of problem as sqlite's above.
+    # ICU4C 77.1 ships as icu4c-77_1-src.tgz from a release-77-1 tag, and it
+    # unpacks to a bare `icu/` with no version in the directory name at all --
+    # so SRC_DIR cannot carry the version either, and the underscore form in
+    # SRC_URL is the only place it appears.
+    #
+    # The dash form already generated above does not match: it zero-pads, giving
+    # "77-01" against the tag's "77-1". Widening the dash form to cover both
+    # would loosen a rule that ca-certificates needs to stay tight, so this is a
+    # separate spelling rather than a relaxation of that one.
+    for form in list(forms):
+        if "." in form:
+            forms.append(form.replace(".", "_"))
     return forms
 
 

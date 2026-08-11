@@ -1,0 +1,30 @@
+[package]
+name = "icu"
+description = "Unicode and internationalisation libraries (ICU4C)"
+version = "77.1.0"
+subversion = "1"
+authors = ["The Unicode Consortium"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# libicuuc and libicui18n are C++ and link libstdc++.
+gcc = ">=15.2.0"
+
+[dependencies.build]
+# ICU's configure resolves things through pkg-config, and it is what generates
+# the icu-uc.pc and icu-i18n.pc that mozjs then asks for by name -- so this is
+# not merely a probe, it is how the output of this package becomes findable.
+pkgconf = ">=2.5.0"

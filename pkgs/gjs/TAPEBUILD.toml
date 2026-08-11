@@ -1,0 +1,58 @@
+[package]
+name = "gjs"
+description = "JavaScript bindings for GNOME, built on SpiderMonkey"
+version = "1.84.2"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# libgjs is C++.
+gcc = ">=15.2.0"
+# meson.build asks for glib-2.0, gthread-2.0, gobject-2.0 and gio-2.0 with a
+# floor of >= 2.68.0 -- well under the 2.84.1 packaged here, so this pairing
+# needs no glib bump. (BLFS pairs this gjs with 2.84.4; the floor in the source
+# is what decides, and it is 2.68.)
+glib = ">=2.84.0"
+# libgirepository. gjs IS a binding: it resolves every GNOME API at runtime
+# through introspection data, so this is a runtime dependency before it is a
+# build one.
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.0"
+cairo = ">=1.18.4"
+libffi = ">=3.4.8"
+# The engine, after the BLFS patch renames the pkg-config module from mozjs-128.
+mozjs = ">=140.2.0"
+# -Dreadline=enabled, and ncurses behind it.
+readline = ">=8.3.0"
+ncurses = ">=6.5.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+# meson.build calls gnome.generate_gir(libgjs) unconditionally at line 550, so
+# g-ir-scanner and the GObject typelibs it reads are both needed to BUILD this,
+# not only to run it.
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.0"
+# find_program('glib-compile-schemas'), required by default.
+glib = ">=2.84.0"
+# find_program('dbus-run-session'). -Dskip_dbus_tests=true makes it
+# not-required, but the `required:` expression is a negated option rather than a
+# literal false, so declaring it is both honest and what stops this reading as
+# an undeclared tool.
+dbus = ">=1.16.2"

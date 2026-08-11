@@ -257,8 +257,12 @@ jobs:
               # exist for every architecture yet.
               case $p in
                 # uutils is Rust, and rustc builds with rustc: both need the
-                # image carrying a Rust toolchain, not duct/builder.
-                uutils-coreutils|rust) image=ghcr.io/duct-linux/rust:$a ;;
+                # image carrying a Rust toolchain, not duct/builder. cbindgen is
+                # Rust too -- and unlike the other two it is a BUILD DEPENDENCY
+                # of a native package (mozjs will not configure without it), so
+                # leaving it off this list does not merely build it in the wrong
+                # image, it fails mozjs at the same level.
+                uutils-coreutils|rust|cbindgen) image=ghcr.io/duct-linux/rust:$a ;;
                 # Likewise Go, which bootstraps from Go.
                 go)                    image=ghcr.io/duct-linux/go:$a ;;
                 # tape is compiled in duct/bootstrap. Built anywhere else the
