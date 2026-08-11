@@ -25,3 +25,12 @@ util-linux = ">=2.41.1"
 
 [dependencies.build]
 pkgconf = ">=2.5.0"
+# configure DIES without it -- "configure: error: *** gperf not found" -- so it
+# is not optional and never was. It was absent from this list, which means
+# nothing ordered eudev after gperf; the climb only worked because gperf
+# happens to land at level 2 and eudev at level 4 for other reasons.
+#
+# An undeclared build tool is invisible to dep-levels.sh, so the ordering that
+# saved us was a coincidence of the rest of the graph rather than a consequence
+# of this dependency. Declaring it makes the edge real.
+gperf = ">=3.1.0"
