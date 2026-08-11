@@ -59,6 +59,13 @@ bubblewrap = ">=0.11.0"
 xdg-dbus-proxy = ">=0.1.6"
 
 [dependencies.build]
+# The variant-schema compiler is written against it, and meson stops at
+# configure without it -- not a test dependency: it generates C source the
+# build then compiles, so it runs whatever else is disabled.
+#
+# check-recipes named this in advance, by package name, and the line was read
+# past because it is a warning rather than a problem.
+python-pyparsing = ">=3.3.2"
 meson = ">=1.8.0"
 ninja = ">=1.13.0"
 pkgconf = ">=2.5.0"
