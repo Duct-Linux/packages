@@ -499,7 +499,8 @@ GNOME_PKGS := \
 	highway libjxl \
 	colord gnome-desktop \
 	libogg libvorbis libcanberra sound-theme-freedesktop \
-	xcb-util startup-notification
+	xcb-util startup-notification \
+	mutter
 
 # The GTK 3 island, and it is an island on purpose.
 #
