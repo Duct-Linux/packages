@@ -108,12 +108,27 @@ fi
 # Asserted by glob rather than by a fixed path, because the plugin directory is
 # versioned and a hardcoded 1.54.0 would silently stop matching on the next
 # version bump -- an assertion that quietly tests nothing is worse than none.
-wwan=$(find "$DESTDIR/usr/lib/NetworkManager" -name 'libnm-device-plugin-wwan.so' -print -quit 2>/dev/null || true)
-[ -n "$wwan" ] \
+# TWO ARTIFACTS, AND THE mm-glib LINKAGE IS NOT ON THE ONE YOU WOULD CHECK.
+# meson builds both a shared_library libnm-wwan.so and a shared_module
+# libnm-device-plugin-wwan.so (wwan/meson.build 7 and 43). NetworkManager loads
+# the PLUGIN; the LIBRARY is what actually links libmm-glib. Verified by reading
+# the built objects rather than the build file:
+#   libnm-wwan.so                 NEEDED libmm-glib.so.0
+#   libnm-device-plugin-wwan.so   NEEDED libnm-wwan.so
+# The first version of this check asserted libmm-glib on the plugin and would
+# have FAILED A PERFECTLY GOOD BUILD -- a false assertion is worse than none,
+# because it blocks the thing it was meant to protect.
+wwan_plugin=$(find "$DESTDIR/usr/lib/NetworkManager" -name 'libnm-device-plugin-wwan.so' -print -quit 2>/dev/null || true)
+wwan_lib=$(find "$DESTDIR/usr/lib/NetworkManager" -name 'libnm-wwan.so' -print -quit 2>/dev/null || true)
+[ -n "$wwan_plugin" ] \
 	|| die "the WWAN device plugin was not installed; -Dmodem_manager=true did not take effect and there would be no mobile broadband panel"
+[ -n "$wwan_lib" ] \
+	|| die "libnm-wwan.so was not installed; the plugin has nothing to load"
 if command -v readelf >/dev/null 2>&1; then
-	readelf -d "$wwan" 2>/dev/null | grep -q "libmm-glib.so" \
-		|| die "the WWAN plugin does not link libmm-glib; it cannot talk to ModemManager"
+	readelf -d "$wwan_lib" 2>/dev/null | grep -q "libmm-glib.so" \
+		|| die "libnm-wwan.so does not link libmm-glib; NetworkManager cannot talk to ModemManager"
+	readelf -d "$wwan_plugin" 2>/dev/null | grep -q "libnm-wwan.so" \
+		|| die "the WWAN plugin does not link libnm-wwan; the two halves were not built together"
 fi
 
 # --- what this package still cannot do, said out loud on every build ---------
