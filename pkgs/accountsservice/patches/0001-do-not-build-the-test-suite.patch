@@ -1,0 +1,58 @@
+Do not build the test suite.
+
+`subdir('tests')` is UNCONDITIONAL -- there is no `tests` option in
+meson_options.txt to turn it off, so no `-D` switch can avoid this. Absence
+from the option file is not evidence that a thing is optional.
+
+WHAT IT BREAKS. tests/meson.build's first act is
+
+    libmocklibc = subproject('mocklibc').get_variable('libmocklibc')
+
+and mocklibc does not compile with this toolchain:
+
+    subprojects/mocklibc-1.0/src/netgroup-debug.c:25:3: error: implicit
+      declaration of function 'print_indent' [-Wimplicit-function-declaration]
+
+mocklibc 1.0 is from 2013 and an implicit declaration was legal C then. The
+builder image has GCC 15.2.0, where -Wimplicit-function-declaration is an
+error by default rather than a warning, so a file upstream still considers
+fine stops the build.
+
+WHY THE SUBPROJECT IS REACHABLE AT ALL, which is the part worth reading.
+subprojects/ contains only mocklibc.wrap -- a download-only wrap, with
+source_url and patch_url pointing at code.google.com and wrapdb. Under
+`--wrap-mode=nodownload`, which _scripts/build-meson.sh passes, a wrap like
+that is normally inert. This one is not: the release tarball also ships
+subprojects/packagecache/ carrying both mocklibc-1.0.tar.gz and the wrapdb
+patch zip, so meson satisfies the subproject from the cache without
+downloading anything and builds it. Reading the .wrap alone gives the wrong
+answer in the safe direction, which is the dangerous one.
+
+WHY REMOVING IT COSTS NOTHING.
+  * tests/meson.build and mocklibc install NOTHING. The payload is
+    byte-for-byte identical with the tests gone -- this removes build work,
+    not shipped files.
+  * `_scripts/build-meson.sh` never runs `meson test`, so these tests could
+    not execute even if they built.
+  * The Python tests need the `gi` and `dbusmock` modules, neither packaged.
+    Upstream's own fallback for that case replaces each test with
+    `sh -c 'exit 77'` -- a skip. So the suite was already going to run
+    nothing.
+
+WHY NOT THE OTHER FIX. `-Dc_args=-Wno-implicit-function-declaration` would
+also make it compile, and would apply to the WHOLE build -- including
+accounts-daemon itself, where an implicit declaration is a real bug and an
+error is the correct response. Turning a genuine diagnostic off across a
+whole package to get a test shim to build is the trade this distribution
+exists to refuse.
+
+--- a/meson.build
++++ b/meson.build
+@@ -232,7 +232,6 @@
+   subdir('doc/libaccountsservice')
+ endif
+
+-subdir('tests')
+
+ configure_file(
+   output: 'config.h',

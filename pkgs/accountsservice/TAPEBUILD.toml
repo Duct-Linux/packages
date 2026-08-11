@@ -1,0 +1,53 @@
+[package]
+name = "accountsservice"
+description = "User account daemon: the list of users a login screen shows and the account panel edits"
+version = "23.13.9"
+subversion = "1"
+authors = ["The AccountsService project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+# dependency('polkit-gobject-1') with no `required` argument: unconditional.
+# Every method that changes an account is authorized through it, and the action
+# file is installed into polkit's own policydir, read from polkit's .pc.
+polkit = ">=126.0.0"
+# THE LOGIND INTERFACE. -Delogind=true selects
+# dependency('libelogind', version: '>= 229.4') in place of libsystemd -- see
+# pkg.env for why the difference is not cosmetic here.
+elogind = ">=255.17.0"
+# dependency('dbus-1'), and the daemon is reachable only over the system bus.
+dbus = ">=1.16.0"
+# dependency('libxcrypt', version: '>= 4'). Declared `required: false`, but it
+# is what reads and writes the password hashes, and it is packaged.
+libxcrypt = ">=4.4.38"
+# NOT LINKED, AND NOT OPTIONAL. accounts-daemon creates and modifies accounts by
+# EXECUTING shadow's tools by absolute path: /usr/sbin/useradd (src/daemon.c),
+# /usr/sbin/userdel, /usr/sbin/usermod and /usr/sbin/chpasswd (src/user.c).
+# Without shadow installed the daemon starts, answers, and fails every write
+# with an exec error.
+shadow = ">=4.17.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+# i18n.merge_file() for the polkit action file, and the catalogues in po/.
+gettext = ">=0.26.0"
+# -Dintrospection=true. gnome-control-center and gdm both use AccountsService
+# through the typelib.
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.0"

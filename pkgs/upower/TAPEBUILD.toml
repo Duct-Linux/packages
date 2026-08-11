@@ -1,0 +1,49 @@
+[package]
+name = "upower"
+description = "Power and battery daemon: what the shell's battery icon and the suspend policy read"
+version = "1.90.9"
+subversion = "1"
+authors = ["The UPower project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+# The device layer. -Dos_backend=linux makes this unconditional:
+# dependency('gudev-1.0', version: '>= 238') with no `required` argument at all.
+libgudev = ">=238.0.0"
+# upowerd's D-Bus methods are authorized through polkit, and the recipe passes
+# -Dpolkit=enabled rather than leaving it at auto. It also installs an action
+# file into polkit's own actiondir, read from polkit's .pc.
+polkit = ">=126.0.0"
+# eudev owns /usr/lib/udev/rules.d, where the three rules files this package
+# installs land, and the hwdb entries are read by udevadm hwdb --update. Not a
+# link-time dependency -- it arrives through libgudev -- but a package whose
+# rules nothing reads is a package that does not classify batteries.
+eudev = ">=3.2.14"
+# A system bus service, activated by dbus and reached only through the bus, the
+# same argument as polkit's.
+dbus = ">=1.16.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+# i18n.merge_file() for the polkit action file and the translations.
+gettext = ">=0.26.0"
+# -Dintrospection=enabled: gnome-settings-daemon and gnome-shell read power
+# state through UPowerGlib-1.0.
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.0"
