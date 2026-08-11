@@ -1,6 +1,7 @@
 #!/bin/sh
 # Stage libfontenc, then assert the library, the .pc libXfont2 resolves it by,
-# and the directory --with-fontrootdir was passed to control.
+# and the search path --with-fontrootdir was passed to control -- which is a
+# string inside the library, not a directory on disk. See below.
 
 . "$(dirname "$0")/../_scripts/common.sh"
 
@@ -23,16 +24,46 @@ finish_install
 [ -s "$DESTDIR/usr/include/X11/fonts/fontenc.h" ] \
 	|| die "fontenc.h was not installed; nothing could compile against this package"
 
-# THE ENCODINGS DIRECTORY, WHICH IS WHAT --with-fontrootdir WAS PASSED FOR.
-# ENCODINGSDIR is derived as ${FONTROOTDIR}/encodings (configure 19915), so
-# this path existing is the proof that the flag took effect -- and losing the
-# flag does not fail anything, it silently relocates these files relative to
-# whatever ${datadir} expanded to. The encodings are looked up at RUNTIME by
-# path, so a relocated set is a set that is never read.
-[ -d "$DESTDIR/usr/share/fonts/X11/encodings" ] \
-	|| die "/usr/share/fonts/X11/encodings does not exist; --with-fontrootdir did not take effect and the encoding tables are somewhere nothing looks"
-[ -n "$(find "$DESTDIR/usr/share/fonts/X11/encodings" -name '*.enc*' -print -quit 2>/dev/null)" ] \
-	|| die "the encodings directory was created but holds no .enc files"
+# WHAT --with-fontrootdir ACTUALLY PRODUCES, AND IT IS NOT A DIRECTORY.
+#
+# This assertion was first written against /usr/share/fonts/X11/encodings and
+# it failed CI, correctly: libfontenc INSTALLS NO ENCODING FILES AT ALL. Its
+# entire payload is the library, one header and one .pc. ENCODINGSDIR never
+# reaches an install rule -- it reaches the COMPILER, once, through
+# src/Makefile.am 13-14:
+#
+#     FONTENCDIR=@ENCODINGSDIR@
+#     FONTENCDEFS = -DFONT_ENCODINGS_DIRECTORY=\"$(FONTENCDIR)/encodings.dir\"
+#
+# so the flag's whole observable effect is a string literal in .rodata, read at
+# run time by FontEncDirectory() (encparse.c 844-857). The directory it names is
+# populated by X.Org's separate `encodings` package, which this tree does not
+# have. Asserting the directory was asserting another package's payload.
+#
+# Asserted on the artefact instead, which is where the flag's effect actually
+# is. Losing the flag does not fail anything: it silently compiles a path
+# derived from whatever ${datadir} expanded to, and the library then looks for
+# its tables somewhere nothing writes.
+# Matched on the ROOT rather than on the whole FONT_ENCODINGS_DIRECTORY string:
+# the "/encodings.dir" tail is appended by src/Makefile.am and is not what this
+# flag controls, so asserting it would be asserting upstream's spelling. The
+# root is the part --with-fontrootdir decides and the part that goes wrong.
+grep -qa '/usr/share/fonts/X11/encodings' "$DESTDIR/usr/lib/libfontenc.so.1" \
+	|| die "the shipped libfontenc does not contain the path /usr/share/fonts/X11/encodings; --with-fontrootdir did not reach FONT_ENCODINGS_DIRECTORY and the library will look for its encoding tables somewhere nothing populates"
+
+# NOT AN ASSERTION, AND THE REASON IT IS NOT ONE IS THE POINT: the directory
+# above is EMPTY in this distribution, and that is survivable rather than
+# broken. fontenc.c compiles in tables for iso10646, iso8859-1 through -16 and
+# koi8-r, so the encodings every font a GNOME desktop loads actually uses are in
+# the library. encodings.dir supplies the REST -- the CJK and legacy vendor
+# sets -- and X.Org ships them in a package of their own.
+#
+# This is the same shape as libXfont2's built-in fonts, one layer down: a
+# compiled-in fallback is doing the work a data package would otherwise do, and
+# nothing logs the difference. Packaging X.Org `encodings` is what would close
+# it, and it is not needed for a Latin-script session.
+log "note: /usr/share/fonts/X11/encodings is empty here -- X.Org's separate 'encodings' package fills it."
+log "note: the iso8859-*, iso10646 and koi8-r tables are compiled into fontenc.c, so common encodings resolve without it."
 
 # The link to zlib, asserted on the artefact. AC_CHECK_LIB decides this at
 # configure time and a failure there is fatal, so this cannot currently be
