@@ -2,7 +2,12 @@
 name = "pipewire"
 description = "Multimedia server for audio, video and screen capture"
 version = "1.4.7"
-subversion = "1"
+# 2 -- Bluetooth audio. The upstream version is unchanged; what changed is the
+# dependency list and the set of SPA plugins installed, which is exactly what a
+# subversion is for. Without the bump, publish.yml keys on
+# (name, version, subversion, arch), finds 1.4.7-1 already published, and KEEPS
+# THE OLD BYTES -- so the re-enable would appear to land and change nothing.
+subversion = "2"
 authors = ["The PipeWire project"]
 packagers = ["ItzYanick"]
 
@@ -50,6 +55,17 @@ glib = ">=2.84.0"
 # either are not built. "configure found it" and "the artefact links it" are
 # different facts, and only the second one belongs here.
 ncurses = ">=6.5.0"
+# -Dbluez5=enabled. Both of these are REQUIRED by that flag rather than
+# optional under it: spa/meson.build takes them with
+# `required: get_option('bluez5')` and then error()s by name if either is
+# missing, so this pair is the whole hard cost of Bluetooth audio.
+#
+# bluez is the daemon and the D-Bus API the SPA plugin drives; sbc is the A2DP
+# codec every sink must implement, and the codec plugins are built against it
+# with no found() guard. Everything else pipewire can do over Bluetooth --
+# aptX, LDAC, AAC, LC3 -- is disabled and would each need its own package.
+bluez = ">=5.83.0"
+sbc = ">=2.1.0"
 
 [dependencies.build]
 meson = ">=1.8.0"

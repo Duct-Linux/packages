@@ -72,6 +72,32 @@ alsa_plugin=$(find "$DESTDIR/usr/lib" -name 'libspa-alsa.so' -print -quit 2>/dev
 [ -n "$alsa_plugin" ] && [ -s "$alsa_plugin" ] \
 	|| die "the ALSA SPA plugin (libspa-alsa.so) was not installed; this pipewire would start and find no sound device at all"
 
+# The Bluetooth SPA plugin and its SBC codec, from -Dbluez5=enabled. Asserted
+# for the same reason as the ALSA backend and with more force, because the
+# option's DEFAULT is 'auto' and under auto a missing dependency drops this
+# whole plugin without failing anything. A pipewire without it pairs a headset
+# and plays nothing through it.
+#
+# The codec is checked separately from the plugin: they are different shared
+# objects, both loaded by filename at run time, and libspa-bluez5.so can be
+# present while the codec beside it is not -- which is a Bluetooth stack that
+# connects a device and can encode nothing for it.
+bluez5_plugin=$(find "$DESTDIR/usr/lib" -name 'libspa-bluez5.so' -print -quit 2>/dev/null)
+[ -n "$bluez5_plugin" ] && [ -s "$bluez5_plugin" ] \
+	|| die "the Bluetooth SPA plugin (libspa-bluez5.so) was not installed; -Dbluez5 resolved to nothing and this pipewire would pair a headset and play no sound through it"
+
+sbc_codec=$(find "$DESTDIR/usr/lib" -name 'libspa-codec-bluez5-sbc.so' -print -quit 2>/dev/null)
+[ -n "$sbc_codec" ] && [ -s "$sbc_codec" ] \
+	|| die "the SBC codec plugin was not installed; SBC is the codec every A2DP sink must implement, so no Bluetooth device could receive audio at all"
+
+# G722, which costs no dependency and is the ASHA codec hearing aids connect
+# over. Asserted so that a later tidy-up of -Dbluez5-codec-g722 cannot remove
+# accessibility support silently -- the flag is free, so nothing else would
+# notice it going.
+g722_codec=$(find "$DESTDIR/usr/lib" -name 'libspa-codec-bluez5-g722.so' -print -quit 2>/dev/null)
+[ -n "$g722_codec" ] && [ -s "$g722_codec" ] \
+	|| die "the G722 codec plugin was not installed; that is the ASHA codec hearing aids connect over, and it costs no dependency to build"
+
 audioconvert=$(find "$DESTDIR/usr/lib" -name 'libspa-audioconvert.so' -print -quit 2>/dev/null)
 [ -n "$audioconvert" ] && [ -s "$audioconvert" ] \
 	|| die "the audioconvert SPA plugin was not installed; no stream could be resampled to a device's format"
