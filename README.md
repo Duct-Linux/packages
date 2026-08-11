@@ -77,6 +77,15 @@ seconds; `libksba` and `libgcrypt` were built, uploaded and lost.
 that one drops artefacts within a run, this one drops entire runs between
 publishes, and a publish can suffer either without the other.
 
+> **Before merging something that will publish, look at in-flight BUILDS, not
+> publishes.** A merge does not create a publish; it creates a *build*, and the
+> publish appears only when that build finishes. So a run list filtered to
+> `publish.yml` can show everything complete while a merge from a minute ago is
+> already committed to producing one. Three of us read exactly that list and
+> cleared a second merge from it.
+> Filter `build.yml` to `main` and non-completed. A PR-branch build is not
+> contention -- `publish.yml` triggers on `workflow_run` restricted to `main`.
+
 **4. Indexed but wrong on the server.** The row is correct and the file behind it
 is not. `findutils` arrived as 65536 bytes against an index saying 365768:
 advertised at full size, undownloadable, and indexed perfectly. **Indexed is not
