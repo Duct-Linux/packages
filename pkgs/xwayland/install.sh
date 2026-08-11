@@ -79,12 +79,26 @@ grep -qE '^#define XWL_HAS_EI_PORTAL( |$)' "$xwl" \
 grep -q '^have_enable_ei_portal=true$' "$pc" \
 	|| die "xwayland.pc does not advertise have_enable_ei_portal=true; mutter reads this variable and would not offer the portal path"
 
-# ELOGIND, WHICH -Dsystemd_notify=false DOES NOT PREVENT. The option compiles
-# out the notify support (HAVE_SYSTEMD_DAEMON below); the LINK comes from
-# meson.build:406, where libsystemd sits in the common dependency list with no
-# guard at all. Both facts are asserted, in opposite directions, because
-# together they are the whole of finding 29's fourth mechanism: the feature is
-# off and the library is linked.
+# ELOGIND, AND THE ASSERTION THAT REVERSED ITSELF.
+#
+# This block first asserted that Xwayland DOES link libsystemd, on finding 29's
+# fourth mechanism: the lookup is `required: false` (meson.build:107) but sits
+# in the COMMON dependency list unguarded (meson.build:406), so "the flag
+# controls the feature, not the link". CI refuted it on both arches --
+# configure reports "Run-time dependency libsystemd found: YES 255", elogind's
+# alias, and the shipped binary has no NEEDED entry for it.
+#
+# The missing step was the LINKER. -Dsystemd_notify=false compiles out every
+# sd_notify call, nothing references a libsystemd symbol, and an --as-needed
+# link drops an unreferenced library. So the flag does control the link, by
+# controlling whether anything calls into it.
+#
+# Asserted in the direction that is true, and the message names the consequence:
+# if a future image's linker keeps the entry, the DECLARATION has to come back.
+#
+# First, the FEATURE, which is the half that was right all along and is the
+# stable fact here -- it depends only on the flag, not on the linker.
+#
 # Written as a negative rather than as `grep '^#undef HAVE_SYSTEMD_DAEMON'`,
 # because that would assert MESON'S SPELLING OF ABSENCE rather than the absence.
 # The fact under test is that the macro is not defined; whether meson records
@@ -99,8 +113,10 @@ command -v readelf >/dev/null 2>&1 \
 needed=$(readelf -d "$xwayland" 2>/dev/null) \
 	|| die "readelf could not read $xwayland"
 
-echo "$needed" | grep -q 'NEEDED.*libsystemd\.so' \
-	|| die "Xwayland does not link libsystemd; elogind's compatibility alias was not found at build time. The declared elogind dependency describes this link, so if this ever fails the DECLARATION is what needs revisiting, not this check"
+# Then the LINK, asserted absent.
+if echo "$needed" | grep -q 'NEEDED.*libsystemd\.so'; then
+	die "Xwayland links libsystemd, which this recipe does not expect and does not declare. The linker kept an entry for a library nothing calls into -- so either --as-needed is not in effect in this image, or something now references a libsystemd symbol. Either way elogind must go back into [dependencies] in TAPEBUILD.toml, because an undeclared runtime link is a package that installs and cannot start"
+fi
 
 # ===========================================================================
 # THE REST OF THE LINKS, EACH ONE SILENT WHEN ABSENT

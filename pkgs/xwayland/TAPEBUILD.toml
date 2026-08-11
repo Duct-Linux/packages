@@ -31,14 +31,36 @@ xtrans = ">=1.6.0"
 # xdmcp_dep, from -Dxdmcp=true. Stated at its default in pkg.env, so this is a
 # real link rather than a possibility.
 libXdmcp = ">=1.1.5"
-# ELOGIND IS DECLARED EVEN THOUGH -Dsystemd_notify=false. The option controls
-# the notify FEATURE; the LINK is unconditional. libsystemd is looked up
-# `required: false` at meson.build:107 and then placed in the common list at
-# meson.build:406 with no guard, so the artefact carries a NEEDED entry for
-# elogind's libsystemd.pc alias in every configuration. install.sh asserts it,
-# because a declaration that describes an inference rather than an artefact is
-# how this class of thing gets quietly deleted later.
-elogind = ">=255.17.0"
+# ELOGIND IS DELIBERATELY *NOT* DECLARED, AND THIS REVERSES WHAT THIS RECIPE
+# FIRST SAID. It was declared on the strength of finding 29's fourth mechanism
+# -- libsystemd is looked up `required: false` at meson.build:107 and then sits
+# in the COMMON dependency list at meson.build:406 with no guard, so "the flag
+# controls the feature, not the link" and the artefact should carry the NEEDED
+# entry in every configuration.
+#
+# CI SAYS OTHERWISE, ON BOTH ARCHES IDENTICALLY. Configure does find it --
+# "Run-time dependency libsystemd found: YES 255", elogind's alias, exactly as
+# predicted -- and the shipped Xwayland has NO NEEDED entry for it.
+#
+# The step the meson reading misses is the LINKER. -Dsystemd_notify=false
+# compiles out every sd_notify call, so no symbol from libsystemd is referenced
+# anywhere in the binary, and an --as-needed link drops an unreferenced library
+# from DT_NEEDED. So the flag does control the link here -- indirectly, by way
+# of controlling whether anything calls into it.
+#
+# Finding 29's general rule survives and is what caught this: "configure found
+# it" and "the artefact links it" are two facts and NEITHER IMPLIES THE OTHER,
+# IN EITHER DIRECTION. The fourth mechanism picked the wrong direction for this
+# configuration.
+#
+# Undeclared rather than declared-with-a-caveat because this tree's convention
+# is explicit -- libei's recipe puts it as "only the second belongs here", and
+# declares libevdev while refusing libxkbcommon on exactly this ground. And
+# nothing is lost: elogind still arrives in the closure through libei below,
+# which does link it.
+#
+# install.sh asserts the ABSENCE, so that an image whose linker does not drop it
+# fails by name and tells the next person to restore this declaration.
 
 # --- SHA1, which is not optional and is not obviously here. os/xsha1.c is
 # --- compiled unconditionally and meson.build 307-314 error()s with no
