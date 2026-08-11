@@ -27,10 +27,51 @@ finish_install
 # in a package that is not this one. Asserted by content for that reason.
 pc=$DESTDIR/usr/lib/pkgconfig/xkbcomp.pc
 [ -s "$pc" ] || die "xkbcomp.pc was not installed; xwayland reads xkbconfigdir and bindir out of it under required:false and falls back SILENTLY"
-grep -q '^xkbconfigdir=/usr/share/X11/xkb$' "$pc" \
-	|| die "xkbcomp.pc does not declare xkbconfigdir=/usr/share/X11/xkb; --with-xkb-config-root did not take effect, and xwayland would inherit a different directory from this file than xkeyboard-config installs into"
-grep -q '^bindir=/usr/bin$' "$pc" \
-	|| die "xkbcomp.pc does not declare bindir=/usr/bin; xwayland resolves XKB_BIN_DIRECTORY from this line and would look for xkbcomp somewhere it is not"
+
+# RESOLVED THROUGH pkg-config, NOT GREPPED OUT OF THE FILE -- and that
+# distinction cost a CI run. A .pc is a TEMPLATE, not a set of literals:
+# autotools substitutes @bindir@ as the UNEXPANDED '${exec_prefix}/bin', so
+# xkbcomp.pc really contains
+#
+#     prefix=/usr
+#     exec_prefix=${prefix}
+#     bindir=${exec_prefix}/bin
+#
+# and pkg-config does the expansion at query time. An earlier version of this
+# asserted `^bindir=/usr/bin$` against the raw line and failed on a perfectly
+# correct package.
+#
+# Querying is also the more honest check, because it is the same mechanism the
+# consumer uses: xwayland's meson calls
+# xkbcomp_dep.get_variable(pkgconfig: 'bindir'). Asserting the file's spelling
+# would test something no one reads.
+#
+# PKG_CONFIG_LIBDIR rather than PKG_CONFIG_PATH: it REPLACES the search path
+# instead of prepending to it, so the answer cannot come from a copy of this
+# package that is already in the build image.
+PKGCONF=$(command -v pkg-config || command -v pkgconf) \
+	|| die "no pkg-config or pkgconf; cannot resolve xkbcomp.pc the way xwayland will, and this check is not optional"
+pcq() { PKG_CONFIG_LIBDIR="$DESTDIR/usr/lib/pkgconfig" "$PKGCONF" --variable="$1" xkbcomp 2>/dev/null; }
+
+# xkbconfigdir IS a literal, because --with-xkb-config-root was passed a literal
+# -- so this one would survive a grep. Queried anyway, so that both halves of
+# the agreement are read the same way and neither depends on how upstream
+# happens to spell its substitution.
+xkbdir=$(pcq xkbconfigdir)
+[ "$xkbdir" = /usr/share/X11/xkb ] \
+	|| die "xkbcomp.pc resolves xkbconfigdir to '$xkbdir', not /usr/share/X11/xkb; --with-xkb-config-root did not take effect and xwayland would inherit a different directory from this file than xkeyboard-config installs into"
+
+# bindir is the one that matters at run time, and the one that is NOT a literal:
+# it comes from autoconf's standard --bindir, which this recipe does not pass,
+# so it is prefix-derived and the only thing under test is that the prefix is
+# right. Matched on the tail rather than on equality because pkgconf may
+# redefine prefix from the .pc's own location when reading a staged tree; the
+# failure worth catching is a prefix of /usr/local, not a DESTDIR component.
+bindir=$(pcq bindir)
+case "$bindir" in
+	*/usr/bin) : ;;
+	*) die "xkbcomp.pc resolves bindir to '$bindir', which is not a /usr/bin; xwayland resolves XKB_BIN_DIRECTORY from this variable and would look for xkbcomp somewhere it is not -- and it does not search \$PATH" ;;
+esac
 
 # THE SAME DIRECTORY AGAIN, THIS TIME COMPILED INTO THE BINARY. It arrives by a
 # different route -- AM_CPPFLAGS -DDFLT_XKB_CONFIG_ROOT in Makefile.am:25 --
