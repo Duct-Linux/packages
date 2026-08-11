@@ -85,8 +85,14 @@ grep -q '^have_enable_ei_portal=true$' "$pc" \
 # guard at all. Both facts are asserted, in opposite directions, because
 # together they are the whole of finding 29's fourth mechanism: the feature is
 # off and the library is linked.
-grep -q '^#undef HAVE_SYSTEMD_DAEMON' "$dix" \
-	|| die "HAVE_SYSTEMD_DAEMON is set despite -Dsystemd_notify=false; the notify support was compiled in"
+# Written as a negative rather than as `grep '^#undef HAVE_SYSTEMD_DAEMON'`,
+# because that would assert MESON'S SPELLING OF ABSENCE rather than the absence.
+# The fact under test is that the macro is not defined; whether meson records
+# that as an #undef line or by omitting the line entirely is not this recipe's
+# business. The same mistake in xkbcomp's .pc check cost a CI run.
+if grep -qE '^#define HAVE_SYSTEMD_DAEMON( |$)' "$dix"; then
+	die "HAVE_SYSTEMD_DAEMON is defined despite -Dsystemd_notify=false; the notify support was compiled in"
+fi
 
 command -v readelf >/dev/null 2>&1 \
 	|| die "no readelf; cannot verify what Xwayland links, and these checks are not optional"
