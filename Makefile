@@ -171,7 +171,8 @@ GTK_PKGS := \
 	gdk-pixbuf graphene libepoxy \
 	libyaml curl libxmlb appstream \
 	gsettings-desktop-schemas \
-	gtk4 libadwaita adwaita-icon-theme cantarell-fonts
+	gtk4 libadwaita adwaita-icon-theme cantarell-fonts \
+	weston
 
 # Filesystem creation. Not part of the session and not part of the boot chain:
 # nothing already here calls them, and nothing boots without them either. They
