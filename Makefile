@@ -138,7 +138,7 @@ TOOLS_PKGS := \
 	\
 	gettext ninja cmake meson gperf \
 	libxml2 libxslt itstool python-markupsafe python-jinja2 python-mako \
-	python-setuptools python-pyyaml python-pycparser
+	python-setuptools python-pyyaml python-pycparser python-pyparsing
 
 SESSION_PKGS := \
 	libcap expat pcre2 \

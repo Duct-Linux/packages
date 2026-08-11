@@ -1,0 +1,18 @@
+[package]
+name = "python-pyparsing"
+description = "Parsing library in pure Python"
+version = "3.3.2"
+subversion = "1"
+authors = ["Paul McGuire"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+python = ">=3.13.0"
+
+[dependencies.build]
