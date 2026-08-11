@@ -1,0 +1,64 @@
+[package]
+name = "polkit"
+description = "Authorization manager: pkexec, polkitd and the JavaScript rules engine"
+version = "126.0.0"
+subversion = "1"
+authors = ["The polkit project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+# Its own, because the assertions have to run on the FINAL payload -- after
+# finish_install has stripped every binary. pkexec's setuid bit is the thing
+# most worth asserting and stripping rewrites the file it lives on, so an
+# assertion in post-install.sh would be checking bytes that are then replaced.
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+# The XML parser for the .policy action files. meson.build does not merely look
+# for it -- it asserts on expat.h and on XML_ParserCreate.
+expat = ">=2.7.0"
+# THE RULES ENGINE. polkit 126 has exactly one JavaScript backend and it is
+# duktape: mozjs was removed upstream in 124, so there is no second engine to
+# pull in and no option to choose between them. See pkg.env.
+duktape = ">=2.7.0"
+# pkexec and polkit-agent-helper-1 authenticate through PAM.
+linux-pam = ">=1.7.0"
+# THE LOGIND INTERFACE. -Dsession_tracking=elogind makes this a link-time
+# dependency: libpolkit-gobject-1 carries DT_NEEDED libelogind.so.
+elogind = ">=255.17.0"
+# Not linked -- polkitd speaks D-Bus through GDBus -- and still a runtime
+# dependency, for the same reason glib-networking declares ca-certificates:
+# polkitd IS a system bus service. It is started by dbus activation, it owns
+# org.freedesktop.PolicyKit1 on the system bus, and every caller reaches it
+# through that bus. Without dbus the package installs and authorizes nothing.
+dbus = ">=1.16.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+# i18n.gettext() in po/meson.build, which runs whether or not -Dgettext is set:
+# the option only controls the ENABLE_GETTEXT define, not whether the catalogues
+# are built.
+gettext = ">=0.26.0"
+# src/polkitbackend/meson.build:18 runs toarray.pl through find_program('perl')
+# with no `required: false` and no option guard, to turn init.js into a C array.
+# Without perl the build stops at meson setup.
+perl = ">=5.42.0"
+# -Dintrospection=true. gnome-shell's polkit agent is JavaScript and reaches
+# polkit through the Polkit-1.0 typelib, so this is not optional decoration --
+# and generating a GIR needs the scanner (gobject-introspection) and the GObject
+# .gir data (glib-introspection) both.
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.0"

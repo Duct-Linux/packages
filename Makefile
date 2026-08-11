@@ -230,6 +230,34 @@ CRYPTO_PKGS := \
 	dconf libpsl nghttp2 sqlite glib-networking \
 	flatpak libsoup
 
+# The system services a desktop session asks before it can do anything
+# privileged, know anything about the hardware, or reach a secret.
+#
+# A NEW LIST RATHER THAN AN ADDITION TO SESSION_PKGS, and the reason is the
+# ordering rule the other lists are already built on rather than tidiness.
+# SESSION_PKGS is the logind/udev/PAM tier and runs BEFORE glib, introspection
+# and gtk. Everything here needs at least glib and most of it needs
+# gobject-introspection, so appending to SESSION_PKGS would put each package
+# earlier than something it needs -- which is precisely what
+# tools/check-build-order.sh exists to refuse.
+#
+# Placed after CRYPTO_PKGS for the same reason CRYPTO_PKGS is placed after
+# GTK_PKGS, stated in its own comment: putting the group last means every
+# prerequisite precedes it however the earlier lists are rearranged. gcr and
+# libsecret need libgcrypt and gnupg from that group; polkit and
+# accountsservice need elogind from SESSION_PKGS and glib from GLIB_PKGS.
+#
+# BEFORE NETWORK_PKGS, which is the one ordering constraint between the two
+# groups: NetworkManager is destined for that list and does not build usefully
+# without polkit -- `-Dpolkit=false` makes it set main.auth-polkit=false and
+# authorize nothing on its D-Bus API. Nothing in NETWORK_PKGS today needs
+# anything from here, so this costs nothing now and is the order that stays
+# correct when NetworkManager arrives.
+#
+# The internal order is the dependency order.
+SERVICES_PKGS := \
+	polkit
+
 # Networking and Bluetooth: the daemons and libraries gnome-control-center's
 # Network, Wi-Fi and Bluetooth panels talk to. A tier of its own rather than an
 # addition to an existing list, because the README describes the desktop tiers
@@ -258,7 +286,7 @@ NETWORK_PKGS := \
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
-	$(NETWORK_PKGS) $(BOOT_PKGS)
+	$(SERVICES_PKGS) $(NETWORK_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #
