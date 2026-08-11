@@ -177,13 +177,21 @@ GRAPHICS_PKGS := \
 # nothing here needs anything from GTK_PKGS. alsa-lib itself needs only glibc
 # and is first because pipewire's ALSA device backend is built against it.
 #
+# The three leaf libraries come first and the two daemons after, which is the
+# dependency order and stays the dependency order as this group grows.
+#
 # sbc precedes pipewire although nothing yet makes it a dependency: pipewire is
 # built -Dbluez5=disabled today, and the follow-up that enables it makes sbc a
 # build input. Ordering it now costs nothing -- sbc needs only glibc -- and
 # means the re-enable is a flag change rather than a flag change plus a
 # reordering of this list.
+#
+# lua sits here rather than in TOOLS_PKGS because it is not a build tool in this
+# tree: it is wireplumber's embedded policy engine, loaded as a shared library
+# at run time. It needs only glibc, so it goes with the other leaf libraries.
 MEDIA_PKGS := \
-	alsa-lib sbc pipewire
+	alsa-lib sbc lua \
+	pipewire wireplumber
 
 GTK_PKGS := \
 	harfbuzz cairo pango \

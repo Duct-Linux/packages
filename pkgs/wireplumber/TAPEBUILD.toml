@@ -1,0 +1,49 @@
+[package]
+name = "wireplumber"
+description = "Session and policy manager for PipeWire"
+version = "0.5.10"
+subversion = "1"
+authors = ["The WirePlumber project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# libpipewire-0.3 AND libspa-0.2, both taken with a bare dependency() and no
+# required: false, so a missing either is a loud configure failure rather than
+# a quieter build. That is why neither gets an assertion in install.sh: the
+# build cannot reach the install step without them.
+pipewire = ">=1.4.7"
+# The policy engine. Everything wireplumber decides -- default sink, device
+# routing, volume restore -- is a Lua script loaded through
+# wireplumber-module-lua-scripting, which is why install.sh asserts that module
+# specifically rather than only the daemon.
+lua = ">=5.4.8"
+# glib-2.0, gobject-2.0, gmodule-2.0, gio-2.0 and gio-unix-2.0. gmodule is what
+# loads the modules; a wireplumber without it is a daemon that can load no
+# policy at all.
+glib = ">=2.84.0"
+# libelogind, taken through -Delogind=enabled. wireplumber asks logind whether
+# the session is active before taking a device on a seat.
+#
+# There is deliberately no gettext entry despite meson's dependency('intl'):
+# on glibc the gettext functions live in libc itself and meson's builtin intl
+# lookup resolves there, so declaring it would name a dependency the artefact
+# does not have.
+elogind = ">=255.17.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
