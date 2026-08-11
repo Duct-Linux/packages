@@ -63,6 +63,34 @@ fetch() {
             _urls="$_urls https://ftp.gnu.org/gnu/$_rest https://mirrors.kernel.org/gnu/$_rest" ;;
     esac
 
+    # A LAST-RESORT MIRROR FOR EVERYTHING, because single-host upstreams fail in
+    # ways retrying cannot fix.
+    #
+    # startup-notification fetched fine from freedesktop.org on both
+    # architectures in one CI run and returned three consecutive HTTP 418s in
+    # the next -- same URL, same digest, minutes apart. 418 is the code the
+    # retry loop below exists for, and it still lost: the host was refusing on
+    # purpose, which is rate limiting against CI egress rather than a blip.
+    #
+    # Several sources in this tree have exactly one host and no redundancy at
+    # all -- libcanberra is served from a personal domain, sound-theme from a
+    # ~user directory. BLFS mirrors its own sources at osuosl under
+    # conglomeration/<project>/<file>, and <project> is the tarball name with
+    # its version stripped. Verified byte-identical for startup-notification,
+    # sound-theme-freedesktop and libcanberra against the digests this tree
+    # already records.
+    #
+    # Appended LAST, so it is only ever reached after the real upstream has
+    # failed, and a 404 here for a non-BLFS source costs one request on a path
+    # that was already failing. Content is verified after fetching regardless of
+    # which host answered, so a mirror cannot substitute different bytes.
+    _mirror_name=$(basename "$_url"); _mirror_name=${_mirror_name%.tar.*}
+    _mirror_name=${_mirror_name%.crate}
+    _mirror_proj=$(printf '%s' "$_mirror_name" | sed 's/-[0-9][0-9A-Za-z.+~-]*$//')
+    if [ -n "$_mirror_proj" ]; then
+        _urls="$_urls https://ftp.osuosl.org/pub/blfs/conglomeration/$_mirror_proj/$(basename "$_url")"
+    fi
+
     for u in $_urls; do
         echo "  fetching $u"
         # NO -A/--user-agent HERE, AND THAT IS A MEASURED DECISION RATHER THAN
