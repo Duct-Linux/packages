@@ -280,8 +280,12 @@ SERVICES_PKGS := \
 #            the SONAME of at BUILD time.
 #   libndp   IPv6 neighbour discovery. NetworkManager's one hard external
 #            dependency that nothing else here provides.
+#   bluez    bluetoothd, which IS gnome-bluetooth's entire backend. Needs glib,
+#            dbus and eudev, so it follows SESSION_PKGS and GLIB_PKGS -- but
+#            nothing in this group, which is why it is second rather than last.
 NETWORK_PKGS := \
-	libnl jansson libndp
+	libnl jansson libndp \
+	bluez
 
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \

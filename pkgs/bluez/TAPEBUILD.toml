@@ -1,0 +1,46 @@
+[package]
+name = "bluez"
+description = "Bluetooth protocol stack: bluetoothd, the daemon gnome-bluetooth talks to over D-Bus"
+version = "5.83.0"
+subversion = "1"
+authors = ["Marcel Holtmann and the BlueZ project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# The three PKG_CHECK_MODULES that configure will not proceed without. Each was
+# confirmed by running configure in duct/builder rather than by reading:
+#   glib-2.0 >= 2.36   the mainloop bluetoothd runs on
+#   dbus-1   >= 1.10   the bus its entire API is exposed on
+#   libudev  >= 196    how it notices adapters appearing
+glib = ">=2.84.0"
+dbus = ">=1.16.0"
+eudev = ">=3.2.14"
+# NOT DECLARED AND DELIBERATELY SO: polkit. bluez carries its OWN polkit client
+# -- gdbus/polkit.c, which speaks org.freedesktop.PolicyKit1 over the bus and is
+# reached from gdbus/object.c's method dispatch. It links nothing from polkit and
+# there is no polkit PKG_CHECK_MODULES anywhere in configure.ac, so a build-time
+# declaration would simply be false. Checked in the source rather than taken from
+# the brief, which said bluez needs polkit at build time; it does not.
+#
+# Not declared at RUNTIME either, and that is the weaker of the two claims: it
+# would make this package uninstallable until polkit is published, and what
+# gates access to org.bluez in the meantime is the D-Bus policy in
+# src/bluetooth.conf, which this package installs. Worth revisiting once polkit
+# is in the index -- a dependency added later needs a subversion bump, since
+# [dependencies] reaches TAPEPACKAGE.toml.
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
