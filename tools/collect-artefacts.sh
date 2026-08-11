@@ -34,7 +34,8 @@
 # mechanism here answered a slightly different question than that one.
 #
 # Usage: collect-artefacts.sh <run-id> <dest-dir>
-# Requires: gh (authenticated via GH_TOKEN), unzip, jq.
+# Requires: gh (authenticated via GH_TOKEN) and unzip. The -q filters are gh's
+# own built-in jq; no separate jq binary is needed.
 
 set -eu
 
