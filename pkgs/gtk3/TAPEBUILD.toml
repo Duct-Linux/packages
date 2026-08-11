@@ -1,0 +1,60 @@
+[package]
+name = "gtk3"
+description = "GTK 3, Wayland-only: the toolkit libnma links unconditionally, which gnome-control-center's network panel needs"
+version = "3.24.50"
+subversion = "1"
+authors = ["The GTK Team"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+cairo = ">=1.18.0"
+pango = ">=1.56.0"
+gdk-pixbuf = ">=2.42.0"
+libepoxy = ">=1.5.0"
+fribidi = ">=1.0.0"
+harfbuzz = ">=11.0.0"
+# ATK. Not a package of its own any more -- at-spi2-core absorbed it, and it is
+# what installs atk.pc and atk-bridge-2.0.pc. Verified against the PUBLISHED
+# package rather than the recipe: at-spi2-core-2.56.4-1 ships both.
+at-spi2-core = ">=2.56.0"
+# The Wayland backend's four dependencies, all required once
+# -Dwayland_backend=true: wayland-client, wayland-cursor and wayland-protocols
+# (meson.build 538-540), and wayland-egl, which comes from mesa rather than
+# from wayland.
+wayland = ">=1.23.0"
+wayland-protocols = ">=1.41.0"
+mesa = ">=25.0.0"
+# meson.build 441: required whenever the wayland backend is enabled, not
+# optional as it is for the X11 build.
+libxkbcommon = ">=1.8.0"
+# Runtime, not build. GTK looks up icons by name through the icon theme and
+# resolves MIME types for file choosers; neither is linked, and both are
+# missing-at-runtime failures rather than build failures -- an application that
+# starts with no icons at all.
+adwaita-icon-theme = ">=48.0.0"
+shared-mime-info = ">=2.4.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+# -Dintrospection=true. Two packages, not one: g-ir-scanner comes from
+# gobject-introspection, and the GObject typelibs it reads come from
+# glib-introspection. A package with one and not the other links and then dies.
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.0"
+gettext = ">=0.26.0"
