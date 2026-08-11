@@ -1,0 +1,34 @@
+[package]
+name = "sbc"
+description = "Bluetooth SBC audio codec library"
+version = "2.1.0"
+subversion = "1"
+authors = ["The BlueZ project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+# libc and libm, and nothing else. Verified against Makefile.am rather than
+# assumed from the size of the package: the library's only link-time input
+# besides libc is the math library, and the one dependency configure probes for
+# -- sndfile -- belongs to the tester, which --disable-tester removes.
+#
+# The version is declared 2.1.0 while upstream ships "sbc-2.1". tape's resolver
+# requires three-component semver and skips a package that is not, SILENTLY, so
+# the trailing zero is load-bearing; check-recipes knows the padding and matches
+# the declared version against the URL either way.
+glibc = ">=2.42.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
