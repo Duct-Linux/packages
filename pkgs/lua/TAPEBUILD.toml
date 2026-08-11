@@ -1,0 +1,32 @@
+[package]
+name = "lua"
+description = "Powerful, efficient, lightweight embeddable scripting language"
+version = "5.4.8"
+subversion = "1"
+authors = ["PUC-Rio"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+# The shared generic prepare, which applies every patch in patches/ in sorted
+# order. lua needs one: upstream builds a static liblua.a only, and wireplumber
+# loads its modules against a shared object.
+[prepare]
+script = "../_scripts/prepare.sh"
+
+# lua has no configure and no meson. It ships a hand-written Makefile with one
+# target per platform, so neither the generic build nor the generic install
+# applies -- the same situation as duktape and bzip2.
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+# libm and libdl, both from glibc. `make linux` aliases linux-noreadline, so
+# there is deliberately no readline edge here -- see build.sh.
+glibc = ">=2.42.0"
+
+[dependencies.build]
