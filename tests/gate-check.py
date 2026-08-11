@@ -188,15 +188,48 @@ def parse_request(arg):
 
 def main(names):
     path = fetch(REPO)
+    # ORDER BY id, explicitly. The previous version relied on the order sqlite
+    # happened to return, which is unspecified without it -- and it decided
+    # which build got called "the" one. That worked only because rowid order
+    # happens to be insertion order today.
     rows = sqlite3.connect(path).execute(
-        "select name, version, subversion, arch from packages where deleted_at is null"
+        "select name, version, subversion, arch from packages "
+        "where deleted_at is null order by id"
     ).fetchall()
 
-    arches = defaultdict(set)
-    version = {}
+    # KEYED BY (name, identity), NOT BY NAME.
+    #
+    # THE INDEX ACCUMULATES; IT DOES NOT REPLACE. Publishing patch 2.8.0-3
+    # leaves 2.8.0-1 and 2.8.0-2 in place, all with deleted_at NULL -- measured
+    # on 2026-08-11, when a five-package republish moved the row count 354 ->
+    # 364 while the name count did not move at all.
+    #
+    # The previous version unioned arches per NAME, across every subversion.
+    # That makes the completeness check unsound in exactly the case it was
+    # written for: a truncated publish that lands 2.8.0-3 on x86_64 only still
+    # reads as covering both arches, because 2.8.0-2 supplies the aarch64.
+    # AN OLDER GOOD BUILD CONCEALS A NEWER BROKEN ONE.
+    #
+    # This is not hypothetical and the live index demonstrates it: rust
+    # 1.97.1-1 exists on aarch64 ONLY. It is harmless because 1.97.1-4 is
+    # complete -- but had -4 been the truncated one, the union would have
+    # reported READY off the back of -2.
+    #
+    # It also explains the shape observed the night of the truncation: the
+    # visibility of the damage was inversely proportional to how long a package
+    # had existed. That was not a property of the damage. IT WAS THIS BUG.
+    per_identity = defaultdict(set)
+    latest = {}
     for name, ver, sub, arch in rows:
-        arches[name].add(arch)
-        version[name] = "%s-%s" % (ver, sub)
+        identity = "%s-%s" % (ver, sub)
+        per_identity[(name, identity)].add(arch)
+        latest[name] = identity          # last by id == most recently indexed
+
+    # Kept only for the floor check and the ABSENT test, both of which are
+    # genuinely questions about the NAME rather than about a build.
+    arches = defaultdict(set)
+    for (name, _identity), got in per_identity.items():
+        arches[name] |= got
 
     total_names = len({r[0] for r in rows})
     print("index: %d names, %d rows" % (total_names, len(rows)))
@@ -214,31 +247,50 @@ def main(names):
     verdicts = []
     for request in names:
         name, want = parse_request(request)
-        have = arches.get(name)
-        if not have:
+        if name not in arches:
             print("  ABSENT      %-14s — not published at all; wait" % name)
             verdicts.append("%s ABSENT" % name)
             ready = False
-        elif have == {"any"}:
-            print("  READY       %-14s %s  (any)" % (name, version[name]))
-            verdicts.append("%s READY" % name)
-        elif want is not None and version[name] != want:
-            # Present, complete, and NOT the build the caller is waiting for.
-            # This is exactly the state a truncated publish leaves behind: an
-            # older row survives and reads healthy.
+            continue
+
+        # WHICH BUILD IS BEING JUDGED, decided before anything is measured.
+        # Pinned means that exact one; unpinned means the most recently
+        # indexed. Every check below then reads the arches of THAT identity
+        # alone, so no other build can lend it coverage.
+        identity = want if want is not None else latest[name]
+        have = per_identity.get((name, identity), set())
+
+        if want is not None and not have:
+            # Asked for a build the index does not contain. The name IS
+            # present, and older builds of it may be perfectly complete --
+            # which is exactly what a discarded upload leaves behind.
             print("  STALE       %-14s index has %s, you asked for %s"
-                  % (name, version[name], want))
-            print("              Present and complete, but not this build. A publish")
-            print("              that dropped it would look exactly like this.")
+                  % (name, latest[name], want))
+            print("              The name is published and its other builds may be")
+            print("              complete. THIS build is not in the index at all.")
+            print("              A publish discarded for a duplicate identity, or")
+            print("              never uploaded, looks exactly like this.")
             verdicts.append("%s STALE" % name)
             ready = False
+        elif have == {"any"}:
+            print("  READY       %-14s %s  (any)" % (name, identity))
+            verdicts.append("%s READY" % name)
         elif REQUIRED <= have:
-            print("  READY       %-14s %s  (%s)" % (name, version[name], ", ".join(sorted(have))))
+            print("  READY       %-14s %s  (%s)" % (name, identity, ", ".join(sorted(have))))
             verdicts.append("%s READY" % name)
         else:
             missing = ", ".join(sorted(REQUIRED - have))
             print("  INCOMPLETE  %-14s %s  has %s, MISSING %s"
-                  % (name, version[name], ", ".join(sorted(have)), missing))
+                  % (name, identity, ", ".join(sorted(have)), missing))
+            # Named explicitly, because the older builds are the reason this
+            # is worth printing: they are what made the previous version of
+            # this tool answer READY here.
+            others = sorted(i for (n, i) in per_identity if n == name and i != identity)
+            if others:
+                print("              Other builds of %s ARE in the index (%s) and one"
+                      % (name, ", ".join(others)))
+                print("              of them may well cover %s. THAT DOES NOT COUNT:" % missing)
+                print("              an install resolves one build, not a union of them.")
             print("              A name check would call this published. It is not:")
             print("              a build would pass on %s and fail on %s, and that"
                   % (", ".join(sorted(have)), missing))
