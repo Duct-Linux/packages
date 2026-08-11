@@ -152,11 +152,42 @@ jobs:
              from packages where arch in ('${{ matrix.seed_arch }}','any') and deleted_at is null;")
           [ -n "$files" ] || { echo "::notice::nothing published for ${{ matrix.seed_arch }} yet"; exit 0; }
           n=0
+          skipped=0
+          listed=$(printf '%s\n' $files | wc -l | tr -d ' ')
           for f in $files; do
             # The package being built is deliberately not seeded: it would be
             # the previous build of the very thing under test.
-            case $f in ${{ matrix.package }}-*) continue ;; esac
-            curl -fsSL -o pkg.tar.gz "$REPO_URL/packages/$f" || continue
+            #
+            # ANCHORED ON THE VERSION, WHICH ALWAYS STARTS WITH A DIGIT. The
+            # pattern used to be `${package}-*`, which also matched every
+            # package whose NAME begins with this one's followed by a hyphen --
+            # ten real collisions in the current tree:
+            #
+            #   building python  ALSO skipped python-jinja2, python-mako,
+            #                    python-markupsafe, python-pycparser,
+            #                    python-pyyaml and python-setuptools
+            #   building linux   ALSO skipped linux-headers and linux-pam
+            #   building glib    ALSO skipped glib-introspection
+            #   building wayland ALSO skipped wayland-protocols
+            #
+            # Silently, and in the direction that looks like a recipe bug: the
+            # build fails on a missing dependency that IS published and IS
+            # listed, so the seed count is quietly short and nothing says which
+            # ones were withheld or why. Checked against the index -- zero
+            # published versions begin with anything other than a digit -- so
+            # -[0-9]* separates a version from a name suffix exactly.
+            case $f in ${{ matrix.package }}-[0-9]*) continue ;; esac
+            # A seed that cannot be fetched is NOT nothing, and this used to
+            # `|| continue` in silence. It is not fatal -- the package may
+            # genuinely not be needed, and one unreachable file should not stop
+            # a build that would otherwise succeed -- but an unexplained short
+            # seed count is how a missing build dependency reads as a recipe
+            # bug. Say which file and why.
+            if ! curl -fsSL -o pkg.tar.gz "$REPO_URL/packages/$f"; then
+              echo "::warning::could not download $f; not seeded"
+              skipped=$((skipped + 1))
+              continue
+            fi
             # tar straight into deps/, rather than unpacking to a scratch
             # directory and `cp -a`-ing the result over.
             #
@@ -190,7 +221,11 @@ jobs:
             n=$((n+1))
           done
           rm -f pkg.tar.gz
-          echo "seeded $n published packages"
+          # The count on its own is not readable: "seeded 81" looks fine until
+          # you know the index listed 170. Print what it was measured against,
+          # so a short seed is visible in the line that reports it rather than
+          # inferred hours later from a missing command.
+          echo "seeded $n of $listed published package(s) for ${{ matrix.seed_arch }}; $skipped could not be downloaded"
 
       # Everything built earlier in *this* run, unpacked on top of the published
       # set so a package under review wins over its published predecessor.
