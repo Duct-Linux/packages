@@ -354,10 +354,26 @@ GNOME_PKGS := \
 	libusb libgusb \
 	highway libjxl
 
+# The GTK 3 island, and it is an island on purpose.
+#
+# gtk3 exists for exactly one consumer: libnma, whose meson.build has a
+# top-level unconditional gtk+-3.0 dependency, and which gnome-control-center
+# 48.4 requires under host_is_linux with no option to drop. It is not a second
+# application platform and must not become somewhere GTK 3 packages accumulate.
+#
+# AFTER GNOME_PKGS because gtk3 needs at-spi2-core, which is in that group --
+# at-spi2-core absorbed ATK, and gtk3's dependency('atk') is a hard build
+# requirement. Placing it in NETWORK_PKGS with the rest of this chain's work is
+# what a topic-based reading would do, and check-build-order rejects it:
+# "out of order: gtk3 (position 163) needs at-spi2-core (position 168)".
+NETWORK_UI_PKGS := \
+	gtk3
+
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
-	$(SERVICES_PKGS) $(NETWORK_PKGS) $(GNOME_PKGS) $(BOOT_PKGS)
+	$(SERVICES_PKGS) $(NETWORK_PKGS) $(GNOME_PKGS) \
+	$(NETWORK_UI_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #
