@@ -20,7 +20,9 @@ script = "../_scripts/prepare.sh"
 script = "../_scripts/build.sh"
 
 [install]
-script = "../_scripts/install.sh"
+# Its own: ostree ships an absolute symlink that tape-repo cannot archive, and
+# the failure lands in publish rather than in the build. See install.sh.
+script = "install.sh"
 
 [dependencies]
 glibc = ">=2.42.0"
