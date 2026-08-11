@@ -5,17 +5,33 @@
 
 cd "$BUILD_DIR"
 
-# Plain `install`, and NOT `install-libs`.
+# Plain 'install', and NOT 'install-libs'.
 #
-# An earlier draft of this recipe ran both, on the assumption that the default
-# target stages only the programs. It does not: Makefile.in:74 shows `install`
-# already depends on install-shlibs-libs-recursive, so the shared libraries
-# e2fsck links against are staged by it. `install-libs` additionally stages the
-# static archives and the development headers, which nothing here uses and
-# which would go into every installed system.
+# WHAT EACH TARGET STAGES, MEASURED FROM A BUILD RATHER THAN READ OFF THE
+# MAKEFILE. The comment that stood here until now said that install-libs was
+# what added the static archives and the development headers, and that plain
+# install added neither. BOTH HALVES WERE WRONG. It was written by reading the
+# top-level install target, seeing it depend on install-shlibs-libs-recursive
+# rather than install-libs-recursive, and concluding what the lib
+# subdirectories must therefore not do. The lib subdirectories have their own
+# install:: rules -- lib/et/Makefile.in carries one -- and those run whichever
+# top-level target asked for them.
 #
-# The assertion below checks that the shared libraries really are present,
-# rather than trusting either reading of the Makefile.
+# Plain install stages ALL of: the programs, the shared libraries, the
+# development headers under /usr/include/{e2p,et,ext2fs,ss}, the four
+# pkg-config files, and the three static archives.
+#
+# The error survived a full day because this recipe had never once got past
+# configure in CI -- util-linux was missing from the published repository -- so
+# no tree had ever existed to look at, and a claim about the outcome was made
+# from the mechanism alone.
+#
+# Consequences, both load-bearing for other packages:
+#   - THE HEADERS SHIP. ostree compiles against libe2p and needs nothing
+#     further from this recipe.
+#   - The archives are removed below. That is a decision about static linking
+#     and NOT an answer to whether this should become a -dev package, which is
+#     deliberately still open.
 make DESTDIR="$DESTDIR" install || die "make install failed"
 
 finish_install
@@ -72,12 +88,41 @@ for l in libext2fs libe2p libcom_err libss; do
 	[ -e "$1" ] || die "$l shared library was not staged; e2fsck and mke2fs would not start"
 done
 
-# No static archives: nothing links them and they would ship in every installed
-# system. If a future upstream starts installing them by default, this says so
-# rather than letting the package quietly grow.
+# ---------------------------------------------------------------------------
+# THE STATIC ARCHIVES: REMOVED BY NAME, AND THEN THE ABSENCE IS MEASURED
+#
+# libcom_err.a, libe2p.a and libext2fs.a are staged by plain install and are
+# deleted here. Nothing in Duct links statically, LFS deletes them too, and
+# they would otherwise go into every installed system. One line to reverse if
+# something ever does need static linking.
+#
+# BY NAME, and not `rm usr/lib/*.a`, so the guard below is not measuring its
+# own cleanup. A blanket remove followed by "assert no archives remain" is an
+# assertion that cannot fail -- it would report on the rm rather than on the
+# package, which is the shape of guard this recipe exists to avoid.
+#
+# Each one must be PRESENT before it is removed. A silent `rm -f` of something
+# upstream no longer produces would hide exactly the change worth knowing
+# about, and the version is pinned, so this can only fire when a human is
+# already bumping it.
+# ---------------------------------------------------------------------------
+for a in libcom_err.a libe2p.a libext2fs.a; do
+	[ -e "$DESTDIR/usr/lib/$a" ] ||
+		die "$a was not staged, so this recipe is deleting something that is no
+       longer there. Upstream changed what the install target produces -- find
+       out what else moved before trimming this loop."
+	rm -f "$DESTDIR/usr/lib/$a" || die "could not remove $a from the staging root"
+done
+
+# Any OTHER archive is an upstream change nobody has made a decision about.
+# This is the original guard, kept, and it now runs against a tree the three
+# known archives have already been taken out of -- so it can only report
+# something new.
 for a in "$DESTDIR"/usr/lib/*.a; do
 	[ -e "$a" ] || continue
-	die "static archive $(basename "$a") was staged; nothing here links it"
+	die "static archive $(basename "$a") was staged; nothing here links it, and it
+       is not one of the three this recipe knows about. Decide whether it ships
+       before this package does."
 done
 
 # mke2fs.conf decides what features a filesystem gets when no -O is passed, and

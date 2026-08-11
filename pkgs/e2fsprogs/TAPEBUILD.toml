@@ -2,7 +2,13 @@
 name = "e2fsprogs"
 description = "ext2/3/4 filesystem utilities: mke2fs, e2fsck, tune2fs"
 version = "1.47.2"
-subversion = "1"
+# Bumped when the static archives were dropped. e2fsprogs has never published,
+# so this is still its first identity to reach a repository -- but the rule is
+# bump on any content change after a build has run, because tape-repo refuses
+# an upload whose name=version-subversion already exists and DISCARDS IT
+# QUIETLY. A package that is silently not republished looks exactly like one
+# that was.
+subversion = "2"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 
