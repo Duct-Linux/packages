@@ -13,7 +13,7 @@ script = "../_scripts/fetch.sh"
 script = "../_scripts/prepare.sh"
 
 [build]
-script = "../_scripts/build.sh"
+script = "./build.sh"
 
 [install]
 script = "./install.sh"
