@@ -28,9 +28,13 @@ install needs no package repository at all — the live squashfs already holds
 every file of the installed set plus tape's database, so the installer copies
 the filesystem and removes what is live-only.
 
-Two blockers remain, both packages: **`e2fsprogs`** and **`dosfstools`**. One
-decision remains, and it is the human's: **what runs as PID 1** on an installed
-system, since `duct-live` is live-only.
+Both blocking packages now exist. **`e2fsprogs`** is merged and published
+(`1.47.2-3`, both arches); **`dosfstools`** is green in packages#51 and waiting
+on a merge slot. So nothing in the package tree blocks an installer from
+putting a filesystem on a disk.
+
+One decision remains, and it is the human's: **what runs as PID 1** on an
+installed system, since `duct-live` is live-only.
 
 ## Building
 
@@ -42,7 +46,7 @@ See DESIGN.md.
 ```sh
 meson setup build
 ninja -C build
-meson test -C build          # the backend, no display needed
+meson test -C build          # backend, CLI, shell syntax — no display needed
 ./build/duct-installer       # the GUI — dry run, writes nothing
 ./build/duct-install-cli --list-disks
 ./build/duct-install-cli -a tests/answers.example -t /dev/nvme0n1
@@ -62,15 +66,15 @@ PATH=/opt/homebrew/bin:$PATH PKG_CONFIG_PATH=/opt/homebrew/lib/pkgconfig meson s
 
 ## Verification
 
-Two checks, both passing, neither needing a screen:
+Three suites and a self-test, all passing, none needing a screen:
 
 ```sh
 meson test -C build              # backend, CLI and shell-syntax; no display needed
 ./build/duct-installer --self-test   # constructs all 9 screens, runs an install
 ```
 
-`meson test` runs three suites. `backend` exercises the safety model directly: the live medium cannot be
-planned for, a too-small disk is refused, every disk description names its node
+`meson test` runs three suites. `backend` exercises the safety model directly:
+the live medium cannot be planned for, a too-small disk is refused, every disk description names its node
 and exact byte count, partition naming is right for `sda`/`nvme0n1`/`mmcblk0`,
 the real backend refuses to exist, and a complete dry run logs 49 commands and
 writes nothing.
@@ -138,6 +142,8 @@ present, not merely switched off. Two gates were placed on writing it:
 
 1. `e2fsprogs` and `dosfstools` must exist, because until they do the code
    cannot be tested and untested destructive code is the thing being avoided.
+   **This gate is now open**: e2fsprogs is published and dosfstools is green in
+   packages#51. Gate 2 is not, and it is the one that matters.
 2. A virtual machine must be arranged, and explicit approval given separately
    from the approval to write it.
 
@@ -148,10 +154,12 @@ proved against before it is allowed to run anywhere.
 
 ## What I did not do
 
-- Touched `packages/` or `images/`. What is needed there — `e2fsprogs` and
-  `dosfstools` for duct-3, the kernel-config assertions and the install trigger
-  for duct-2 — is in GAP-ANALYSIS.md and was routed through the orchestrator
-  rather than made here.
+- Touched `images/` at all, and did not touch `packages/` while the scope rule
+  was in force. `e2fsprogs` and `dosfstools` were written only after the
+  orchestrator lifted it and assigned those two recipes to me. Everything else
+  the gap analysis asks for — the kernel-config assertions and the install
+  trigger, both duct-2's — is recorded in GAP-ANALYSIS.md and was routed
+  through the orchestrator rather than made here.
 - Built a bootloader test. duct-2 is doing that one (test 4a) in their own
   territory, ahead of the installer, so a wrong GRUB module list names its own
   cause instead of surfacing inside an installer.
