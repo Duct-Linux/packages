@@ -103,10 +103,18 @@ BUILDER_PKGS := \
 	m4 bison flex make gawk sed grep findutils diffutils \
 	tar gzip xz bzip2 patch file readline perl texinfo
 
-# Built in duct/rust rather than duct/chroot, because there is no Rust compiler
-# in the Duct package set. Cross-linked against Duct's own glibc, so the result
-# is bound to the libc that ships -- see docker/Dockerfile.rust.
-RUST_PKGS := uutils-coreutils
+# Built in duct/rust rather than duct/chroot, because there is no cargo in the
+# standard build image. Cross-linked against Duct's own glibc, so the result is
+# bound to the libc that ships -- see docker/Dockerfile.rust.
+#
+# cbindgen joins uutils here, and it is a different KIND of member: uutils is a
+# shipped userland, cbindgen is a build-time-only tool that mozjs's configure
+# refuses to run without. That makes it the first entry in this list that
+# something in ALL_PKGS depends on, which is what the `packages` target's
+# ordering comment below is about. CI is told the same thing separately, in the
+# per-package image case in .github/workflows/build.yml -- two places, because
+# the local build and CI decide the image by different mechanisms.
+RUST_PKGS := uutils-coreutils cbindgen
 
 # Everything the live ISO needs and a container image does not.
 #
@@ -422,10 +430,41 @@ GNOME_PKGS := \
 NETWORK_UI_PKGS := \
 	gtk3
 
+# The JavaScript engine chain, and the reason it is a chain rather than a
+# package: gnome-shell and gnome-settings-daemon are GJS applications -- the
+# shell is JavaScript from its top-level down -- and gjs is a binding for
+# SpiderMonkey, which needs a system ICU under it.
+#
+# LATE, AFTER GTK_PKGS, because gjs is the tail of it and gjs needs cairo
+# (GTK_PKGS) and glib with introspection (GLIB_PKGS). readline and icu could
+# each sit far earlier -- readline needs only ncurses, icu only a C++ compiler
+# -- but splitting the group to place them there would put three of the four
+# entries somewhere the fourth cannot follow, and buy nothing: a local build is
+# a total order anyway, and CI derives its levels from the declared dependencies
+# rather than from this list.
+#
+# The internal order is the dependency order:
+#   icu       needs nothing here but a compiler
+#   mozjs     needs icu and readline, plus rust and cbindgen from RUST_PKGS
+#   gjs       needs mozjs, and is what the tier above actually calls
+#
+# TWO MEMBERS OF THIS CHAIN ARE NOT IN THIS GROUP, both deliberately.
+#
+# readline is in BUILDER_PKGS. It was written for mozjs and gjs, but three
+# other chains need it EARLIER -- NetworkManager's -Dnmcli asserts on it and
+# NETWORK_PKGS runs before this tier -- and it is an LFS chapter 8 package
+# needing only ncurses, so BUILDER_PKGS is both where the book puts it and the
+# earliest point it can go.
+#
+# cbindgen is in RUST_PKGS, because it is Rust and needs a cargo. See the note
+# there, and the one on the `packages` target.
+JS_PKGS := \
+	icu mozjs gjs
+
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
-	$(SERVICES_PKGS) $(NETWORK_PKGS) $(GNOME_PKGS) \
+	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(GNOME_PKGS) \
 	$(NETWORK_UI_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.

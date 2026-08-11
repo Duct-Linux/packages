@@ -1,0 +1,64 @@
+[package]
+name = "mozjs"
+description = "SpiderMonkey, Mozilla's JavaScript engine, from the Firefox ESR source"
+version = "140.2.0"
+subversion = "1"
+authors = ["The Mozilla Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# libmozjs-140.so is C++ and links libstdc++.
+gcc = ">=15.2.0"
+# --with-system-icu. Both of the modules js/moz.configure asks for by name come
+# from this package, and it is linked, not merely used at build time.
+icu = ">=77.1.0"
+# --with-system-zlib.
+zlib = ">=1.3.1"
+# --enable-readline. The js140 shell links libreadline, and libreadline links
+# libncursesw -- so ncurses arrives here through readline and is named anyway,
+# because a package that is a transitive runtime dependency is still a runtime
+# dependency.
+readline = ">=8.3.0"
+ncurses = ">=6.5.0"
+
+[dependencies.build]
+# Verified in the firefox-140.2.0 source, not assumed: js/moz.configure includes
+# build/moz.configure/bindgen.configure whenever --enable-compile-environment is
+# on, and that file raises FatalCheckError if cbindgen is not on PATH. Nothing
+# under js/ has a cbindgen.toml, so the build never runs it -- the check is
+# still fatal. See pkgs/cbindgen/pkg.env.
+cbindgen = ">=0.29.0"
+# SpiderMonkey is part Rust. This is also what orders the CI levels: cbindgen
+# needs rust too, and both must precede this package.
+rust = ">=1.97.0"
+# configure IS a Python program -- js/src/configure is a five-line shell wrapper
+# around configure.py.
+python = ">=3.13.0"
+# --with-system-icu and --with-system-zlib are resolved with pkg_check_modules.
+pkgconf = ">=2.5.0"
+
+# DELIBERATELY NOT DECLARED: gobject-introspection and glib-introspection.
+#
+# check-recipes.sh warns that this build "may need programs from packages it
+# does not declare: glib-introspection, gobject-introspection". It is a false
+# positive, and it is one the checker itself predicts: its rule-two scan reads
+# every meson.build in the tarball without evaluating the conditions around it,
+# and this tarball is the WHOLE OF FIREFOX -- 421,000 files, of which only js/
+# is built here. The generate_gir call it found belongs to the browser.
+#
+# SpiderMonkey does not use meson at all. Declaring these would add two
+# dependencies to a package that cannot use them and would move it down two
+# levels in CI for nothing.

@@ -355,6 +355,7 @@ than what the packages are about:
 | 2 | `GRAPHICS_PKGS` | wayland, libdrm, libinput, libxkbcommon, X client libraries, llvm, mesa, and the X *server* support libraries Xwayland needs (libxcvt, libxshmfence, libXfont2, xkbcomp) |
 | 2½ | `MEDIA_PKGS` | the audio stack, alsa-lib upwards. Between graphics and GTK because pipewire needs dbus, eudev and glib and nothing above them |
 | 3–4 | `DESKTOP_PKGS` | freetype through pango, then glib through gtk4 and libadwaita |
+| 5 | `JS_PKGS` | icu, mozjs (SpiderMonkey), gjs — the engine GNOME Shell runs on |
 
 Three decisions worth knowing before reading the recipes:
 
@@ -406,19 +407,56 @@ What is still missing, in dependency order:
 2. **Session services**: `polkit` (duktape is already packaged for it),
    `libgudev`, `upower`, `accountsservice`, `libnotify`, `gnome-desktop`,
    `gnome-menus`, `gcr`, `libsecret`, `gnome-keyring`.
-3. **JavaScript**: `mozjs`, then `gjs`.
-4. **The session itself**: `mutter`, `gnome-settings-daemon`, `gnome-session`,
+3. **The session itself**: `mutter`, `gnome-settings-daemon`, `gnome-session`,
    `gnome-shell`, `gnome-shell-extensions`, and a display manager or an
    autologin path.
 
-`mozjs` is the one with real risk in it, and it is unavoidable: `gnome-shell` is
-written in JavaScript, it runs on `gjs`, and `gjs` is a binding for
-SpiderMonkey. Building SpiderMonkey needs Rust — which Duct packages, in its own
-build image — and clang, which it does not. The `llvm` recipe added here builds
-with `LLVM_ENABLE_PROJECTS` empty; turning clang on is most of what unblocks
-`mozjs`, at a substantial cost in build time. Until that is done there is no
-GNOME Shell, and saying so plainly is better than discovering it at the end of
-the tier.
+### JavaScript, which used to be item 3 on that list
+
+`JS_PKGS` closes it: `icu`, `mozjs` and `gjs`, plus `cbindgen` over in
+`RUST_PKGS` and `readline` down in `BUILDER_PKGS`. `gnome-shell` and
+`gnome-settings-daemon` are GJS applications, so nothing above them could be
+attempted while this was missing.
+
+Two of the five sit outside the group, and both placements are load-bearing
+rather than tidy. `cbindgen` is Rust and needs a cargo. `readline` was written
+for `mozjs --enable-readline` and `gjs -Dreadline`, but three other chains need
+it *earlier* — NetworkManager leaves `-Dnmcli` defaulting true and its
+`-Dreadline=auto` probes readline then libedit with both `required: false`, so
+with neither packaged it does not degrade quietly, it trips an assert and fails
+the build. `NETWORK_PKGS` runs before this tier, so readline living here would
+have made nmcli unbuildable however correct the recipe was. It is an LFS chapter
+8 package (8.12, between File and M4) needing only ncurses, so `BUILDER_PKGS` is
+both where the book puts it and the earliest point it can go.
+
+**This section used to say that `mozjs` needed clang, and that turning clang on
+in the `llvm` recipe was "most of what unblocks mozjs". That was wrong, and it
+was wrong in the expensive direction** — it made a clang package look like a
+prerequisite for the whole GNOME tier, and a clang recipe was written on the
+strength of it. SpiderMonkey's default compiler is clang, which is not the same
+claim as requiring one: `CC=gcc CXX=g++` is what BLFS documents for keeping gcc,
+and in the source `build/moz.configure/bindgen.configure` *returns* rather than
+dying when no clang is found, leaving `MOZ_LIBCLANG_PATH` unset. Clang is
+genuinely required only on 32-bit systems without SSE2, where it exists to stop
+the x87 unit answering floating-point questions differently from everything
+else. Duct is x86_64 and aarch64. So `llvm` stays as it is, built for llvmpipe
+with `LLVM_ENABLE_PROJECTS` empty.
+
+What `mozjs` does need, and what none of the earlier notes mentioned, is
+**`cbindgen`** — a Rust program, packaged beside `uutils-coreutils` because it
+needs a cargo. Its configure raises a fatal error without one even though the
+standalone SpiderMonkey build never runs it: there is not a single
+`cbindgen.toml` under `js/` in the Firefox tarball. That is also why `packages`
+now runs `packages-rust` before `packages-native`; cbindgen is the first entry
+in `RUST_PKGS` that anything native depends on.
+
+The version pairing is the book's rather than the tarball's, and the two
+disagree. `gjs` 1.84.2's own `meson.build` reads `dependency('mozjs-128')`; BLFS
+12.4 ships that exact `gjs` against SpiderMonkey from `firefox-140.2.0esr` and
+carries `gjs-1.84.2-spidermonkey_140-1.patch` — eleven upstream commits — to
+move it. Following the book is the whole reason the book is followed: the set is
+known to build together, and 128 would mean building a mid-2024 ESR with the
+2026 rustc packaged here.
 
 Also deferred, and cheaper: `xwayland` (so X-only applications run at all),
 `gstreamer` (so `GtkVideo` and `gnome-shell`'s screencasting work), `cups` (so

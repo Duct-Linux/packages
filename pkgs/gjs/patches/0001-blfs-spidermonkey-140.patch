@@ -1,0 +1,1102 @@
+Submitted By:            Xi Ruoyao <xry111 at xry111 dot site>
+Date:                    2025-08-06
+Initial Package Version: 1.84.2
+Origin:                  Self & Upstream
+Upstream Status:         Applied
+Description:             Allow building gjs with spidermonkey 140.
+
+From 369043482c63a781e65b6959608974642aeecc8d Mon Sep 17 00:00:00 2001
+From: Xi Ruoyao <xry111@xry111.site>
+Date: Thu, 7 Aug 2025 11:29:02 +0800
+Subject: [PATCH 01/11] meson: Build with SpiderMonkey 140
+
+---
+ meson.build | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/meson.build b/meson.build
+index 32541b53..bf353d62 100644
+--- a/meson.build
++++ b/meson.build
+@@ -141,7 +141,7 @@ cairo = dependency('cairo', fallback: ['cairo', 'libcairo_dep'])
+ cairo_gobject = dependency('cairo-gobject',
+     fallback: ['cairo', 'libcairogobject_dep'])
+ cairo_xlib = dependency('cairo-xlib', required: false)
+-spidermonkey = dependency('mozjs-128')
++spidermonkey = dependency('mozjs-140')
+ 
+ sysprof_capture = dependency('sysprof-capture-4',
+     required: get_option('profiler'), include_type: 'system',
+-- 
+2.50.1
+
+From b1cc97c4052116de44205890dd06dce142722161 Mon Sep 17 00:00:00 2001
+From: Xi Ruoyao <xry111@xry111.site>
+Date: Wed, 25 Jun 2025 23:23:32 +0800
+Subject: [PATCH 02/11] mozjs-140: Initialize the codeForEvalGets field for
+ JSSecurityCallbacks
+
+Link: https://bugzilla.mozilla.org/show_bug.cgi?id=1905239
+(cherry picked from commit a6616d1b88bb2e61e6d354115300980e399dc971)
+---
+ gjs/engine.cpp | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/gjs/engine.cpp b/gjs/engine.cpp
+index 28f916cb..41a1b117 100644
+--- a/gjs/engine.cpp
++++ b/gjs/engine.cpp
+@@ -181,6 +181,7 @@ JSPrincipals* get_internal_principals() {
+ 
+ static const JSSecurityCallbacks security_callbacks = {
+     /* contentSecurityPolicyAllows = */ nullptr,
++    /* codeForEvalGets = */ nullptr,
+     &ModuleLoaderPrincipals::subsumes,
+ };
+ 
+-- 
+2.50.1
+
+From 3166880ea8f39d78cc1946490dfccb96578102f6 Mon Sep 17 00:00:00 2001
+From: Xi Ruoyao <xry111@xry111.site>
+Date: Wed, 25 Jun 2025 23:26:28 +0800
+Subject: [PATCH 03/11] mozjs-140: Implement
+ GjsContextPrivate::getHostDefinedData instead of getIncumbentGlobal
+
+Link: https://bugzilla.mozilla.org/show_bug.cgi?id=1928412
+(cherry picked from commit 32003df1cda67bae438566dca45db021f641a67b)
+---
+ gjs/context-private.h | 2 +-
+ gjs/context.cpp       | 6 ++++--
+ 2 files changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/gjs/context-private.h b/gjs/context-private.h
+index e3c7e547..bd39d0c7 100644
+--- a/gjs/context-private.h
++++ b/gjs/context-private.h
+@@ -255,7 +255,7 @@ class GjsContextPrivate : public JS::JobQueue {
+ 
+     // Implementations of JS::JobQueue virtual functions
+     GJS_JSAPI_RETURN_CONVENTION
+-    JSObject* getIncumbentGlobal(JSContext* cx) override;
++    bool getHostDefinedData(JSContext*, JS::MutableHandleObject) const override;
+     GJS_JSAPI_RETURN_CONVENTION
+     bool enqueuePromiseJob(JSContext* cx, JS::HandleObject promise,
+                            JS::HandleObject job,
+diff --git a/gjs/context.cpp b/gjs/context.cpp
+index 5ddc8d99..d77768f3 100644
+--- a/gjs/context.cpp
++++ b/gjs/context.cpp
+@@ -1005,9 +1005,11 @@ void GjsContextPrivate::stop_draining_job_queue(void) {
+     m_dispatcher.stop();
+ }
+ 
+-JSObject* GjsContextPrivate::getIncumbentGlobal(JSContext* cx) {
++bool GjsContextPrivate::getHostDefinedData(JSContext* cx,
++                                           JS::MutableHandleObject data) const {
+     // This is equivalent to SpiderMonkey's behavior.
+-    return JS::CurrentGlobalOrNull(cx);
++    data.set(JS::CurrentGlobalOrNull(cx));
++    return true;
+ }
+ 
+ // See engine.cpp and JS::SetJobQueue().
+-- 
+2.50.1
+
+From ecec737b04a077d4fc888692030d32e1c50db174 Mon Sep 17 00:00:00 2001
+From: Xi Ruoyao <xry111@xry111.site>
+Date: Wed, 25 Jun 2025 23:28:19 +0800
+Subject: [PATCH 04/11] mozjs-140: Use JS::EnvironmentChain for scope_chain
+
+Link: https://bugzilla.mozilla.org/show_bug.cgi?id=1914895
+(cherry picked from commit bf16f4c3fdc3b1a500cc8c6e5e0393c68c65aa7a)
+---
+ gjs/context.cpp | 3 ++-
+ gjs/gjs_pch.hh  | 1 +
+ gjs/module.cpp  | 3 ++-
+ 3 files changed, 5 insertions(+), 2 deletions(-)
+
+diff --git a/gjs/context.cpp b/gjs/context.cpp
+index d77768f3..56edbf6e 100644
+--- a/gjs/context.cpp
++++ b/gjs/context.cpp
+@@ -42,6 +42,7 @@
+ #include <js/CompilationAndEvaluation.h>
+ #include <js/CompileOptions.h>
+ #include <js/Context.h>
++#include <js/EnvironmentChain.h>
+ #include <js/ErrorReport.h>
+ #include <js/Exception.h>     // for StealPendingExceptionStack
+ #include <js/GCAPI.h>         // for JS_GC, JS_AddExtraGCRootsTr...
+@@ -1734,7 +1735,7 @@ bool GjsContextPrivate::eval_with_scope(JS::HandleObject scope_object,
+     if (!buf.init(m_cx, source, source_len, JS::SourceOwnership::Borrowed))
+         return false;
+ 
+-    JS::RootedObjectVector scope_chain(m_cx);
++    JS::EnvironmentChain scope_chain{m_cx, JS::SupportUnscopables::No};
+     if (!scope_chain.append(eval_obj)) {
+         JS_ReportOutOfMemory(m_cx);
+         return false;
+diff --git a/gjs/gjs_pch.hh b/gjs/gjs_pch.hh
+index fa3806ce..be542e4b 100644
+--- a/gjs/gjs_pch.hh
++++ b/gjs/gjs_pch.hh
+@@ -66,6 +66,7 @@
+ #include <js/ContextOptions.h>
+ #include <js/Conversions.h>
+ #include <js/Debug.h>
++#include <js/EnvironmentChain.h>
+ #include <js/ErrorReport.h>
+ #include <js/Exception.h>
+ #include <js/GCAPI.h>
+diff --git a/gjs/module.cpp b/gjs/module.cpp
+index b9a5b50c..b426c9b5 100644
+--- a/gjs/module.cpp
++++ b/gjs/module.cpp
+@@ -21,6 +21,7 @@
+ #include <js/CompilationAndEvaluation.h>
+ #include <js/CompileOptions.h>
+ #include <js/Conversions.h>
++#include <js/EnvironmentChain.h>
+ #include <js/ErrorReport.h>  // for JS_ReportOutOfMemory
+ #include <js/Exception.h>
+ #include <js/GCVector.h>  // for RootedVector
+@@ -119,7 +120,7 @@ class GjsScriptModule {
+         if (!buf.init(cx, source, source_len, JS::SourceOwnership::Borrowed))
+             return false;
+ 
+-        JS::RootedObjectVector scope_chain(cx);
++        JS::EnvironmentChain scope_chain{cx, JS::SupportUnscopables::No};
+         if (!scope_chain.append(module)) {
+             JS_ReportOutOfMemory(cx);
+             return false;
+-- 
+2.50.1
+
+From 793a1e739ed8db5eb75375a06fb36b9474b82d8c Mon Sep 17 00:00:00 2001
+From: Xi Ruoyao <xry111@xry111.site>
+Date: Wed, 25 Jun 2025 23:29:17 +0800
+Subject: [PATCH 05/11] mozjs-140: Adapt for JS::Heap::address rename to
+ unsafeAddress
+
+Link: https://bugzilla.mozilla.org/show_bug.cgi?id=1896973
+(cherry picked from commit a21e78acc389893208cd339a6856fb3572562579)
+---
+ gi/boxed.h | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/gi/boxed.h b/gi/boxed.h
+index 7d4173ce..dc355094 100644
+--- a/gi/boxed.h
++++ b/gi/boxed.h
+@@ -119,7 +119,7 @@ class BoxedPrototype : public GIWrapperPrototype<BoxedBase, BoxedPrototype,
+     // The ID is traced from the object, so it's OK to create a handle from it.
+     [[nodiscard]] JS::HandleId default_constructor_name() const {
+         return JS::HandleId::fromMarkedLocation(
+-            m_default_constructor_name.address());
++            m_default_constructor_name.unsafeAddress());
+     }
+ 
+     // JSClass operations
+-- 
+2.50.1
+
+From fd55af09b5e005bae3e928fec2c74da02c830052 Mon Sep 17 00:00:00 2001
+From: Philip Chimento <philip.chimento@gmail.com>
+Date: Wed, 16 Jul 2025 23:24:41 -0700
+Subject: [PATCH 06/11] debugger, system: Explicitly report uncatchable
+ exception
+
+In previous versions, returning false without an exception pending would
+signal an uncatchable exception. Now you have to explicitly signal that
+with JS::ReportUncatchableException().
+
+(cherry picked from commit a780816a43586d9cdb97e190fb65c252407082d3)
+---
+ doc/Understanding-SpiderMonkey-code.md | 2 +-
+ gjs/debugger.cpp                       | 4 +++-
+ modules/system.cpp                     | 4 +++-
+ 3 files changed, 7 insertions(+), 3 deletions(-)
+
+diff --git a/doc/Understanding-SpiderMonkey-code.md b/doc/Understanding-SpiderMonkey-code.md
+index 6c150d95..b5243d71 100644
+--- a/doc/Understanding-SpiderMonkey-code.md
++++ b/doc/Understanding-SpiderMonkey-code.md
+@@ -16,6 +16,6 @@
+ - Many API functions return a `bool`. As in many other APIs, these should return `true` for success and `false` for failure.
+ - Specific to SpiderMonkey is the convention that if an API function returns `false`, an  exception should have been thrown (a JS exception, not a C++ exception, which would terminate the program!) This is also described as "an exception should be _pending_ on `cx`". Likewise, if the function returns `true`, an exception should not be pending.
+ - There are two ways to violate that condition:
+-  - Returning `false` with no exception pending. This is interpreted as an "uncatchable" exception, and it's used for out-of-memory and killing scripts within Firefox, for example. In GJS we use it to implement `System.exit()`.
++  - Returning `false` with no exception pending. This will fail assertions in debug builds.
+   - Returning `true` while an exception is pending. This can easily happen by forgetting to check the return value of a SpiderMonkey function, and is a programmer error but not too serious. It will probably cause some warnings.
+ - Likewise if an API function returns a pointer such as `JSObject*` (this is less common), the convention is that it should return `nullptr` on failure, in which case an exception should be pending.
+diff --git a/gjs/debugger.cpp b/gjs/debugger.cpp
+index 00d8c9d9..f97c6941 100644
+--- a/gjs/debugger.cpp
++++ b/gjs/debugger.cpp
+@@ -15,6 +15,7 @@
+ #include <glib.h>
+ 
+ #include <js/CallArgs.h>
++#include <js/ErrorReport.h>  // for ReportUncatchableException
+ #include <js/PropertyAndElement.h>
+ #include <js/PropertySpec.h>
+ #include <js/Realm.h>
+@@ -47,7 +48,8 @@ static bool quit(JSContext* cx, unsigned argc, JS::Value* vp) {
+ 
+     GjsContextPrivate* gjs = GjsContextPrivate::from_cx(cx);
+     gjs->exit(exitcode);
+-    return false;  // without gjs_throw() == "throw uncatchable exception"
++    JS::ReportUncatchableException(cx);
++    return false;
+ }
+ 
+ GJS_JSAPI_RETURN_CONVENTION
+diff --git a/modules/system.cpp b/modules/system.cpp
+index 9a0027cc..fff60a63 100644
+--- a/modules/system.cpp
++++ b/modules/system.cpp
+@@ -16,6 +16,7 @@
+ 
+ #include <js/CallArgs.h>
+ #include <js/Date.h>                // for ResetTimeZone
++#include <js/ErrorReport.h>         // for ReportUncatchableException
+ #include <js/GCAPI.h>               // for JS_GC
+ #include <js/JSON.h>
+ #include <js/PropertyAndElement.h>
+@@ -173,7 +174,8 @@ gjs_exit(JSContext *context,
+ 
+     GjsContextPrivate* gjs = GjsContextPrivate::from_cx(context);
+     gjs->exit(ecode);
+-    return false;  /* without gjs_throw() == "throw uncatchable exception" */
++    JS::ReportUncatchableException(context);
++    return false;
+ }
+ 
+ static bool gjs_clear_date_caches(JSContext*, unsigned argc, JS::Value* vp) {
+-- 
+2.50.1
+
+From f15451a3b47fe294a65bb3364f4a0ff3b0d1c761 Mon Sep 17 00:00:00 2001
+From: Philip Chimento <philip.chimento@gmail.com>
+Date: Wed, 16 Jul 2025 23:25:33 -0700
+Subject: [PATCH 07/11] tests: Update error messages
+
+SpiderMonkey improved their "___ is null" error message to be more
+descriptive. The old message appeared a few times in the debugger tests'
+golden output files. Update to the new message.
+
+(cherry picked from commit 1e1d58d6eadab8576b43101043f6ff21c7e34f7d)
+---
+ .../debugger/sourcemap-inlined-module.debugger.output           | 2 +-
+ installed-tests/debugger/sourcemap-inlined.debugger.output      | 2 +-
+ .../debugger/sourcemap-separate-module.debugger.output          | 2 +-
+ installed-tests/debugger/sourcemap-separate.debugger.output     | 2 +-
+ 4 files changed, 4 insertions(+), 4 deletions(-)
+
+diff --git a/installed-tests/debugger/sourcemap-inlined-module.debugger.output b/installed-tests/debugger/sourcemap-inlined-module.debugger.output
+index 473f72c1..a60be042 100644
+--- a/installed-tests/debugger/sourcemap-inlined-module.debugger.output
++++ b/installed-tests/debugger/sourcemap-inlined-module.debugger.output
+@@ -21,7 +21,7 @@ Unwinding due to exception. (Type 'c' to continue unwinding.)
+    2	    return num[1].n.toFixed(1);
+ Exception value is:
+ $1 = [object TypeError]
+-TypeError: num[1].n is null
++TypeError: can't access property "toFixed", num[1].n is null
+ db> list
+    1	interface SuperFancyNumber {
+    2	    n: number;
+diff --git a/installed-tests/debugger/sourcemap-inlined.debugger.output b/installed-tests/debugger/sourcemap-inlined.debugger.output
+index 22da2756..5e49d98e 100644
+--- a/installed-tests/debugger/sourcemap-inlined.debugger.output
++++ b/installed-tests/debugger/sourcemap-inlined.debugger.output
+@@ -22,7 +22,7 @@ Unwinding due to exception. (Type 'c' to continue unwinding.)
+    2	var b = a.n.toString(42);
+ Exception value is:
+ $1 = [object TypeError]
+-TypeError: a.n is null
++TypeError: can't access property "toString", a.n is null
+ db> list
+    1	interface FancyNumber {
+    2	    n: number;
+diff --git a/installed-tests/debugger/sourcemap-separate-module.debugger.output b/installed-tests/debugger/sourcemap-separate-module.debugger.output
+index a4d5e88b..5f429ecd 100644
+--- a/installed-tests/debugger/sourcemap-separate-module.debugger.output
++++ b/installed-tests/debugger/sourcemap-separate-module.debugger.output
+@@ -21,7 +21,7 @@ Unwinding due to exception. (Type 'c' to continue unwinding.)
+    2	    return num[1].n.toFixed(1);
+ Exception value is:
+ $1 = [object TypeError]
+-TypeError: num[1].n is null
++TypeError: can't access property "toFixed", num[1].n is null
+ db> list
+    1	interface SuperFancyNumber {
+    2	    n: number;
+diff --git a/installed-tests/debugger/sourcemap-separate.debugger.output b/installed-tests/debugger/sourcemap-separate.debugger.output
+index ce4982da..52b177b5 100644
+--- a/installed-tests/debugger/sourcemap-separate.debugger.output
++++ b/installed-tests/debugger/sourcemap-separate.debugger.output
+@@ -22,7 +22,7 @@ Unwinding due to exception. (Type 'c' to continue unwinding.)
+    2	var b = a.n.toString(42);
+ Exception value is:
+ $1 = [object TypeError]
+-TypeError: a.n is null
++TypeError: can't access property "toString", a.n is null
+ db> list
+    1	interface FancyNumber {
+    2	    n: number;
+-- 
+2.50.1
+
+From 73d085e8f66474ef526d9feeb5b967388005f715 Mon Sep 17 00:00:00 2001
+From: Philip Chimento <philip.chimento@gmail.com>
+Date: Mon, 21 Jul 2025 15:34:25 -0700
+Subject: [PATCH 08/11] GLib: Use new symmetric difference Set method
+
+This is now a JS language feature.
+
+(cherry picked from commit c585ec7778245a6509597a37c62e70f19eef3d63)
+---
+ modules/core/overrides/GLib.js | 8 +-------
+ 1 file changed, 1 insertion(+), 7 deletions(-)
+
+diff --git a/modules/core/overrides/GLib.js b/modules/core/overrides/GLib.js
+index 0c69e6e5..fa509217 100644
+--- a/modules/core/overrides/GLib.js
++++ b/modules/core/overrides/GLib.js
+@@ -548,13 +548,7 @@ function _init() {
+ 
+         const originalMatchInfoMethods = new Set(Object.keys(oldMatchInfo.prototype));
+         const overriddenMatchInfoMethods = new Set(Object.keys(MatchInfo.prototype));
+-        const symmetricDifference = new Set(originalMatchInfoMethods);
+-        for (const method of overriddenMatchInfoMethods) {
+-            if (symmetricDifference.has(method))
+-                symmetricDifference.delete(method);
+-            else
+-                symmetricDifference.add(method);
+-        }
++        const symmetricDifference = originalMatchInfoMethods.symmetricDifference(overriddenMatchInfoMethods);
+         if (symmetricDifference.size !== 0)
+             throw new Error(`Methods of GMatchInfo and GjsMatchInfo don't match: ${[...symmetricDifference]}`);
+ 
+-- 
+2.50.1
+
+From a82ea31c48827543e4cc01f4ba14ed4f8a9337c2 Mon Sep 17 00:00:00 2001
+From: Xi Ruoyao <xry111@xry111.site>
+Date: Wed, 25 Jun 2025 23:30:49 +0800
+Subject: [PATCH 09/11] mozjs-140: Pass const UTF8Chars& to
+ UTF8CharsToNewTwoByteCharsZ
+
+Link: https://bugzilla.mozilla.org/show_bug.cgi?id=1579248
+(cherry picked from commit 2d582867e41abb9bbac1394c9b223cf763c9c54c)
+---
+ gjs/jsapi-util-string.cpp | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/gjs/jsapi-util-string.cpp b/gjs/jsapi-util-string.cpp
+index 03a83f74..6485c912 100644
+--- a/gjs/jsapi-util-string.cpp
++++ b/gjs/jsapi-util-string.cpp
+@@ -145,7 +145,7 @@ bool gjs_string_to_utf8_n(JSContext* cx, JS::HandleString str, JS::UniqueChars*
+  * @param value_p a value to store the resulting string in
+  */
+ JSString* gjs_lossy_string_from_utf8(JSContext* cx, const char* utf8_string) {
+-    JS::ConstUTF8CharsZ chars(utf8_string, strlen(utf8_string));
++    JS::UTF8Chars chars{utf8_string, strlen(utf8_string)};
+     size_t outlen;
+     JS::UniqueTwoByteChars twobyte_chars(
+         JS::LossyUTF8CharsToNewTwoByteCharsZ(cx, chars, &outlen,
+-- 
+2.50.1
+
+From f67a2165e60dca2aae0e5d6875336b970d625a15 Mon Sep 17 00:00:00 2001
+From: Philip Chimento <philip.chimento@gmail.com>
+Date: Sat, 2 Aug 2025 19:58:23 -0700
+Subject: [PATCH 10/11] object: Use JS::NewObjectWithStashedPointer instead of
+ SimpleWrapper
+
+JS::NewObjectWithStashedPointer() and JS::ObjectGetStashedPointer() are
+new SpiderMonkey APIs that do the same thing as SimpleWrapper. We can use
+them, and delete SimpleWrapper instead.
+
+(cherry picked from commit be259f17ce0ec6a8619142ab3c7219f5653d797c)
+---
+ gi/object.cpp                 |  45 +++++++----
+ gjs/gjs_pch.hh                |   1 +
+ gjs/jsapi-simple-wrapper.cpp  |  67 ----------------
+ gjs/jsapi-simple-wrapper.h    |  59 --------------
+ meson.build                   |   1 -
+ test/gjs-test-jsapi-utils.cpp | 144 ----------------------------------
+ test/gjs-test-rooting.cpp     |  12 +--
+ 7 files changed, 36 insertions(+), 293 deletions(-)
+ delete mode 100644 gjs/jsapi-simple-wrapper.cpp
+ delete mode 100644 gjs/jsapi-simple-wrapper.h
+
+diff --git a/gi/object.cpp b/gi/object.cpp
+index 8c3718bf..a8a4b94d 100644
+--- a/gi/object.cpp
++++ b/gi/object.cpp
+@@ -34,6 +34,7 @@
+ #include <js/GCVector.h>            // for MutableWrappedPtrOperations
+ #include <js/HeapAPI.h>
+ #include <js/MemoryFunctions.h>     // for AddAssociatedMemory, RemoveAssoci...
++#include <js/ObjectWithStashedPointer.h>
+ #include <js/PropertyAndElement.h>
+ #include <js/PropertyDescriptor.h>  // for JSPROP_PERMANENT, JSPROP_READONLY
+ #include <js/String.h>
+@@ -69,7 +70,6 @@
+ #include "gjs/deprecation.h"
+ #include "gjs/gerror-result.h"
+ #include "gjs/jsapi-class.h"
+-#include "gjs/jsapi-simple-wrapper.h"
+ #include "gjs/jsapi-util-args.h"
+ #include "gjs/jsapi-util-root.h"
+ #include "gjs/jsapi-util.h"
+@@ -382,7 +382,7 @@ bool ObjectBase::prop_getter_func(JSContext* cx, unsigned argc, JS::Value* vp) {
+     JS::RootedObject pspec_obj{
+         cx, &gjs_dynamic_property_private_slot(&args.callee()).toObject()};
+     auto* info_caller =
+-        Gjs::SimpleWrapper::get<ObjectPropertyInfoCaller>(cx, pspec_obj);
++        JS::ObjectGetStashedPointer<ObjectPropertyInfoCaller>(cx, pspec_obj);
+ 
+     const GI::AutoFunctionInfo& func_info = info_caller->func_info;
+     GI::AutoPropertyInfo property_info{g_function_info_get_property(func_info)};
+@@ -551,7 +551,7 @@ bool ObjectBase::prop_getter_simple_type_func(JSContext* cx, unsigned argc,
+     JS::RootedObject pspec_obj(
+         cx, &gjs_dynamic_property_private_slot(&args.callee()).toObject());
+     auto* caller =
+-        Gjs::SimpleWrapper::get<ObjectPropertyPspecCaller>(cx, pspec_obj);
++        JS::ObjectGetStashedPointer<ObjectPropertyPspecCaller>(cx, pspec_obj);
+ 
+     std::string full_name{GJS_PROFILER_DYNAMIC_STRING(
+         cx, priv->format_name() + "[\"" + caller->pspec->name + "\"]")};
+@@ -627,7 +627,7 @@ bool ObjectBase::field_getter(JSContext* cx, unsigned argc, JS::Value* vp) {
+     JS::RootedObject field_info_obj{
+         cx, &gjs_dynamic_property_private_slot(&args.callee()).toObject()};
+     auto const& field_info =
+-        *Gjs::SimpleWrapper::get<GI::AutoFieldInfo>(cx, field_info_obj);
++        *JS::ObjectGetStashedPointer<GI::AutoFieldInfo>(cx, field_info_obj);
+ 
+     std::string full_name{GJS_PROFILER_DYNAMIC_STRING(
+         cx, priv->format_name() + "[\"" + field_info.name() + "\"]")};
+@@ -792,7 +792,7 @@ bool ObjectBase::prop_setter_func(JSContext* cx, unsigned argc, JS::Value* vp) {
+     JS::RootedObject func_obj{
+         cx, &gjs_dynamic_property_private_slot(&args.callee()).toObject()};
+     auto* info_caller =
+-        Gjs::SimpleWrapper::get<ObjectPropertyInfoCaller>(cx, func_obj);
++        JS::ObjectGetStashedPointer<ObjectPropertyInfoCaller>(cx, func_obj);
+ 
+     const GI::AutoFunctionInfo& func_info = info_caller->func_info;
+     GI::AutoPropertyInfo property_info{g_function_info_get_property(func_info)};
+@@ -937,7 +937,7 @@ bool ObjectBase::prop_setter_simple_type_func(JSContext* cx, unsigned argc,
+     JS::RootedObject pspec_obj(
+         cx, &gjs_dynamic_property_private_slot(&args.callee()).toObject());
+     auto* caller =
+-        Gjs::SimpleWrapper::get<ObjectPropertyPspecCaller>(cx, pspec_obj);
++        JS::ObjectGetStashedPointer<ObjectPropertyPspecCaller>(cx, pspec_obj);
+ 
+     std::string full_name{GJS_PROFILER_DYNAMIC_STRING(
+         cx, priv->format_name() + "[" + caller->pspec->name + "]")};
+@@ -1014,7 +1014,7 @@ bool ObjectBase::field_setter(JSContext* cx, unsigned argc, JS::Value* vp) {
+     JS::RootedObject field_info_obj{
+         cx, &gjs_dynamic_property_private_slot(&args.callee()).toObject()};
+     auto const& field_info =
+-        *Gjs::SimpleWrapper::get<GI::AutoFieldInfo>(cx, field_info_obj);
++        *JS::ObjectGetStashedPointer<GI::AutoFieldInfo>(cx, field_info_obj);
+ 
+     std::string full_name{GJS_PROFILER_DYNAMIC_STRING(
+         cx, priv->format_name() + "[\"" + field_info.name() + "\"]")};
+@@ -1231,6 +1231,19 @@ static JSNative get_getter_for_type(GITypeInfo* type_info,
+     }
+ }
+ 
++// Wrap a call to JS::NewObjectWithStashedPointer() while ensuring the pointer
++// is properly deleted if the call fails.
++template <typename T, typename... Ts>
++GJS_JSAPI_RETURN_CONVENTION static inline JSObject*
++new_object_with_stashed_pointer(JSContext* cx, Ts... args) {
++    std::unique_ptr<T> data = std::make_unique<T>(args...);
++    JSObject* obj = JS::NewObjectWithStashedPointer(
++        cx, data.get(), [](T* data) { delete data; });
++    if (obj)
++        data.release();
++    return obj;
++}
++
+ GJS_JSAPI_RETURN_CONVENTION
+ static JSNative create_getter_invoker(JSContext* cx, GParamSpec* pspec,
+                                       GIFunctionInfo* getter, GITypeInfo* type,
+@@ -1242,21 +1255,21 @@ static JSNative create_getter_invoker(JSContext* cx, GParamSpec* pspec,
+ 
+     Gjs::GErrorResult<> init_result{Ok{}};
+     if (js_getter) {
+-        wrapper = Gjs::SimpleWrapper::new_for_type<ObjectPropertyPspecCaller>(
++        wrapper = new_object_with_stashed_pointer<ObjectPropertyPspecCaller>(
+             cx, pspec);
+         if (!wrapper)
+             return nullptr;
+         auto* caller =
+-            Gjs::SimpleWrapper::get<ObjectPropertyPspecCaller>(cx, wrapper);
++            JS::ObjectGetStashedPointer<ObjectPropertyPspecCaller>(cx, wrapper);
+         init_result = caller->init(getter);
+     } else {
+-        wrapper = Gjs::SimpleWrapper::new_for_type<ObjectPropertyInfoCaller>(
++        wrapper = new_object_with_stashed_pointer<ObjectPropertyInfoCaller>(
+             cx, getter);
+         if (!wrapper)
+             return nullptr;
+         js_getter = &ObjectBase::prop_getter_func;
+         auto* caller =
+-            Gjs::SimpleWrapper::get<ObjectPropertyInfoCaller>(cx, wrapper);
++            JS::ObjectGetStashedPointer<ObjectPropertyInfoCaller>(cx, wrapper);
+         init_result = caller->init();
+     }
+ 
+@@ -1447,21 +1460,21 @@ static JSNative create_setter_invoker(JSContext* cx, GParamSpec* pspec,
+ 
+     Gjs::GErrorResult<> init_result{Ok{}};
+     if (js_setter) {
+-        wrapper = Gjs::SimpleWrapper::new_for_type<ObjectPropertyPspecCaller>(
++        wrapper = new_object_with_stashed_pointer<ObjectPropertyPspecCaller>(
+             cx, pspec);
+         if (!wrapper)
+             return nullptr;
+         auto* caller =
+-            Gjs::SimpleWrapper::get<ObjectPropertyPspecCaller>(cx, wrapper);
++            JS::ObjectGetStashedPointer<ObjectPropertyPspecCaller>(cx, wrapper);
+         init_result = caller->init(setter);
+     } else {
+-        wrapper = Gjs::SimpleWrapper::new_for_type<ObjectPropertyInfoCaller>(
++        wrapper = new_object_with_stashed_pointer<ObjectPropertyInfoCaller>(
+             cx, setter);
+         if (!wrapper)
+             return nullptr;
+         js_setter = &ObjectBase::prop_setter_func;
+         auto* caller =
+-            Gjs::SimpleWrapper::get<ObjectPropertyInfoCaller>(cx, wrapper);
++            JS::ObjectGetStashedPointer<ObjectPropertyInfoCaller>(cx, wrapper);
+         init_result = caller->init();
+     }
+ 
+@@ -2011,7 +2024,7 @@ bool ObjectPrototype::uncached_resolve(JSContext* context, JS::HandleObject obj,
+             flags |= JSPROP_READONLY;
+ 
+         JS::RootedObject rooted_field{
+-            context, Gjs::SimpleWrapper::new_for_type<GI::AutoFieldInfo>(
++            context, new_object_with_stashed_pointer<GI::AutoFieldInfo>(
+                          context, field_info)};
+         JS::RootedValue private_value{context, JS::ObjectValue(*rooted_field)};
+         if (!gjs_define_property_dynamic(
+diff --git a/gjs/gjs_pch.hh b/gjs/gjs_pch.hh
+index be542e4b..73b65a20 100644
+--- a/gjs/gjs_pch.hh
++++ b/gjs/gjs_pch.hh
+@@ -82,6 +82,7 @@
+ #include <js/MemoryFunctions.h>
+ #include <js/Modules.h>
+ #include <js/Object.h>
++#include <js/ObjectWithStashedPointer.h>
+ #include <js/Principals.h>
+ #include <js/Printer.h>
+ #include <js/ProfilingCategory.h>
+diff --git a/gjs/jsapi-simple-wrapper.cpp b/gjs/jsapi-simple-wrapper.cpp
+deleted file mode 100644
+index f2cf8e97..00000000
+--- a/gjs/jsapi-simple-wrapper.cpp
++++ /dev/null
+@@ -1,67 +0,0 @@
+-/* -*- mode: C++; c-basic-offset: 4; indent-tabs-mode: nil; -*- */
+-// SPDX-License-Identifier: MIT OR LGPL-2.0-or-later
+-// SPDX-FileCopyrightText: 2023 Marco Trevisan <marco.trevisan@canonical.com>
+-
+-#include <config.h>
+-
+-#include <js/Class.h>
+-#include <js/Object.h>
+-#include <jsapi.h>
+-
+-#include "gjs/jsapi-simple-wrapper.h"
+-
+-namespace Gjs {
+-
+-static const size_t DATA_SLOT = 0;
+-static const size_t DESTROY_NOTIFY_SLOT = 1;
+-
+-static const JSClassOps class_ops = {
+-    .finalize =
+-        [](JS::GCContext*, JSObject* obj) {
+-            void* destroy_notify =
+-                JS::GetMaybePtrFromReservedSlot<void>(obj, DESTROY_NOTIFY_SLOT);
+-            void* data = JS::GetMaybePtrFromReservedSlot<void>(obj, DATA_SLOT);
+-            reinterpret_cast<SimpleWrapper::DestroyNotify>(destroy_notify)(
+-                data);
+-        },
+-};
+-
+-static const JSClass data_class = {
+-    .name = "Object",  // user-visible
+-    .flags = JSCLASS_HAS_RESERVED_SLOTS(1),
+-};
+-
+-static const JSClass destroy_notify_class = {
+-    .name = "Object",  // user-visible
+-    .flags = JSCLASS_HAS_RESERVED_SLOTS(2) | JSCLASS_FOREGROUND_FINALIZE,
+-    .cOps = &class_ops,
+-};
+-
+-JSObject* SimpleWrapper::new_for_ptr(JSContext* cx, void* ptr,
+-                                     DestroyNotify destroy_notify) {
+-    if (!destroy_notify) {
+-        JSObject* retval = JS_NewObject(cx, &data_class);
+-        if (!retval)
+-            return nullptr;
+-        JS::SetReservedSlot(retval, DATA_SLOT, JS::PrivateValue(ptr));
+-        return retval;
+-    }
+-
+-    JSObject* retval = JS_NewObject(cx, &destroy_notify_class);
+-    if (!retval)
+-        return nullptr;
+-    JS::SetReservedSlot(retval, DATA_SLOT, JS::PrivateValue(ptr));
+-    JS::SetReservedSlot(
+-        retval, DESTROY_NOTIFY_SLOT,
+-        JS::PrivateValue(reinterpret_cast<void*>(destroy_notify)));
+-    return retval;
+-}
+-
+-void* SimpleWrapper::get_ptr(JSContext* cx, JS::HandleObject obj) {
+-    if (!JS_InstanceOf(cx, obj, &destroy_notify_class, nullptr) &&
+-        !JS_InstanceOf(cx, obj, &data_class, nullptr))
+-        return nullptr;
+-    return JS::GetMaybePtrFromReservedSlot<void>(obj, DATA_SLOT);
+-}
+-
+-}  // namespace Gjs
+diff --git a/gjs/jsapi-simple-wrapper.h b/gjs/jsapi-simple-wrapper.h
+deleted file mode 100644
+index 7b3605a5..00000000
+--- a/gjs/jsapi-simple-wrapper.h
++++ /dev/null
+@@ -1,59 +0,0 @@
+-/* -*- mode: C++; c-basic-offset: 4; indent-tabs-mode: nil; -*- */
+-// SPDX-License-Identifier: MIT OR LGPL-2.0-or-later
+-// SPDX-FileCopyrightText: 2023 Marco Trevisan <marco.trevisan@canonical.com>
+-
+-#pragma once
+-
+-#include <config.h>
+-
+-#include <type_traits>
+-
+-#include <js/RootingAPI.h>
+-#include <js/TypeDecls.h>
+-
+-#include "gjs/macros.h"
+-
+-namespace Gjs {
+-
+-class SimpleWrapper {
+-    template <typename T>
+-    using DestroyNotifyType = void (*)(T);
+-
+- public:
+-    using DestroyNotify = DestroyNotifyType<void*>;
+-
+- private:
+-    static JSObject* new_for_ptr(JSContext*, void* data, DestroyNotify);
+-    [[nodiscard]] static void* get_ptr(JSContext*, JS::HandleObject);
+-
+- public:
+-    template <typename T, typename DT>
+-    GJS_JSAPI_RETURN_CONVENTION static JSObject* new_for_ptr(
+-        JSContext* cx, T* data, DT destroy_notify) {
+-        static_assert(std::is_convertible_v<DT, DestroyNotifyType<T*>>,
+-                      "destroy notify can't be converted");
+-        return new_for_ptr(
+-            cx, static_cast<void*>(data),
+-            reinterpret_cast<DestroyNotify>(
+-                static_cast<DestroyNotifyType<T*>>(destroy_notify)));
+-    }
+-
+-    template <typename T>
+-    GJS_JSAPI_RETURN_CONVENTION static JSObject* new_for_ptr(JSContext* cx,
+-                                                             T* data) {
+-        return new_for_ptr(cx, data, nullptr);
+-    }
+-
+-    template <typename T, typename... Ts>
+-    GJS_JSAPI_RETURN_CONVENTION static JSObject* new_for_type(JSContext* cx,
+-                                                              Ts... args) {
+-        return new_for_ptr(cx, new T(args...), [](T* data) { delete data; });
+-    }
+-
+-    template <typename T>
+-    [[nodiscard]] static T* get(JSContext* cx, JS::HandleObject obj) {
+-        return static_cast<T*>(get_ptr(cx, obj));
+-    }
+-};
+-
+-}  // namespace Gjs
+diff --git a/meson.build b/meson.build
+index bf353d62..59a713c3 100644
+--- a/meson.build
++++ b/meson.build
+@@ -450,7 +450,6 @@ libgjs_private_sources = [
+ libgjs_jsapi_sources = [
+     'gjs/jsapi-class.h',
+     'gjs/jsapi-dynamic-class.cpp',
+-    'gjs/jsapi-simple-wrapper.cpp', 'gjs/jsapi-simple-wrapper.h',
+     'gjs/jsapi-util-args.h',
+     'gjs/jsapi-util-error.cpp',
+     'gjs/jsapi-util-root.h',
+diff --git a/test/gjs-test-jsapi-utils.cpp b/test/gjs-test-jsapi-utils.cpp
+index 395275ff..e16f9e50 100644
+--- a/test/gjs-test-jsapi-utils.cpp
++++ b/test/gjs-test-jsapi-utils.cpp
+@@ -9,60 +9,15 @@
+ 
+ #include <stddef.h>  // for NULL
+ 
+-#include <atomic>  // for atomic_int
+-#include <condition_variable>
+-#include <mutex>
+ #include <utility>   // for move, swap
+ 
+ #include <glib-object.h>
+ #include <glib.h>
+ 
+-#include <js/GCAPI.h>
+-#include <js/RootingAPI.h>  // for Rooted
+-#include <js/TypeDecls.h>
+-#include <jsapi.h>
+-
+ #include "gjs/auto.h"
+ #include "gjs/gerror-result.h"
+-#include "gjs/jsapi-simple-wrapper.h"
+ #include "test/gjs-test-utils.h"
+ 
+-namespace GC {
+-
+-static std::mutex s_gc_lock;
+-static std::condition_variable s_gc_finished;
+-static std::atomic_int s_gc_counter;
+-
+-static void on_gc(JSContext*, JSGCStatus status, JS::GCReason, void*) {
+-    if (status != JSGC_END)
+-        return;
+-
+-    std::unique_lock lock{s_gc_lock};
+-    s_gc_counter.fetch_add(1);
+-    s_gc_finished.notify_all();
+-}
+-
+-static void setup(GjsUnitTestFixture* fx, const void*) {
+-    gjs_unit_test_fixture_setup(fx, nullptr);
+-    JS_SetGCCallback(fx->cx, on_gc, fx);
+-}
+-
+-static void wait_for_gc(GjsUnitTestFixture* fx) {
+-    int count = s_gc_counter.load();
+-
+-    JS_GC(fx->cx);
+-
+-    std::unique_lock lock{s_gc_lock};
+-    s_gc_finished.wait(lock,
+-                       [&count]() { return count != s_gc_counter.load(); });
+-}
+-
+-static void teardown(GjsUnitTestFixture* fx, const void*) {
+-    gjs_unit_test_fixture_teardown(fx, nullptr);
+-}
+-
+-}  // namespace GC
+-
+ struct _GjsTestObject {
+     GObject parent_instance;
+ 
+@@ -635,96 +590,9 @@ static void test_gjs_error_out() {
+     g_assert_null(error);
+ }
+ 
+-static void test_gjs_simple_wrapper_new_for_ptr(GjsUnitTestFixture* fx,
+-                                                const void*) {
+-    int value = 55;
+-
+-    JSObject* obj =
+-        Gjs::SimpleWrapper::new_for_ptr(fx->cx, &value, [](int* value_ptr) {
+-            g_assert_cmpint(*value_ptr, ==, 55);
+-            *value_ptr = 33;
+-        });
+-    g_assert_nonnull(obj);
+-
+-    {
+-        JS::RootedObject rooted{fx->cx, obj};
+-        GC::wait_for_gc(fx);
+-        JS_GC(fx->cx);
+-
+-        g_assert_cmpint(*Gjs::SimpleWrapper::get<int>(fx->cx, rooted), ==, 55);
+-    }
+-
+-    GC::wait_for_gc(fx);
+-    JS_GC(fx->cx);
+-    g_assert_cmpint(value, ==, 33);
+-}
+-
+-static void test_gjs_simple_wrapper_new_for_ptr_null_destructor(
+-    GjsUnitTestFixture* fx, const void*) {
+-    int value = 55;
+-
+-    JSObject* obj = Gjs::SimpleWrapper::new_for_ptr(fx->cx, &value);
+-    g_assert_nonnull(obj);
+-
+-    {
+-        JS::RootedObject rooted{fx->cx, obj};
+-        g_assert_cmpint(*Gjs::SimpleWrapper::get<int>(fx->cx, rooted), ==, 55);
+-    }
+-
+-    GC::wait_for_gc(fx);
+-    JS_GC(fx->cx);
+-}
+-
+-static void test_gjs_simple_wrapper_new_for_type(GjsUnitTestFixture* fx,
+-                                                 const void*) {
+-    bool destructor_called = false;
+-    struct MyNiceStruct {
+-        explicit MyNiceStruct(bool* destructor_called_ptr)
+-            : destructor_called_ptr(destructor_called_ptr) {
+-            g_assert_false(*destructor_called_ptr);
+-        }
+-        ~MyNiceStruct() {
+-            g_assert_false(*destructor_called_ptr);
+-            *destructor_called_ptr = true;
+-        }
+-
+-        bool* destructor_called_ptr;
+-    };
+-
+-    JSObject* obj = Gjs::SimpleWrapper::new_for_type<MyNiceStruct>(
+-        fx->cx, &destructor_called);
+-    g_assert_nonnull(obj);
+-
+-    {
+-        JS::RootedObject rooted{fx->cx, obj};
+-        g_assert_false(*Gjs::SimpleWrapper::get<MyNiceStruct>(fx->cx, rooted)
+-                            ->destructor_called_ptr);
+-    }
+-
+-    GC::wait_for_gc(fx);
+-    JS_GC(fx->cx);
+-    g_assert_true(destructor_called);
+-}
+-
+-static void test_gjs_simple_wrapper_get_invalid_type(GjsUnitTestFixture* fx,
+-                                                     const void*) {
+-    JS::RootedObject obj{
+-        fx->cx,
+-        JS_GetFunctionObject(JS_NewFunction(
+-            fx->cx, [](JSContext*, unsigned, JS::Value*) { return false; }, 1,
+-            0, "aFunction"))};
+-
+-    g_assert_true(obj);
+-    g_assert_null(Gjs::SimpleWrapper::get<JSObject>(fx->cx, obj));
+-}
+-
+ #define ADD_AUTOPTRTEST(path, func) \
+     g_test_add(path, Fixture, nullptr, setup, func, teardown);
+ 
+-#define ADD_JS_GC_TEST(path, func)                                         \
+-    g_test_add("/gjs/" path, GjsUnitTestFixture, nullptr, GC::setup, func, \
+-               GC::teardown);
+-
+ void gjs_test_add_tests_for_jsapi_utils(void) {
+     g_test_add_func("/gjs/jsapi-utils/gjs-autopointer/size",
+                     test_gjs_autopointer_size);
+@@ -830,16 +698,4 @@ void gjs_test_add_tests_for_jsapi_utils(void) {
+     g_test_add_func("/gjs/jsapi-utils/gjs-autoerror/init", test_gjs_error_init);
+     g_test_add_func("/gjs/jsapi-utils/gjs-autoerror/as-out-value",
+                     test_gjs_error_out);
+-
+-    ADD_JS_GC_TEST("/gjs/jsapi-simple-wrapper/new-for-ptr",
+-                   test_gjs_simple_wrapper_new_for_ptr);
+-
+-    ADD_JS_GC_TEST("/gjs/jsapi-simple-wrapper/new-for-ptr-null-destructor",
+-                   test_gjs_simple_wrapper_new_for_ptr_null_destructor);
+-
+-    ADD_JS_GC_TEST("/gjs/jsapi-simple-wrapper/new-for-type",
+-                   test_gjs_simple_wrapper_new_for_type);
+-
+-    ADD_JS_GC_TEST("/gjs/jsapi-simple-wrapper/get-invalid-type",
+-                   test_gjs_simple_wrapper_get_invalid_type);
+ }
+diff --git a/test/gjs-test-rooting.cpp b/test/gjs-test-rooting.cpp
+index 452e7add..f03f4423 100644
+--- a/test/gjs-test-rooting.cpp
++++ b/test/gjs-test-rooting.cpp
+@@ -6,11 +6,11 @@
+ #include <glib.h>
+ 
+ #include <js/GCAPI.h>  // for JS_GC, JS_SetGCCallback, JSGCStatus
++#include <js/ObjectWithStashedPointer.h>
+ #include <js/TypeDecls.h>
+ #include <jsapi.h>
+ 
+ #include "gjs/context-private.h"
+-#include "gjs/jsapi-simple-wrapper.h"
+ #include "gjs/jsapi-util-root.h"
+ #include "test/gjs-test-utils.h"
+ 
+@@ -39,11 +39,11 @@ struct GjsRootingFixture {
+ static JSObject *
+ test_obj_new(GjsRootingFixture *fx)
+ {
+-    return Gjs::SimpleWrapper::new_for_ptr(
+-        PARENT(fx)->cx, fx, [](GjsRootingFixture* data) {
+-            g_assert_false(data->finalized);
+-            data->finalized = true;
+-        });
++    return JS::NewObjectWithStashedPointer(PARENT(fx)->cx, fx,
++                                           [](GjsRootingFixture* data) {
++                                               g_assert_false(data->finalized);
++                                               data->finalized = true;
++                                           });
+ }
+ 
+ static void on_gc(JSContext*, JSGCStatus status, JS::GCReason, void*) {
+-- 
+2.50.1
+
+From 5f0ac872e616b5fb6a077547739347f34080e596 Mon Sep 17 00:00:00 2001
+From: Philip Chimento <philip.chimento@gmail.com>
+Date: Sat, 2 Aug 2025 21:16:16 -0700
+Subject: [PATCH 11/11] error: Make Error.isError work on GErrors
+
+In browsers, Error.isError() returns true for DOMExceptions, even though
+they are not part of the JS language. Analogously, we should do the same
+for GErrors.
+
+Note the situation described in #700, there are two kinds of GErrors. This
+does not yet work for the unusual kind (returned from a function.)
+
+(cherry picked from commit 5abca9cc9ca27846261963dafcb5be0b0dc1495d)
+---
+ gi/gerror.cpp                        |  3 ++-
+ gi/gerror.h                          |  5 ++++
+ gjs/engine.cpp                       | 11 +++++++++
+ installed-tests/js/testExceptions.js | 34 ++++++++++++++++++++++++++++
+ 4 files changed, 52 insertions(+), 1 deletion(-)
+
+diff --git a/gi/gerror.cpp b/gi/gerror.cpp
+index 5be97d75..78b52d01 100644
+--- a/gi/gerror.cpp
++++ b/gi/gerror.cpp
+@@ -198,7 +198,8 @@ const struct JSClassOps ErrorBase::class_ops = {
+ 
+ const struct JSClass ErrorBase::klass = {
+     "GLib_Error",
+-    JSCLASS_HAS_RESERVED_SLOTS(1) | JSCLASS_BACKGROUND_FINALIZE,
++    JSCLASS_HAS_RESERVED_SLOTS(1) | JSCLASS_BACKGROUND_FINALIZE |
++        JSCLASS_IS_DOMJSCLASS,  // needed for Error.isError()
+     &ErrorBase::class_ops
+ };
+ 
+diff --git a/gi/gerror.h b/gi/gerror.h
+index f6102351..79bd5074 100644
+--- a/gi/gerror.h
++++ b/gi/gerror.h
+@@ -54,7 +54,12 @@ class ErrorBase
+     static constexpr const char* DEBUG_TAG = "gerror";
+ 
+     static const struct JSClassOps class_ops;
++
++ public:
++    // public in order to implement Error.isError()
+     static const struct JSClass klass;
++
++ protected:
+     static JSPropertySpec proto_properties[];
+     static JSFunctionSpec static_methods[];
+ 
+diff --git a/gjs/engine.cpp b/gjs/engine.cpp
+index 41a1b117..70bca46e 100644
+--- a/gjs/engine.cpp
++++ b/gjs/engine.cpp
+@@ -32,6 +32,7 @@
+ #include <mozilla/Atomics.h>  // for Atomic in JSPrincipals
+ #include <mozilla/UniquePtr.h>
+ 
++#include "gi/gerror.h"
+ #include "gjs/context-private.h"
+ #include "gjs/engine.h"
+ #include "gjs/gerror-result.h"
+@@ -185,6 +186,15 @@ static const JSSecurityCallbacks security_callbacks = {
+     &ModuleLoaderPrincipals::subsumes,
+ };
+ 
++static bool instance_class_is_error(const JSClass* klass) {
++    return klass == &ErrorBase::klass;
++}
++
++static const js::DOMCallbacks dom_callbacks = {
++    /* instanceClassHasProtoAtDepth = */ nullptr,
++    &instance_class_is_error,
++};
++
+ JSContext* gjs_create_js_context(GjsContextPrivate* uninitialized_gjs) {
+     g_assert(gjs_is_inited);
+     JSContext *cx = JS_NewContext(32 * 1024 * 1024 /* max bytes */);
+@@ -215,6 +225,7 @@ JSContext* gjs_create_js_context(GjsContextPrivate* uninitialized_gjs) {
+                                            uninitialized_gjs);
+     JS::SetHostCleanupFinalizationRegistryCallback(
+         cx, on_cleanup_finalization_registry, uninitialized_gjs);
++    js::SetDOMCallbacks(cx, &dom_callbacks);
+ 
+     // We use this to handle "lazy sources" that SpiderMonkey doesn't need to
+     // keep in memory. Most sources should be kept in memory, but we can skip
+diff --git a/installed-tests/js/testExceptions.js b/installed-tests/js/testExceptions.js
+index 4e762ddd..3a0f7cb0 100644
+--- a/installed-tests/js/testExceptions.js
++++ b/installed-tests/js/testExceptions.js
+@@ -280,3 +280,37 @@ describe('GError.new_literal', function () {
+             .toThrowError(/0 is not a valid domain/);
+     });
+ });
++
++describe('Interoperation with Error.isError', function () {
++    it('thrown GError', function () {
++        let err;
++        try {
++            const file = Gio.file_new_for_path("\\/,.^!@&$_don't exist");
++            file.read(null);
++        } catch (e) {
++            err = e;
++        }
++        expect(Error.isError(err)).toBeTruthy();
++    });
++
++    xit('returned GError', function () {
++        const err = GIMarshallingTests.gerror_return();
++        expect(Error.isError(err)).toBeTruthy();
++    }).pend('https://gitlab.gnome.org/GNOME/gjs/-/issues/700');
++
++    it('created GError', function () {
++        const err = new Gio.IOErrorEnum({message: 'a message', code: 0});
++        expect(Error.isError(err)).toBeTruthy();
++    });
++
++    it('GError created with the GLib.Error constructor', function () {
++        const err = new GLib.Error(Gio.IOErrorEnum, 0, 'a message');
++        expect(Error.isError(err)).toBeTruthy();
++    });
++
++    it('GError created with GLib.Error.new_literal', function () {
++        const err = GLib.Error.new_literal(
++            Gio.IOErrorEnum, Gio.IOErrorEnum.FAILED, 'message');
++        expect(Error.isError(err)).toBeTruthy();
++    });
++});
+-- 
+2.50.1
+
