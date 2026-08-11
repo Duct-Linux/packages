@@ -356,13 +356,18 @@ than what the packages are about:
 | 2½ | `MEDIA_PKGS` | the audio stack, alsa-lib upwards. Between graphics and GTK because pipewire needs dbus, eudev and glib and nothing above them |
 | 3–4 | `DESKTOP_PKGS` | freetype through pango, then glib through gtk4 and libadwaita |
 | 5 | `JS_PKGS` | icu, mozjs (SpiderMonkey), gjs — the engine GNOME Shell runs on |
+| 6 | `XORG_PKGS` | Xwayland. Last before the GNOME tier, because it links libepoxy from the GTK tier and libgcrypt from the crypto tier, and because mutter reads its `xwayland.pc` |
 
 Three decisions worth knowing before reading the recipes:
 
-- **Wayland first.** mesa is built with `-Dplatforms=wayland` and no GLX, gtk4
-  with no X11 backend, cairo with no xlib surface. The X *client* libraries are
-  packaged because several GNOME components link them regardless of backend, and
-  because Xwayland would need them first — but nothing here runs an X server.
+- **Wayland first, with one X server.** mesa is built with `-Dplatforms=wayland`
+  and no GLX, gtk4 with no X11 backend, cairo with no xlib surface. The X
+  *client* libraries were packaged because several GNOME components link them
+  regardless of backend — and because Xwayland needed them first. Xwayland is
+  now here (`XORG_PKGS`), so X11 applications do run; nothing else does. Note
+  that mesa's `-Dglx=disabled` is the *client* GLX, and Xwayland's `-Dglx=true`
+  is the server side built from its own sources through epoxy: the two are
+  different things and do not contradict each other.
 - **elogind, not systemd.** mutter cannot open a DRM device or an input device
   on a seat-managed system without asking logind; gnome-shell will not draw
   until logind says the session is active. elogind installs a `libsystemd.pc`
