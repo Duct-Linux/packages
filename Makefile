@@ -399,6 +399,31 @@ NETWORK_PKGS := \
 	wpa_supplicant ModemManager \
 	NetworkManager
 
+# The X server, and the only thing in this file that is not a Wayland component.
+#
+# A GROUP OF ONE, AND NOT BECAUSE IT IS SPECIAL. Xwayland belongs with the seven
+# X server support libraries it consumes, all of which are in GRAPHICS_PKGS, and
+# it cannot go there: it links libepoxy from GTK_PKGS through glamor, and
+# libgcrypt from CRYPTO_PKGS through the SHA1 provider its meson picks by
+# first-match. Both of those groups are later, so an entry in GRAPHICS_PKGS
+# would be built before two of its own dependencies and check-build-order.sh
+# would say so.
+#
+# Placed here, immediately before GNOME_PKGS, for the reason CRYPTO_PKGS gives
+# for its own position -- last is the position that stays correct however the
+# earlier lists are rearranged -- and BEFORE GNOME_PKGS rather than after
+# because mutter is destined for that list and reads this package's xwayland.pc
+# to decide what the X server it launches can do. Nothing in GNOME_PKGS needs it
+# today, so the placement costs nothing now and is the order that stays right
+# when mutter arrives.
+#
+# The two things this group does NOT bring, both of which are declared
+# dependencies of the recipe and neither of which any build check can see: the
+# X server shells out to xkbcomp to compile a keymap, and reads xkeyboard-config
+# for the rules. Both are in earlier groups. A missing one is a session that
+# starts and has no working keyboard in any X11 window.
+XORG_PKGS := xwayland
+
 # The GNOME desktop tier: everything between "a GTK 4 application platform" and
 # "a GNOME session". Added in waves, in dependency order, and this is the first
 # of them -- the leaves that depend only on what is already here.
@@ -508,7 +533,7 @@ JS_PKGS := \
 ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
-	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(GNOME_PKGS) \
+	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(XORG_PKGS) $(GNOME_PKGS) \
 	$(NETWORK_UI_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.

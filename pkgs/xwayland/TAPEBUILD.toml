@@ -1,0 +1,146 @@
+[package]
+name = "xwayland"
+description = "X server that renders into a Wayland compositor, so X11 applications keep working"
+version = "24.1.8"
+subversion = "1"
+authors = ["The X.Org Foundation"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+# --- the COMMON dependency list (meson.build 391-421), which every part of the
+# --- server links whatever else is turned on.
+pixman = ">=0.44.2"
+libXfont2 = ">=2.0.7"
+# THE X AUTHORITY READER, AND IT WAS MISSING FROM THIS LIST UNTIL THE ARTEFACT
+# WAS READ. os/auth.c calls XauReadAuth and XauDisposeAuth to parse the
+# .Xauthority file, so libXau is linked into every Xwayland -- it does not
+# appear in any dependency() call in meson.build, because it arrives through
+# xdmcp's pkg-config closure rather than by name.
+#
+# Nothing caught it: the recipe's own link check asserted a list of libraries
+# someone had written down, and an undeclared-but-linked library is by
+# definition not on that list. It surfaced only when the check began printing
+# the binary's full NEEDED set. That is the direction that costs a user rather
+# than a packager -- a package that installs and then cannot start.
+libXau = ">=1.0.12"
+xorgproto = ">=2024.1.0"
+xtrans = ">=1.6.0"
+# xdmcp_dep, from -Dxdmcp=true. Stated at its default in pkg.env, so this is a
+# real link rather than a possibility.
+libXdmcp = ">=1.1.5"
+# ELOGIND IS DELIBERATELY *NOT* DECLARED, AND THIS REVERSES WHAT THIS RECIPE
+# FIRST SAID. It was declared on the strength of finding 29's fourth mechanism
+# -- libsystemd is looked up `required: false` at meson.build:107 and then sits
+# in the COMMON dependency list at meson.build:406 with no guard, so "the flag
+# controls the feature, not the link" and the artefact should carry the NEEDED
+# entry in every configuration.
+#
+# CI SAYS OTHERWISE, ON BOTH ARCHES IDENTICALLY. Configure does find it --
+# "Run-time dependency libsystemd found: YES 255", elogind's alias, exactly as
+# predicted -- and the shipped Xwayland has NO NEEDED entry for it.
+#
+# The step the meson reading misses is the LINKER. -Dsystemd_notify=false
+# compiles out every sd_notify call, so no symbol from libsystemd is referenced
+# anywhere in the binary, and an --as-needed link drops an unreferenced library
+# from DT_NEEDED. So the flag does control the link here -- indirectly, by way
+# of controlling whether anything calls into it.
+#
+# Finding 29's general rule survives and is what caught this: "configure found
+# it" and "the artefact links it" are two facts and NEITHER IMPLIES THE OTHER,
+# IN EITHER DIRECTION. The fourth mechanism picked the wrong direction for this
+# configuration.
+#
+# Undeclared rather than declared-with-a-caveat because this tree's convention
+# is explicit -- libei's recipe puts it as "only the second belongs here", and
+# declares libevdev while refusing libxkbcommon on exactly this ground. And
+# nothing is lost: elogind still arrives in the closure through libei below,
+# which does link it.
+#
+# install.sh asserts the ABSENCE, so that an image whose linker does not drop it
+# fails by name and tells the next person to restore this declaration.
+
+# --- SHA1, which is not optional and is not obviously here. os/xsha1.c is
+# --- compiled unconditionally and meson.build 307-314 error()s with no
+# --- provider. See pkg.env for why libgcrypt and not libcrypto.
+libgcrypt = ">=1.11.2"
+
+# --- the Wayland side.
+wayland = ">=1.23.1"
+# Xwayland's one unconditional hard dependency outside the protocol headers:
+# taken `required: true` twice (meson.build 176, 187).
+libxcvt = ">=0.1.3"
+
+# --- glamor, and everything -Dglamor=true drags in `required: true` at
+# --- meson.build 190-194 plus glamor/meson.build:43.
+libxshmfence = ">=1.3.3"
+libdrm = ">=2.4.124"
+libepoxy = ">=1.5.10"
+# gbm. THE ONE NO OPTION CONTROLS: `dependency('gbm', required: false)` at
+# meson.build:206, and build_xwayland_glamor is the conjunction of -Dglamor and
+# that lookup. Declared so it is present; asserted in install.sh because being
+# present is not the same as having been found.
+mesa = ">=25.0.7"
+
+# --- emulated input, from -Dxwayland_ei=portal. Both halves: libei is the
+# --- client library and liboeffis the RemoteDesktop-portal helper, and the
+# --- libei package ships both.
+libei = ">=1.4.1"
+
+# --- RUNTIME, WITH NO BUILD-TIME TRACE. These two are the reason a green
+# --- Xwayland can still be a session with a dead keyboard.
+#
+# xkbcomp is not linked. xkb/ddxLoad.c 154-176 builds a command line, runs it as
+# a child process and writes the keymap into its stdin. Nothing at build time
+# touches the binary, so its absence is invisible until the first key is pressed
+# in an X11 window -- one line in the log, "XKB: Could not invoke xkbcomp", and
+# a keyboard that does nothing.
+xkbcomp = ">=1.4.7"
+# The rules xkbcomp compiles, read by path. ddxLoad.c:415 also reads
+# <XkbBaseDirectory>/rules/<name> directly from the server, so this is a
+# dependency of Xwayland itself and not only of xkbcomp.
+xkeyboard-config = ">=2.44.0"
+
+[dependencies.build]
+meson = ">=1.8.2"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+# The protocol XML, plus wayland-scanner from the wayland package above.
+# hw/xwayland/meson.build 35-56 reads fifteen protocol files out of
+# wayland-protocols' pkgdatadir, including staging/xwayland-shell and
+# staging/linux-drm-syncobj.
+wayland-protocols = ">=1.41.0"
+# BUILD-ONLY, AND THE REASON IS WORTH RECORDING: meson.build:71 is
+# `x11_dep = dependency('x11')` -- required, so configure stops without it --
+# and the variable is then NEVER USED. It appears exactly once in the whole
+# tarball. So libX11 must be present to configure and the artefact does not link
+# it, which is why it is here rather than above.
+libX11 = ">=1.8.12"
+# BUILD-ONLY FOR A DIFFERENT REASON, AND THIS ONE MOVED HERE AFTER CI SAID SO.
+# meson.build:104 takes dependency('xkbfile') as a hard requirement, so its .pc
+# and headers must be present to configure -- but THE SERVER VENDORS THE .xkm
+# READER. xkb/meson.build compiles its own xkmread.c, xkbfmisc.c and xkbout.c,
+# and xkb/ddxLoad.c includes "xkbfile.h" in quotes: the local header. So
+# XkmReadFile resolves inside the binary, nothing is imported from the library,
+# and --as-needed drops it.
+#
+# Grepping the source for the symbol is what makes this one look linked: it
+# appears in ddxLoad.c AND in xkmread.c, and the second is the DEFINITION. A
+# symbol present in the tree is not a symbol imported from a library.
+libxkbfile = ">=1.1.3"
+# fontutil.pc, read at meson.build 143-149 to resolve the default font path.
+# Build-time only: it is a string substitution, and nothing installs a font.
+font-util = ">=1.4.1"
