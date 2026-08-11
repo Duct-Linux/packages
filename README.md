@@ -33,6 +33,69 @@ assembly of `duct/base` and `duct/builder` -- is not handled here yet.
 Package recipes, and the build that turns them into a signed repository and two
 `FROM scratch` images.
 
+## Four ways a publish is wrong while reporting success
+
+Every one of these has happened. **Every one of them is a publish exiting 0** --
+which is why "the run was green" is not a statement about the repository, and
+why each of the four needs its own check. They are listed together because each
+one is invisible to the other three.
+
+**1. Dropped before comparison.** Artefacts that never reached the indexer at
+all. `actions/download-artifact@v4` reported `Found 200 artifact(s)` for a run
+holding 258 and returned success. The listing is newest-first, so the tail that
+fell off was the *oldest* -- which in a level-ordered climb is the foundation:
+glibc, tape, ncurses, make, m4, zlib, pkgconf, linux-headers, duct-filesystem.
+Almost none of it looked missing, because an older version of each was still
+indexed from an earlier publish. Only `gperf` and `attr` showed as absent, and
+only because they were new and had no older row to hide behind -- **the
+visibility of the damage was inversely proportional to how long a package had
+existed**. Two packages came out looking like arch-specific build failures and
+were nothing of the kind.
+*Checked by* `tools/collect-artefacts.sh`, which asserts the collected set
+against the API's own `total_count`.
+*Cannot see:* anything about a package that was collected. A complete collection
+of the wrong versions passes this perfectly.
+
+**2. Tree moved past index.** The index serves an older version than the recipe
+on `main` declares, because the newer build's artefact was dropped (class 1) or
+its publish was cancelled (class 3). Found by predicting every row from the tree
+and diffing: `duct-filesystem` served 0.1.0-1 against a tree at 0.1.0-4, so the
+passwd hazard fix had been merged for hours and published never.
+*Checked by* comparing all recipes on `main` against the index.
+*Cannot see:* a package dropped whose tree version has **not** moved. Those are
+unfalsifiable from the tree side, not clean -- if the index and the recipe agree,
+this check has nothing to compare.
+
+**3. Cancelled between publishes.** A publish indexes only its triggering
+build's artefacts, and the concurrency group holds at most **one** pending run --
+so a newly arriving publish cancels the one already queued, and the cancelled
+one's packages are never indexed by anything. Four PRs merged in fifty-five
+seconds; `libksba` and `libgcrypt` were built, uploaded and lost.
+*Checked by* the reconcile step, which sweeps every build since the last
+**successful** publish.
+*Cannot see:* truncation inside a single run. It is the mirror of class 1 --
+that one drops artefacts within a run, this one drops entire runs between
+publishes, and a publish can suffer either without the other.
+
+**4. Indexed but wrong on the server.** The row is correct and the file behind it
+is not. `findutils` arrived as 65536 bytes against an index saying 365768:
+advertised at full size, undownloadable, and indexed perfectly. **Indexed is not
+the same fact as correctly on the server.**
+*Checked by* the post-upload size sweep over every entry, not just this run's.
+*Cannot see:* a file that is the right size and the wrong bytes.
+
+The general shape, which is worth more than the four instances: **a check that
+derives its expectation from the same traversal it is checking cannot fail.**
+`collect-artefacts.sh` takes its total from the server for exactly that reason --
+otherwise it asserts "I enumerated everything I enumerated", which is the precise
+shape of the failure it exists to stop. The same rule is why a zero needs a
+control beside it: a scan that finds nothing has told you nothing until you have
+watched it find something.
+
+And two distinctions that keep collapsing back together, both of which cost real
+time here: **"it is gone" must not read as "nothing matched"**, and **absent must
+not read as cannot-answer**.
+
 ## The bootstrap chain
 
 Each step is an image, and each is built by the one above it. That is the whole
