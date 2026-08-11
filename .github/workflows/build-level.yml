@@ -336,7 +336,22 @@ jobs:
                 continue 2
               fi
             done
-            case $base in ${{ matrix.package }}-*) continue ;; esac
+            # Anchored on the version, for the same reason as the published
+            # seed above: `${package}-*` also matches any package whose NAME
+            # starts with this one plus a hyphen, so building linux would skip
+            # linux-headers built at a level below it, and building python
+            # would skip six python-* packages. See the longer note at the
+            # published-seed exclusion.
+            #
+            # THIS IS THE SECOND OF TWO SITES AND IT WAS MISSED THE FIRST TIME.
+            # The fix that anchored the published seed left this one unanchored
+            # for an hour -- one fixed path beside an identical broken one,
+            # which is the exact failure the reconcile change was written to
+            # avoid. Both sites are listed here so the next person changing
+            # either one finds the other:
+            #     the published seed  (packages fetched from repo.duct.dss-net.de)
+            #     this one            (artefacts from earlier levels of this run)
+            case $base in ${{ matrix.package }}-[0-9]*) continue ;; esac
 
             # Filter again, on the filename, and deliberately not instead of
             # the download pattern.
