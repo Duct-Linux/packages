@@ -1,0 +1,40 @@
+[package]
+name = "fuse3"
+description = "FUSE library and the setuid fusermount3 helper"
+version = "3.16.2"
+subversion = "1"
+authors = ["Miklos Szeredi and contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+# Its own, because the setuid bit has to be set after the generic install and
+# asserted after the strip. See install.sh.
+[install]
+script = "install.sh"
+
+# Nothing but libc. libfuse talks to the kernel through /dev/fuse and links no
+# library of its own -- which is why this is one recipe rather than a chain, and
+# why AppImage support costs exactly one package.
+#
+# The kernel side is not expressible here and belongs to the linux recipe:
+# CONFIG_FUSE_FS must be =y, not =m. As a module nothing loads it -- duct-live's
+# rc coldplugs by walking sysfs modaliases into modprobe, and a filesystem
+# module advertises none -- so /dev/fuse never appears and every consumer of
+# this package fails at run time on a system that looks correct. That change is
+# queued separately; until it lands, this package is correct and /dev/fuse is
+# absent on a live ISO.
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
