@@ -1,0 +1,28 @@
+[package]
+name = "libtasn1"
+description = "ASN.1 parser: how GnuTLS and p11-kit read X.509 certificates"
+version = "4.20.0"
+subversion = "1"
+authors = ["The GNU Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
+# Documentation generation is left enabled (see pkg.env), and makeinfo comes
+# from texinfo. The man pages ship pre-built, so this is for the info manual.
+texinfo = ">=7.2.0"

@@ -1,0 +1,44 @@
+[package]
+name = "p11-kit"
+description = "PKCS#11 module router and the system trust store GnuTLS reads CAs from"
+version = "0.25.5"
+subversion = "1"
+authors = ["The p11-glue project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# The trust module links libtasn1 to parse certificates -- verified as
+# DT_NEEDED on p11-kit-trust.so in install.sh, not inferred from the flag.
+libtasn1 = ">=4.20.0"
+# -Dlibffi=enabled. Closures are how p11-kit wraps modules; the fallback is a
+# fixed pool of 64 precompiled ones.
+libffi = ">=3.4.8"
+# The compiled-in trust path points into this package's ca-bundle.crt. Not a
+# link-time dependency and invisible to any linkage check -- the trust module
+# opens the file at runtime, and without it there are no anchors to load.
+ca-certificates = ">=2026.7.16"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"
+# NOT A LIBRARY DEPENDENCY. meson runs find_program('asn1Parser'), the binary
+# libtasn1 installs into /usr/bin, and under the upstream 'auto' default its
+# absence silently drops the whole trust module. Declared here because
+# [dependencies.build] is where the build order is derived from, and this edge
+# is an exec rather than a link.
+libtasn1 = ">=4.20.0"
