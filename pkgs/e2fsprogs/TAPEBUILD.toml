@@ -1,0 +1,40 @@
+[package]
+name = "e2fsprogs"
+description = "ext2/3/4 filesystem utilities: mke2fs, e2fsck, tune2fs"
+version = "1.47.2"
+# Bumped when the static archives were dropped. e2fsprogs has never published,
+# so this is still its first identity to reach a repository -- but the rule is
+# bump on any content change after a build has run, because tape-repo refuses
+# an upload whose name=version-subversion already exists and DISCARDS IT
+# QUIETLY. A package that is silently not republished looks exactly like one
+# that was.
+subversion = "3"
+authors = ["upstream"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# Not merely a build-time relationship. The recipe is configured
+# --disable-libuuid --disable-libblkid, so e2fsprogs LINKS AGAINST util-linux's
+# libuuid and libblkid rather than building its own -- see pkg.env for why it
+# must. Those libraries have to be present at runtime, so this belongs here and
+# not in [dependencies.build].
+util-linux = ">=2.41.1"
+
+[dependencies.build]
+# configure looks for the system libuuid and libblkid through pkg-config, and
+# falls back to AC_CHECK_LIB only when it is absent. Declared because a local
+# build supplies it by sequential accident and CI does not.
+pkgconf = ">=2.5.1"
