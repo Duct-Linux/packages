@@ -1,5 +1,20 @@
 # The hazard no per-package check can see
 
+> **CORRECTION, same night, before anyone acts on this.** The worked example
+> below **did not happen**. I wrote it believing `e2fsprogs` shipped no
+> development headers and that `ostree` would fail at the `#include`. The first
+> build that ever got past `configure` proved otherwise: plain `make install`
+> stages `/usr/include/e2p/e2p.h`, `/usr/include/et/com_err.h`, the ten
+> `ext2fs/` headers and the four `.pc` files. The lib subdirectories' own
+> `install::` rules stage them, and those rules are reached. **ostree gets its
+> header. There was never a missing consumer.**
+>
+> I have left the text intact rather than quietly repairing it, because what
+> the document is *now* an instance of is worth more than what I claimed it was
+> — see [What this document turned out to be](#what-this-document-turned-out-to-be)
+> at the end. The general form in the closing section still holds; the
+> **evidence for it does not**, and no decision should rest on the instance.
+
 Written 2026-08-11, after it caught my own recipe.
 
 Every verification mechanism this project built in its first day watches **a
@@ -72,3 +87,50 @@ falsified — the sentence stays true of the moment it described.
 Prefer justifications in terms of what the thing *is*. "Nothing uses this" is a
 fact about today. "This is not a development package" is a fact about the
 package, and it is the one a future reader can act on.
+
+## What this document turned out to be
+
+The hazard class above is real, and I still believe the closing section. But
+**this document is not an example of it.** It is an example of something else,
+and the second thing is the one that actually cost time tonight.
+
+I never observed that the headers were missing. I read the top-level `install`
+target in `Makefile.in`, saw it depended on `install-shlibs-libs-recursive`
+rather than `install-libs-recursive`, and concluded the headers could only come
+from `install-libs`. That is a fact about **one Makefile target**. Whether the
+headers reach the staging tree is a fact about **what the build produces**, and
+those are different questions — the lib subdirectories stage their own headers
+from their own `install::` rules, which the top-level target never mentions.
+
+The decisive evidence did not exist yet. No build had ever survived `configure`,
+because `util-linux` was not in the published repository. **So I reported a
+conclusion about an outcome that had not occurred once.** Everything downstream
+— the escalation to the orchestrator, the relay to `duct-5`, this document —
+was built on it.
+
+So the general form has a companion, and it is the sharper of the two:
+
+> **Reading the mechanism is not observing the outcome.** A mechanism you can
+> read is available immediately; the outcome may not exist yet. When they
+> disagree, the outcome is right — and the moment to notice is *before* the
+> evidence exists, because that is when the reasoning feels most complete.
+
+The tell is specific and checkable: **if the thing I am describing has never
+run, I am describing what I expect, not what happens.** That distinction was
+available to me the whole time. The recipe had never built successfully; I knew
+that; I wrote "MY e2fsprogs SHIPS NO DEVELOPMENT HEADERS" in capitals anyway.
+
+What survives from the original instance, and it is not nothing: the recipe
+comment
+
+> install-libs additionally stages the static archives and the development
+> headers, which nothing here uses
+
+is **factually wrong about this package**, not merely expired. Plain `install`
+stages both. So the comment fails the closing section's test twice over — it
+justifies in terms of the world rather than the package, *and* it misdescribes
+the package. It sits three lines from an assertion that is correct and that
+caught the real problem. **A wrong comment beside a correct assertion is how a
+future reader talks themselves into deleting the assertion**, which is why the
+comment has to be fixed in the same change as the archives, whichever way that
+decision goes.
