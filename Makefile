@@ -318,9 +318,15 @@ SERVICES_PKGS := \
 #            groups. NetworkManager drives it over D-Bus and contains no
 #            authentication code of its own, so this is what makes the Wi-Fi
 #            panel able to connect rather than merely able to list.
+#   ModemManager
+#            the mobile broadband daemon, and the source of the mm-glib that
+#            NetworkManager's -Dmodem_manager needs as a BARE dependency() --
+#            so it has to precede NetworkManager or NetworkManager gets built
+#            without modem support and needs a rebuild later. It needs libgudev
+#            from SERVICES_PKGS, which is the group immediately before this one.
 NETWORK_PKGS := \
 	libnl jansson libndp \
-	wpa_supplicant
+	wpa_supplicant ModemManager
 
 # The GNOME desktop tier: everything between "a GTK 4 application platform" and
 # "a GNOME session". Added in waves, in dependency order, and this is the first
