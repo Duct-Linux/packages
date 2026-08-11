@@ -1,0 +1,33 @@
+[package]
+name = "dconf"
+description = "GSettings backend and configuration database"
+version = "0.40.0"
+subversion = "1"
+authors = ["Allison Karlitskaya and contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+# Both build-time and runtime. meson.build reads dbus-1's pkg-config
+# session_bus_services_dir at configure time, and dconf-service is itself a
+# D-Bus activated service -- so this is not a soft dependency in either
+# direction.
+dbus = ">=1.16.2"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
