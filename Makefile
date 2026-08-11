@@ -177,20 +177,29 @@ GRAPHICS_PKGS := \
 # nothing here needs anything from GTK_PKGS. alsa-lib itself needs only glibc
 # and is first because pipewire's ALSA device backend is built against it.
 #
-# The three leaf libraries come first and the two daemons after, which is the
+# The leaf libraries come first and the two daemons after, which is the
 # dependency order and stays the dependency order as this group grows.
 #
-# sbc precedes pipewire although nothing yet makes it a dependency: pipewire is
-# built -Dbluez5=disabled today, and the follow-up that enables it makes sbc a
-# build input. Ordering it now costs nothing -- sbc needs only glibc -- and
-# means the re-enable is a flag change rather than a flag change plus a
-# reordering of this list.
+# sbc precedes pipewire because pipewire is built -Dbluez5=enabled and the SBC
+# codec plugins are compiled against libsbc with no found() guard. It needs only
+# glibc, so it sits with the other leaf libraries.
 #
 # lua sits here rather than in TOOLS_PKGS because it is not a build tool in this
 # tree: it is wireplumber's embedded policy engine, loaded as a shared library
 # at run time. It needs only glibc, so it goes with the other leaf libraries.
+#
+# BLUEZ IS HERE, AND IT MOVED FROM NETWORK_PKGS TO GET HERE. It is Bluetooth by
+# topic, which is why it was grouped with the network daemons, but grouping is
+# not ordering: pipewire -Dbluez5=enabled LINKS it, and pipewire is in this
+# group, so bluez was being built 49 positions after its own consumer and
+# check-build-order.sh said so the moment the dependency was declared.
+#
+# Moving it is safe for the reason its original comment gave -- it needs glib,
+# dbus and eudev and nothing from the group it was in. It needs nothing from
+# THIS group either, so it goes ahead of pipewire and nothing else here shifts.
+# gnome-bluetooth in GNOME_PKGS is downstream of both and still gets it.
 MEDIA_PKGS := \
-	alsa-lib sbc lua \
+	alsa-lib sbc lua bluez \
 	pipewire wireplumber
 
 GTK_PKGS := \
@@ -294,12 +303,15 @@ SERVICES_PKGS := \
 #            the SONAME of at BUILD time.
 #   libndp   IPv6 neighbour discovery. NetworkManager's one hard external
 #            dependency that nothing else here provides.
-#   bluez    bluetoothd, which IS gnome-bluetooth's entire backend. Needs glib,
-#            dbus and eudev, so it follows SESSION_PKGS and GLIB_PKGS -- but
-#            nothing in this group, which is why it is second rather than last.
+#
+# bluez USED TO BE HERE and moved to MEDIA_PKGS, which is EARLIER. It was placed
+# in this group by topic -- Bluetooth -- rather than by dependency, and the
+# comment that travelled with it said so: it needs glib, dbus and eudev and
+# nothing in this group. pipewire built -Dbluez5=enabled links it, and pipewire
+# is in MEDIA_PKGS, so leaving bluez here built it 49 positions AFTER its own
+# consumer. See MEDIA_PKGS for the rest of the reasoning.
 NETWORK_PKGS := \
-	libnl jansson libndp \
-	bluez
+	libnl jansson libndp
 
 # The GNOME desktop tier: everything between "a GTK 4 application platform" and
 # "a GNOME session". Added in waves, in dependency order, and this is the first
