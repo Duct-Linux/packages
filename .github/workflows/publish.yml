@@ -51,16 +51,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # NOT actions/download-artifact. It reported "Found 200 artifact(s)" for a
+      # run holding 258 and returned success, and the fifty-nine it dropped were
+      # the oldest -- which in a level-ordered climb is the foundation. See
+      # tools/collect-artefacts.sh for the full measurement; the script's job is
+      # to assert the set is complete and FAIL if it is not.
+      #
+      # A manual run has no artefacts of its own -- github.run_id is this publish
+      # run, which contains nothing. The build run has to be named.
       - name: Collect built packages
-        uses: actions/download-artifact@v4
-        with:
-          pattern: pkg-*
-          merge-multiple: true
-          path: incoming
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          # A manual run has no artifacts of its own -- github.run_id is this
-          # publish run, which contains nothing. The build run has to be named.
-          run-id: ${{ github.event.workflow_run.id || inputs.run_id || github.run_id }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ./tools/collect-artefacts.sh \
+            '${{ github.event.workflow_run.id || inputs.run_id || github.run_id }}' incoming
 
       - name: Fetch the current index
         env:
