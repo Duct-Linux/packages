@@ -378,7 +378,30 @@ stage: dirs
 # foreach, not a shell loop: $(call pkg_target,...) is resolved by make, and a
 # shell variable would never match the ARCH_<name> variables -- every package
 # would silently be stamped for $(TARGET), including the arch-independent ones.
-packages: packages-native packages-tape packages-rust
+# packages-rust FIRST, and the order is now load-bearing rather than arbitrary.
+#
+# packages-native unpacks every package built so far over / before each build,
+# so a native package can only see what an EARLIER target produced. Until now
+# nothing native depended on anything in RUST_PKGS -- uutils-coreutils is a
+# shipped userland that nothing builds against -- so rust could run last and the
+# order was free.
+#
+# The invariant that has to hold, and that nothing stated before: A RUST_PKGS
+# ENTRY THAT ANYTHING IN ALL_PKGS DEPENDS ON MUST BE BUILT FIRST. The first such
+# entry is cbindgen, which lands with the JavaScript chain: mozjs is in
+# ALL_PKGS, builds natively, and its configure raises a fatal error when
+# cbindgen is not on PATH. Under the old order `make repo` would build mozjs,
+# fail, and then build the cbindgen it had needed. The failure would name
+# cbindgen, so it would not be mysterious -- it would just be unfixable without
+# changing this line.
+#
+# Landed on its own, ahead of the packages that need it, because four other
+# chains are editing this Makefile right now and a global build-order change
+# arriving inside a five-package pull request is one nobody would see.
+#
+# Nothing else moves: packages-rust needs no locally built package, so running
+# it first is free today and correct afterwards.
+packages: packages-rust packages-native packages-tape
 
 # Every package already built is unpacked into the container before the next one
 # is compiled.
