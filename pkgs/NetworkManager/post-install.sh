@@ -80,13 +80,28 @@ if [ -d "$DESTDIR/lib" ]; then
 	die "NetworkManager staged into /lib; duct-filesystem owns that symlink"
 fi
 
-# --- what this package cannot do, said out loud on every build ---------------
-# Not assertions. Each is a capability that is absent by decision, and each is
-# invisible in a build log, in the meson summary and in the installed tree --
-# so the only place they can be seen is here.
-log "note: -Dcrypto=null. NetworkManager cannot read or verify certificates, so an"
-log "note: 802.1X connection with a CA or client certificate CANNOT BE CONFIGURED."
-log "note: username/password PEAP is unaffected, which is why this looks like it works."
-log "note: neither nss nor gnutls is packaged; this is a scope item, not a bug here."
+# --- the crypto backend, asserted against the binary ------------------------
+# -Dcrypto=gnutls. nm-crypto-gnutls.c is compiled into a static library and
+# linked into libnm, so a DT_NEEDED on libgnutls is the outcome; the flag and
+# the meson summary are only the input.
+#
+# THE FAILURE THIS PREVENTS IS SILENT AND SPECIFIC. -Dcrypto=null builds and
+# installs identically -- same binaries, same paths, same .pc files -- and
+# every entry point in nm-crypto-null.c returns FALSE, including
+# _nm_crypto_init. Its caller is nm-setting-8021x.c:533, which runs when a
+# certificate is SET on a connection, so an 802.1X connection with a CA or
+# client certificate could not be configured while username/password PEAP kept
+# working. Nothing about the installed tree would say so.
+if command -v readelf >/dev/null 2>&1; then
+	readelf -d "$DESTDIR/usr/lib/libnm.so" 2>/dev/null | grep -q "libgnutls.so" \
+		|| die "libnm.so does not link libgnutls; -Dcrypto=gnutls did not take effect and 802.1X certificates could not be read"
+else
+	log "warning: readelf is unavailable, so the crypto-backend check DID NOT RUN."
+fi
+
+# --- what this package still cannot do, said out loud on every build ---------
+# Not an assertion. A capability absent by decision, invisible in a build log,
+# in the meson summary and in the installed tree -- so this is the only place
+# it can be seen.
 log "note: -Dmodem_manager=false, so there is no mobile broadband panel until"
 log "note: mm-glib exists (ModemManager, which waits on libgudev)."

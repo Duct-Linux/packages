@@ -38,6 +38,16 @@ jansson = ">=2.14.0"
 curl = ">=8.13.0"
 # -Dlibpsl=true, the public suffix list, for cookie domain rules.
 libpsl = ">=0.21.0"
+# -Dcrypto=gnutls. The 802.1X certificate path: reading, verifying and
+# decrypting the CA and client certificates an enterprise Wi-Fi connection
+# carries. The alternative backend NetworkManager offers is nss, and the third
+# choice -- null -- compiles in a crypto implementation whose every entry point
+# returns FALSE, so a certificate cannot be set on a connection at all.
+#
+# Added while this package was still banked and unpublished, which is the only
+# window in which it is free: [dependencies] reaches TAPEPACKAGE.toml, so the
+# same change after publication would cost a subversion bump and a rebuild.
+gnutls = ">=3.8.0"
 # THE AUTHORIZATION LAYER, and the reason -Dpolkit=false is forbidden here:
 # without it NM compiles in main.auth-polkit=false and performs no
 # authorization on its D-Bus API at all. See pkg.env.
