@@ -121,10 +121,62 @@ jobs:
 
           # Successful main builds since then. jq does the comparison because
           # these are ISO-8601 and string ordering is correct for that format.
+          #
+          # SELECTED ON updatedAt -- WHEN THE BUILD FINISHED -- AND NOT ON
+          # createdAt, WHICH IS WHEN IT STARTED. This line read `.createdAt`
+          # and that is what made the sweep miss the packages it exists to
+          # rescue, permanently rather than temporarily.
+          #
+          # The failing shape: a build that STARTS BEFORE a publish and
+          # FINISHES AFTER it. Its artefacts were not in that publish, because
+          # they did not exist when it collected -- but its createdAt is older
+          # than that publish's, so every later sweep filters it out. It is
+          # invisible from then on, and the step reports "reconciled 0 build
+          # run(s)", which reads as success.
+          #
+          # That window is open most of the time: a build takes about ten
+          # minutes here and publishes run every few, so any given build is
+          # very likely to straddle one. This is not a rare race.
+          #
+          # The lived instance, 2026-08-11: libei #96, build 31520579131,
+          # started 18:01:38 and finished 18:11:49. The publish it triggered
+          # was cancelled, and the next publish's `since` was 18:09:30 --
+          # started before, finished after, so "reconciled 0 build run(s)".
+          # libei then sat unpublished while FOUR LATER MERGES indexed past it,
+          # which is the diagnostic: a queue that is merely behind publishes in
+          # merge order, so anything younger appearing while yours has not
+          # means the queue has passed you. Recovered only by a manual
+          # workflow_dispatch naming its build id; its artefacts were present
+          # and unexpired throughout, so nothing needed rebuilding.
+          #
+          # TWO NEAR-MISSES THAT LOOKED LIKE MORE INSTANCES AND ARE NOT, kept
+          # here because each one refutes a tempting shortcut:
+          #
+          #   A CANCELLED PUBLISH MAY STILL HAVE INDEXED. gnome-desktop #104's
+          #   publish was cancelled at 19:23:17 and its rows are stamped
+          #   19:23:06 -- it completed the insert before the cancel landed. So
+          #   the run's conclusion is not evidence in EITHER direction: a
+          #   success can miss packages (libei above) and a cancellation can
+          #   land them. Check the index, never the colour of the run.
+          #
+          #   A BUILD-ONLY CHANGE IS INVISIBLE TO AN INDEX CHECK IN BOTH
+          #   DIRECTIONS. linux #99 changed a [dependencies.build] constraint;
+          #   build deps never reach repo.db and its subversion was
+          #   deliberately not bumped, so it mints no new identity and no
+          #   publish could have lost one. Anyone confirming a repair for a
+          #   package like that finds nothing whether or not it worked, and
+          #   could read that as failure.
+          #
+          # Comparing a build's COMPLETION against a publish's START is the
+          # right semantic and is deliberately a little conservative: a publish
+          # collects artefacts when it starts, so anything finishing after that
+          # moment was not in it. Re-collecting a build that WAS already
+          # published is harmless -- the publish keeps the published bytes and
+          # warns -- whereas missing one is silent and permanent.
           runs=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow=build.yml \
                    --branch main --status success --limit 50 \
-                   --json databaseId,createdAt \
-                   -q "[.[] | select(.createdAt > \"$since\") | .databaseId] | .[]" 2>/dev/null || true)
+                   --json databaseId,updatedAt \
+                   -q "[.[] | select(.updatedAt > \"$since\") | .databaseId] | .[]" 2>/dev/null || true)
 
           trigger='${{ github.event.workflow_run.id || inputs.run_id || github.run_id }}'
           n=0
