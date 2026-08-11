@@ -1,0 +1,28 @@
+[package]
+name = "nghttp2"
+description = "HTTP/2 C library, required by libsoup3"
+version = "1.66.0"
+subversion = "1"
+authors = ["Tatsuhiro Tsujikawa and contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "../_scripts/install.sh"
+
+# libc only, and that is a consequence of --enable-lib-only rather than a
+# property of the project: the applications this build does not produce are what
+# would have wanted libev, c-ares, jansson and libevent.
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
