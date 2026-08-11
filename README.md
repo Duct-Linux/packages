@@ -247,6 +247,26 @@ keep new ones that way.
 
 ## Constraints worth knowing before writing a recipe
 
+- **Changing anything that reaches `TAPEPACKAGE.toml` requires a subversion
+  bump** — including `[dependencies]`, `description`, `packagers` and `authors`.
+  That file is generated from the recipe and shipped inside the package, so
+  editing any of those fields changes the artefact's bytes.
+
+  Without a bump the publish sees an identity it has already indexed, warns
+  `rebuilt with different content; keeping the published bytes`, and **keeps the
+  old manifest**. The build is green, the artefact is correct, and nothing
+  reaches users. It is silent in the direction that matters: the recipe on `main`
+  and the package on the server disagree, and only the recipe is easy to read.
+
+  This has happened. `patch` declared `attr` and the published package went on
+  listing only `glibc` while its binary carried `DT_NEEDED libattr.so.1` — so
+  installing it pulled no `attr` and it would fail to run on a machine without
+  one. The fix for a silent degradation was itself silently discarded.
+
+  A dependency in `[dependencies.build]` is the exception, and it is worth
+  knowing why rather than remembering the exception: that section is dropped at
+  wrap time, so it never reaches the manifest and the artefact does not change.
+
 - `version` and `subversion` must both parse as semver, or the resolver skips
   the package **silently**. Use three components and an integer subversion.
 - A dependency constraint of `"2.43"` is not exact — it means `>=2.43.0,
