@@ -45,4 +45,17 @@ glibc = ">=2.42.0"
 # regardless and an undeclared-tool failure would block CI for a distinction the
 # checker cannot currently draw. The comment is the part that matters: without
 # it, the next reader concludes the Makefile needs pkg-config, which it does not.
+#
+# WHICH CHECK THIS IS A WORKAROUND FOR, because getting that wrong nearly removed
+# it. This exists for the PKG-CONFIG USE INFERENCE -- the scan that reads every
+# meson.build, configure and configure.ac in the tarball and concludes the
+# package uses pkg-config. IT IS NOT A WORKAROUND FOR check_meson_options, the
+# option scan, which was separately fixed to strip comments.
+#
+# Two different checks with two different owners and two different lifetimes, and
+# the fix to one was taken by two people as settling the other. Removing this
+# line on that belief was TESTED RATHER THAN ASSUMED and the checker still fails:
+#     zstd: uses but does not declare in [dependencies.build]: pkgconf
+# So it stays until the USE INFERENCE learns that a shipped-but-unused build
+# system is not evidence, and "the option scan was fixed" does not settle it.
 pkgconf = ">=2.5.0"
