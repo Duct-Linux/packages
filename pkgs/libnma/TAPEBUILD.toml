@@ -1,0 +1,47 @@
+[package]
+name = "libnma"
+description = "NetworkManager GUI widgets, built for both GTK 3 and GTK 4: what gnome-control-center's network panel requires"
+version = "1.10.6"
+subversion = "1"
+authors = ["The NetworkManager developers"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+# libnm, from NetworkManager. meson.build requires >= 1.7 and it is not
+# optional -- these are widgets for driving that daemon.
+NetworkManager = ">=1.54.0"
+# The unconditional top-level dependency, and the whole reason gtk3 exists in
+# this tree. Not removed by -Dlibnma_gtk4=true, which ADDS the GTK 4 library
+# beside the GTK 3 one.
+gtk3 = ">=3.24.50"
+# -Dlibnma_gtk4=true. The second library, and the one gnome-control-center
+# actually links.
+gtk4 = ">=4.18.0"
+# -Diso_codes=true, for country name translation in the region pickers.
+iso-codes = ">=4.18.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+# -Dintrospection=true. gnome-control-center reaches these widgets through the
+# typelib, so this is load-bearing rather than decoration. Two packages: the
+# scanner comes from gobject-introspection, the GObject typelibs it reads come
+# from glib-introspection.
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.0"
+gettext = ">=0.26.0"
