@@ -1,0 +1,59 @@
+Guard the ssh-add/ssh-agent lookups behind the ssh_agent option.
+
+WITHOUT THIS, gcr-3.41.2 CANNOT BE CONFIGURED IN THIS TREE AT ALL -- not with
+-Dssh_agent=false, and not with it true either.
+
+meson.build:55-56 reads
+
+    ssh_add_path   = find_program('ssh-add',   required: get_option('ssh_agent')).path()
+    ssh_agent_path = find_program('ssh-agent', required: get_option('ssh_agent')).path()
+
+The `required:` argument is correct and does exactly what it should: with
+-Dssh_agent=false the programs become optional and find_program returns a
+not-found object rather than failing. AND THEN `.path()` IS CALLED ON IT
+ANYWAY, on the same line, unconditionally:
+
+    ERROR: Unable to get the path of a not-found external program
+
+So the option that is supposed to make ssh-add unnecessary cannot be used. This
+is the same shape as an `assert()` cancelling a `required: false` a line later
+-- the call is soft and its CONSEQUENCE is hard -- with the cancellation hidden
+in a method call rather than a separate statement.
+
+The other direction is no better here: -Dssh_agent=true makes ssh-add and
+ssh-agent hard requirements, and OpenSSH is not packaged in this distribution.
+
+UPSTREAM ALREADY FIXED THIS, in the next generation of the same file. gcr-4.4.0.1
+meson.build:97-100 is the identical logic written correctly:
+
+    libsecret_dep = dependency('libsecret-1', ..., required: get_option('ssh_agent'))
+    if get_option('ssh_agent')
+      ssh_add_path = find_program('ssh-add').full_path()
+      ssh_agent_path = find_program('ssh-agent').full_path()
+    endif
+
+so this patch is a backport of gcr's own answer rather than an invention. The
+one addition is the `else` arm setting both variables empty: gcr-3 consumes
+them unconditionally at lines 85-86 (`conf.set_quoted('SSH_ADD_EXECUTABLE',
+...)`), where gcr-4 does not, so they must exist in both branches. The values
+are only ever read by the ssh-agent sources, which are not built when the
+option is off.
+
+--- a/meson.build
++++ b/meson.build
+@@ -52,8 +52,13 @@
+   error('Couldn\'t find location for pkcs11 module config')
+ endif
+ libsecret_dep = dependency('libsecret-1', version: '>= 0.20', required: get_option('ssh_agent'))
+-ssh_add_path = find_program('ssh-add', required: get_option('ssh_agent')).path()
+-ssh_agent_path = find_program('ssh-agent', required: get_option('ssh_agent')).path()
++if get_option('ssh_agent')
++  ssh_add_path = find_program('ssh-add').path()
++  ssh_agent_path = find_program('ssh-agent').path()
++else
++  ssh_add_path = ''
++  ssh_agent_path = ''
++endif
+
+ with_systemd = false
+ libsystemd_deps = []

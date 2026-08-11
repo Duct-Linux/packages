@@ -331,7 +331,7 @@ CRYPTO_PKGS := \
 SERVICES_PKGS := \
 	polkit libgudev upower accountsservice \
 	libtasn1 nettle libunistring p11-kit gnutls \
-	libsecret libwacom
+	libsecret libwacom gcr3 gcr
 
 # Networking and Bluetooth: the daemons and libraries gnome-control-center's
 # Network, Wi-Fi and Bluetooth panels talk to. A tier of its own rather than an
