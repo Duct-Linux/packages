@@ -2,12 +2,18 @@
 name = "duct-filesystem"
 description = "The Duct directory skeleton and base system files"
 version = "0.1.0"
+# 6 -- /etc/profile gains the loop over /etc/profile.d/*.sh, and /etc/profile.d
+# is created. The bump is not optional for the same reason recorded for 5, and
+# it bites harder here: the whole point of the change is a file on INSTALLED
+# systems, so a publish that kept the old bytes would leave every one of them
+# with the profile that reads nothing while the recipe said otherwise.
+#
 # 5 -- the lp user and the lpadmin group, for cups. This file reaches the
 # artefact (TAPEPACKAGE.toml is generated from it and shipped inside the
 # package), and so does install.sh, so without the bump publish.yml finds
 # 0.1.0-4 already published and KEEPS THE OLD BYTES: the templates would appear
 # to change and no installed system would ever see it.
-subversion = "5"
+subversion = "6"
 authors = ["Duct"]
 packagers = ["ItzYanick"]
 

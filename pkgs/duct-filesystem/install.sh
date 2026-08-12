@@ -14,7 +14,7 @@ log "generating the filesystem skeleton"
 # Real directories. Everything lives under /usr; the top-level bin/sbin/lib are
 # symlinks into it (below).
 for d in \
-	dev etc home mnt opt proc root run srv sys tmp \
+	dev etc etc/profile.d home mnt opt proc root run srv sys tmp \
 	usr/bin usr/include usr/lib usr/lib64 usr/libexec usr/sbin \
 	usr/share/man usr/share/misc usr/local \
 	var/cache var/lib var/local var/log var/spool var/tmp
@@ -185,12 +185,90 @@ cat >"$DESTDIR/usr/share/duct-filesystem/hosts.default" <<'EOF'
 ::1 localhost ip6-localhost ip6-loopback
 EOF
 
+# /etc/profile.d IS SOURCED, AND UNTIL NOW IT WAS NOT.
+#
+# This profile had no loop over /etc/profile.d, and nothing else in the
+# distribution sourced that directory either -- measured across all 615
+# published payloads, not inferred. Two packages ship snippets into it and
+# NEITHER was ever read: gawk's (which additionally lands in /usr/etc, fixed
+# separately) and flatpak's flatpak.sh, which is in exactly the right place with
+# exactly the right content. flatpak.sh is what appends the flatpak exports to
+# XDG_DATA_DIRS. The package with the WRONG path lost nothing; the package with
+# the RIGHT path lost its feature, which is why this was found by asking what
+# reads the directory rather than by checking where files landed.
+#
+# THE SCOPE OF THIS FIX IS LOGIN SHELLS, WHICH IS NOT THE WHOLE QUESTION.
+# Whether a GRAPHICAL session inherits the same environment depends on how the
+# display manager starts it and what its session wrapper sources -- a fact about
+# gdm's session path, owned there, and nothing here establishes it. Do not read
+# this loop as evidence that a flatpak application appears in the shell's
+# application grid; that has to be checked where the session is started.
+#
+# An `if` inside the loop rather than `[ -r "$f" ] && . "$f"`: the AND-list
+# leaves a false test as the loop's exit status, so a profile ending on a
+# non-matching iteration returns 1 to anything sourcing it under `set -e`. The
+# `if` form returns 0 when its condition is false. Same reasoning libnl's
+# post-install records for its negative assertion.
+#
+# The glob is deliberately unquoted and unguarded: with no matches it stays
+# literal, the `-r` test fails, and the loop body never runs -- which is the
+# state of every system today and the arm the check below exercises first.
 cat >"$DESTDIR/etc/profile" <<'EOF'
 # Duct base profile.
 export PATH=/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin
 export PS1='\u@\h:\w\$ '
 umask 022
+
+# Package-supplied environment snippets. A package that has to add to every
+# login shell's environment drops a .sh file in /etc/profile.d rather than
+# editing this file, which duct-filesystem owns and rewrites on every upgrade.
+for __duct_profile in /etc/profile.d/*.sh; do
+	if [ -r "$__duct_profile" ]; then
+		. "$__duct_profile"
+	fi
+done
+unset __duct_profile
 EOF
+
+# THE PROFILE IS PARSED AND EXERCISED BEFORE IT SHIPS, because the failure mode
+# this loop introduces is not a degraded feature -- it is a system on which no
+# login shell starts, and it would pass every file-exists check ever written.
+#
+# `sh -n` first: the consumer's own parser, asked the consumer's own question.
+sh -n "$DESTDIR/etc/profile" || die "/etc/profile is not valid shell"
+
+# Then the loop is RUN, because `sh -n` proves only that it parses. The shipped
+# text is used with nothing changed but the directory it scans, so the thing
+# under test is the thing that ships; a hand-written copy of the loop here would
+# only ever test the copy.
+#
+# Three arms, and the first is the one that matters most: EMPTY is the state of
+# every system that has not installed gawk or flatpak, and an unguarded glob
+# breaks exactly there. The other two are a known-positive and a known-negative
+# for the `*.sh` filter -- zz.txt sorts AFTER aa.sh deliberately, so a loop that
+# globbed `*` would overwrite the marker rather than merely add to it, and the
+# check would catch it instead of agreeing with it by luck. The scratch profile
+# lives OUTSIDE the scanned directory: inside it, a `*` glob would source the
+# test copy itself and recurse.
+_pd=$(mktemp -d) || die "could not create a scratch directory for the profile check"
+mkdir -p "$_pd/d"
+sed "s|/etc/profile.d|$_pd/d|g" "$DESTDIR/etc/profile" >"$_pd/profile.test"
+
+( . "$_pd/profile.test" ) >/dev/null 2>&1 \
+	|| die "/etc/profile fails when /etc/profile.d is empty, which is every system that ships no snippet"
+
+echo 'DUCT_PROFILE_D_MARKER=sourced' >"$_pd/d/aa.sh"
+echo 'DUCT_PROFILE_D_MARKER=wrong'   >"$_pd/d/zz.txt"
+_got=$( . "$_pd/profile.test" >/dev/null 2>&1; echo "${DUCT_PROFILE_D_MARKER:-unset}" )
+case "$_got" in
+	sourced) : ;;
+	unset)   die "/etc/profile did not source a readable .sh snippet from /etc/profile.d" ;;
+	wrong)   die "/etc/profile sourced a non-.sh file from /etc/profile.d" ;;
+	*)       die "/etc/profile.d check returned an unexpected marker: $_got" ;;
+esac
+rm -rf "$_pd"
+
+log "/etc/profile sources /etc/profile.d/*.sh (parsed, and exercised empty + positive + negative)"
 
 # A log file the daemon can append to without the directory needing to exist
 # first; tape's default config points its log here.
