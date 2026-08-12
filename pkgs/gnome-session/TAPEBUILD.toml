@@ -1,0 +1,57 @@
+[package]
+name = "gnome-session"
+description = "The GNOME session manager"
+version = "48.0.0"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "./install.sh"
+
+# 48.0.0 rather than 48.0: tape's resolver requires three-component semver and
+# skips a package silently without it. The tarball keeps upstream's name.
+#
+# Read from every meson.build with no truncation, which for this package is
+# short -- there are no error() calls at all and the whole hard set is:
+#
+#   glib            gio-2.0, glib-2.0, gio-unix-2.0   meson.build:84-85, :114
+#   gtk3            gtk+-3.0 >= 3.22                  :86, unconditional. This is
+#                   a GTK 3 program, which is why the package sits after gtk3.
+#   gnome-desktop   gnome-desktop-3.0 >= 3.34.2       :97. THE LEGACY LIBRARY --
+#                   this is the consumer that made -Dlegacy_library=true
+#                   necessary in gnome-desktop, confirmed here from the
+#                   consumer's own file rather than from the argument for it.
+#   json-glib       json-glib-1.0                     :98
+#   elogind         libsystemd >= 209                 :124, required:true and
+#                   UNGUARDED. It resolves through elogind's libsystemd.pc
+#                   symlink; declared because the artefact links it.
+#
+# ice, sm, x11 and xtrans are all inside `if have_x11` and -Dx11=false drops
+# them, so libX11 is NOT a dependency of this package -- unlike gnome-shell,
+# where it is one for a reason decided in mutter's recipe.
+[dependencies]
+glibc = ">=2.42.0"
+gcc = ">=15.2.0"
+glib = ">=2.84.0"
+gtk3 = ">=3.24.0"
+gnome-desktop = ">=44.3.0"
+json-glib = ">=1.10.6"
+elogind = ">=255.17.0"
+
+# No xmlto or DocBook stylesheets: doc/meson.build:1 is `if get_option('docbook')`
+# and pkg.env turns that off, so the tools are never looked for.
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"
