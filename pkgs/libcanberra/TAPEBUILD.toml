@@ -2,7 +2,7 @@
 name = "libcanberra"
 description = "XDG sound theme event sound library"
 version = "0.30.0"
-subversion = "1"
+subversion = "2"
 authors = ["Lennart Poettering"]
 packagers = ["ItzYanick"]
 
@@ -23,6 +23,7 @@ glibc = ">=2.42.0"
 libvorbis = ">=1.3.7"
 libogg = ">=1.3.6"
 alsa-lib = ">=1.2.14"
+gtk3 = ">=3.24.50"
 libtool = ">=2.5.4"
 
 [dependencies.build]

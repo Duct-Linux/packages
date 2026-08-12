@@ -498,7 +498,7 @@ GNOME_PKGS := \
 	libusb libgusb \
 	highway libjxl \
 	colord \
-	libogg libvorbis libcanberra sound-theme-freedesktop \
+	libogg libvorbis sound-theme-freedesktop \
 	xcb-util startup-notification
 
 # The GTK 3 island, and it is an island on purpose.
@@ -522,8 +522,12 @@ GNOME_PKGS := \
 NETWORK_UI_PKGS := \
 	gtk3 libnma
 
-# The GNOME components that are GTK 3 programs, and therefore cannot be built
-# until gtk3 exists.
+# The packages that LINK GTK 3, and therefore cannot be built until gtk3 exists.
+#
+# Named for the tier rather than for a package type: libcanberra is a library
+# rather than a GNOME component, and it is here for the same single reason --
+# its GTK 3 helper includes gdk/gdkx.h, and its consumer gnome-settings-daemon
+# asks for libcanberra-gtk3 by name.
 #
 # WHY THIS GROUP HAS TO EXIST, because the obvious question is why these are not
 # in GNOME_PKGS with the rest of the tier. There is a real ordering constraint
@@ -543,7 +547,7 @@ NETWORK_UI_PKGS := \
 # gnome-settings-daemon/meson.build:107 wants gtk+-x11-3.0 specifically) -- and
 # mutter follows them, because it needs gnome-desktop-4 from here.
 GNOME_UI_PKGS := \
-	gnome-desktop mutter
+	libcanberra gnome-desktop mutter
 
 # The JavaScript engine chain, and the reason it is a chain rather than a
 # package: gnome-shell and gnome-settings-daemon are GJS applications -- the
