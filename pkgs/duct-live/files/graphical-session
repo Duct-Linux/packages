@@ -35,7 +35,35 @@ export PATH
 query=
 [ "${1:-}" = "--would-start" ] && query=1
 
-say() { [ -n "$query" ] || echo "duct-live: $*"; }
+# EVERYTHING THIS SCRIPT SAYS GOES TO /dev/console, NOT TO ITS OWN TERMINAL.
+#
+# This entry runs on tty1, so stdout is tty1 -- and on a machine with a serial
+# console that is a screen nobody is watching, while on a machine without one a
+# compositor takes the VT into graphics mode and text written to it disappears
+# entirely. Either way the session's own account of itself lands where it
+# cannot be read, which is how the first weston boot test failed: udev, the
+# bus, seatd and a client taking seat0 were all visible on the serial console,
+# and not one line from this script or from the compositor was, so a run that
+# may well have worked was indistinguishable from one that never started.
+#
+# A marker that the observer cannot see is not a marker. /dev/console is
+# whatever the kernel command line says it is, which is exactly the place a
+# boot is watched from.
+# Tested by OPENING it, not by asking -w. access(2) answers a question about
+# permission bits and /dev/console is not an ordinary file: measured in a
+# container, `[ -w /dev/console ]` is FALSE while a write to it succeeds -- so
+# the obvious test silences the session in exactly the environments where it
+# would have worked. Appending nothing is the same operation the writes below
+# perform, which is the only test that cannot disagree with them.
+console=/dev/console
+if ! : >>"$console" 2>/dev/null; then
+	console=/dev/null
+fi
+
+say() {
+	[ -n "$query" ] && return 0
+	echo "duct-live: $*" >>"$console"
+}
 
 # The kernel command line, read the way the initramfs reads it.
 want=
@@ -126,13 +154,13 @@ say "starting $session on tty1"
 	for _ in $(seq 1 60); do
 		for sock in /run/user/*/wayland-*; do
 			if [ -S "$sock" ]; then
-				echo "duct-live: wayland display up: $sock"
+				echo "duct-live: wayland display up: $sock" >>"$console"
 				exit 0
 			fi
 		done
 		sleep 1
 	done
-	echo "duct-live: no wayland socket after 60s -- the display did not come up"
+	echo "duct-live: no wayland socket after 60s -- the display did not come up" >>"$console"
 ) &
 
 # In the foreground, so busybox init sees the session end and restarts it.
@@ -141,7 +169,7 @@ case $session in
 		# --nodaemon for the same reason: a gdm that forks and returns looks
 		# to init like a session that exited immediately, and init would
 		# respawn it in a loop against a daemon that is already running.
-		exec "$session" --nodaemon
+		exec "$session" --nodaemon >>"$console" 2>&1
 		;;
 	*weston)
 		# --shell=kiosk IS NOT OPTIONAL, and the reason is not visible from
@@ -154,7 +182,11 @@ case $session in
 		# --continue-without-input because the drm backend otherwise refuses
 		# to start on a machine with no input device, which is exactly what an
 		# emulated boot test is.
-		exec "$session" --shell=kiosk --continue-without-input
+		# Output to the console for the same reason as say(): weston takes
+		# tty1 into graphics mode, so its log would be written to a screen
+		# that is showing a framebuffer. When it fails, this line is the
+		# entire diagnosis.
+		exec "$session" --shell=kiosk --continue-without-input >>"$console" 2>&1
 		;;
 esac
 
