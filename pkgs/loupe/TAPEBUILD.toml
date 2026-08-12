@@ -1,0 +1,28 @@
+[package]
+name = "loupe"
+description = "GNOME loupe"
+version = "48.2.0"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+[source]
+script = "../_scripts/fetch.sh"
+[prepare]
+script = "../_scripts/prepare.sh"
+[build]
+script = "../_scripts/build-meson.sh"
+[install]
+script = "../_scripts/install-meson.sh"
+[dependencies]
++glibc = ">=0.0.0"
+gtk4 = ">=0.0.0"
+libadwaita = ">=0.0.0"
+libgweather = ">=0.0.0"
+lcms2 = ">=0.0.0"
+libseccomp = ">=0.0.0"
+rust = ">=0.0.0"
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"

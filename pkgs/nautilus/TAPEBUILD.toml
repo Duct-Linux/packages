@@ -1,0 +1,30 @@
+[package]
+name = "nautilus"
+description = "GNOME nautilus"
+version = "48.4.0"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+[source]
+script = "../_scripts/fetch.sh"
+[prepare]
+script = "../_scripts/prepare.sh"
+[build]
+script = "../_scripts/build-meson.sh"
+[install]
+script = "../_scripts/install-meson.sh"
+[dependencies]
++glibc = ">=0.0.0"
+glib = ">=0.0.0"
+gtk4 = ">=0.0.0"
+libadwaita = ">=0.0.0"
+gnome-autoar = ">=0.0.0"
+gnome-desktop = ">=0.0.0"
+wayland = ">=0.0.0"
+libportal = ">=0.0.0"
+tinysparql = ">=0.0.0"
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"

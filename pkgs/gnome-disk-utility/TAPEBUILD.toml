@@ -1,0 +1,33 @@
+[package]
+name = "gnome-disk-utility"
+description = "GNOME gnome-disk-utility"
+version = "46.1.0"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+[source]
+script = "../_scripts/fetch.sh"
+[prepare]
+script = "../_scripts/prepare.sh"
+[build]
+script = "../_scripts/build-meson.sh"
+[install]
+script = "../_scripts/install-meson.sh"
+[dependencies]
++glibc = ">=0.0.0"
+glib = ">=0.0.0"
+gtk3 = ">=0.0.0"
+libcanberra = ">=0.0.0"
+libhandy = ">=0.0.0"
+xz = ">=0.0.0"
+libnotify = ">=0.0.0"
+libsecret = ">=0.0.0"
+libpwquality = ">=0.0.0"
+udisks2 = ">=0.0.0"
+elogind = ">=0.0.0"
+libdvdread = ">=0.0.0"
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"

@@ -1,0 +1,35 @@
+[package]
+name = "gnome-bluetooth"
+description = "GNOME Bluetooth libraries and user interface"
+version = "47.2.0"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+[prepare]
+script = "../_scripts/prepare.sh"
+[build]
+script = "../_scripts/build-meson.sh"
+[install]
+script = "../_scripts/install-meson.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+gtk4 = ">=4.18.0"
+libadwaita = ">=1.7.0"
+gsound = ">=1.0.3"
+libnotify = ">=0.8.6"
+eudev = ">=3.2.14"
+upower = ">=1.90.7"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.1"
+

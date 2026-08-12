@@ -783,7 +783,11 @@ PRINT_PKGS := cups
 # is alphabetical, which is what a list with no constraint should be rather than
 # an accident that reads like one.
 SETTINGS_PKGS := \
-	gnome-keyring gnome-menus tecla
+	gnome-keyring gnome-menus tecla \
+	gsound gnome-bluetooth gnome-control-center \
+	prmpt firefox duct-installer \
+	nautilus gnome-text-editor loupe papers \
+	gnome-disk-utility gnome-system-monitor
 
 # The JavaScript engine chain, and the reason it is a chain rather than a
 # package: gnome-shell and gnome-settings-daemon are GJS applications -- the
