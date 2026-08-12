@@ -1,0 +1,33 @@
+[package]
+name = "libpwquality"
+description = "Password quality checking and generation, with a PAM module"
+version = "1.4.5"
+subversion = "1"
+authors = ["Tomas Mraz and the libpwquality project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# The dictionary check, and a HARD requirement unless --disable-cracklib-check
+# is passed: configure.ac:175 is AC_MSG_ERROR([No or unusable cracklib library]).
+# It is not passed -- see pkg.env for why the check is on rather than off.
+cracklib = ">=2.10.3"
+# --enable-pam. The module that enforces the policy at password change, as
+# opposed to the library that only lets an application ask.
+linux-pam = ">=1.7.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"
