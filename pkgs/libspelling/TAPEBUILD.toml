@@ -15,8 +15,8 @@ script = "../_scripts/build-meson.sh"
 script = "../_scripts/install-meson.sh"
 [dependencies]
 glibc = ">=2.42.0"
+gtksourceview = ">=5.16.0"
 [dependencies.build]
 meson = ">=1.8.0"
 ninja = ">=1.13.0"
 pkgconf = ">=2.5.0"
-
