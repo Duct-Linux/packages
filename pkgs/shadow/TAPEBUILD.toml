@@ -2,7 +2,10 @@
 name = "shadow"
 description = "Password and account management utilities"
 version = "4.17.4"
-subversion = "2"
+# 3 -- etc/pam.d/login, passwd and su are no longer shipped: linux-pam owns
+# them, and two packages owning one file is a hard install error, so shadow and
+# linux-pam could not be installed together at all.
+subversion = "3"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 

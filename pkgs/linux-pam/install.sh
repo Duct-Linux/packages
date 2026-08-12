@@ -66,6 +66,12 @@ session   required    pam_deny.so
 # End /etc/pam.d/other
 PAM
 
+# THIS PACKAGE OWNS login, su AND passwd, and shadow used to ship its own
+# copies of all three. Two packages owning one file is a hard install error, so
+# the pair could not be installed together at all until shadow's recipe stopped
+# shipping them -- see pkgs/shadow/install.sh, which asserts their absence.
+# Adding a service to this list means checking that shadow does not also ship
+# it; the intersection is the thing to look at, not either list alone.
 for svc in login su passwd chage; do
 	cat >"$DESTDIR/etc/pam.d/$svc" <<PAM
 # Begin /etc/pam.d/$svc
