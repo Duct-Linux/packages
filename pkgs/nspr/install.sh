@@ -37,5 +37,22 @@ if [ -e "$DESTDIR/usr/lib/libnspr4.a" ]; then
 	die "libnspr4.a was installed despite prepare.sh removing \$(LIBRARY) from config/rules.mk; that edit no longer matches and the package is carrying static archives nothing links"
 fi
 
+# The result is 64-bit on a 64-bit machine, checked on BOTH architectures even
+# though the flag that produces it is passed on only one.
+#
+# build.sh passes --enable-64bit on x86_64 alone, and that IS correct here --
+# NSPR's configure defaults to 32-bit on x86 and detects 64-bit properly
+# elsewhere, which is why BLFS conditions it the same way. But "correct because
+# configure detects it" is a claim about a build that is not run here, and the
+# cost of being wrong is not a failure in this package: NSS is compiled against
+# these headers, and a word-size mismatch surfaces there as a negative array
+# size in freebl -- a diagnostic that names neither NSPR nor the flag.
+#
+# So the arch-conditional flag gets a check that is NOT arch-conditional.
+if [ "$(getconf LONG_BIT 2>/dev/null)" = "64" ]; then
+	readelf -h "$DESTDIR/usr/lib/libnspr4.so" 2>/dev/null | grep -q 'ELF64' || \
+		die "libnspr4.so is not a 64-bit object on a 64-bit machine. On x86_64 that means --enable-64bit did not take; on any other architecture it means NSPR's configure did not detect the word size it was supposed to detect. Either way NSS is about to be compiled against 32-bit-shaped headers"
+fi
+
 finish_install
 log "installed NSPR with its three libraries and unversioned headers"

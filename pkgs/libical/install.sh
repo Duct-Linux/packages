@@ -102,15 +102,37 @@ gen=$DESTDIR/usr/libexec/libical/ical-glib-src-generator
 #
 # THE DATA, NOT A STRING IN THE BINARY. ZONEINFO_DIRECTORY is referenced from
 # get_zone_directory_builtin(), which is compiled whichever way the flag went,
-# so "/usr/share/libical/zoneinfo" is in .rodata even in the broken build and
+# so "/usr/share/libical/zoneinfo" is in .rodata even in the wrong build and
 # grepping for it would pass one. What -DUSE_BUILTIN_TZDATA controls is
-# CMakeLists.txt:693-696, the add_subdirectory(zoneinfo) that installs this
-# tree; the files are the flag's only observable consequence in the payload.
-zdir=$DESTDIR/usr/share/libical/zoneinfo
-[ -s "$zdir/zones.tab" ] || die "no zones.tab under /usr/share/libical/zoneinfo. -DUSE_BUILTIN_TZDATA was lost, and the default is to read a system zoneinfo directory that does not exist anywhere in this tree -- libical would install perfectly and resolve no timezone at all"
+# CMakeLists.txt:693-696, the add_subdirectory(zoneinfo) that installs the
+# builtin tree; the staged files are the flag's only observable consequence.
+#
+# ASSERTED AS AN ABSENCE, and this direction is the current decision rather
+# than the obvious one -- an earlier version of this recipe asserted the same
+# directory PRESENT, because tzdata was not packaged then. The flag and its
+# assertion are one pair and they flipped together; see pkg.env.
+if [ -e "$DESTDIR/usr/share/libical/zoneinfo" ]; then
+	die "the builtin zoneinfo tree was staged, so -DUSE_BUILTIN_TZDATA=False did not take. This tree gets its zones from the tzdata package: libical's own copy is frozen at the tarball's vintage AND internally inconsistent -- its zones.tab lists 596 zones while its install rule ships 14 directories, and the ~108 it lists without installing resolve to non-NULL zone objects that answer UTC (measured: US/Eastern gives +0/+0 on the builtin data and -5/-4 on the system data)"
+fi
 
-nzone=$(find "$zdir" -name '*.ics' -type f | wc -l | tr -d ' ')
-[ "${nzone:-0}" -ge 300 ] || die "only $nzone zone definitions under /usr/share/libical/zoneinfo; the tarball carries several hundred, so the zoneinfo install ran short and most timezones would resolve to nothing"
+# THE COUPLING, which is invisible from either package alone. libical does not
+# take a zoneinfo path from pkg-config, an option or an environment variable at
+# build time: icaltz-util.c:104-109 hardcodes four directories and takes the
+# first holding a zone.tab. Nothing in the build fails when none of them does;
+# the library simply resolves no timezone. So the fact that some package in
+# this tree satisfies that list is checked here rather than assumed, against
+# the root this build ran on.
+#
+# This asserts libical's own hardcoded requirement, NOT what tzdata does --
+# whether tzdata ships zone1970.tab as well, or a posix/ tree, or leap seconds,
+# is that recipe's business and restating it here is how a note about a
+# neighbour goes quietly false.
+zonetab=
+for d in /usr/share/zoneinfo /usr/lib/zoneinfo /etc/zoneinfo /usr/share/lib/zoneinfo; do
+	[ -f "$d/zone.tab" ] && { zonetab=$d/zone.tab; break; }
+done
+[ -n "$zonetab" ] || die "none of libical's four hardcoded zoneinfo directories holds a zone.tab (icaltz-util.c:104-109 searches /usr/share/zoneinfo, /usr/lib/zoneinfo, /etc/zoneinfo, /usr/share/lib/zoneinfo, in that order). With -DUSE_BUILTIN_TZDATA=False that is where every timezone comes from, and libical would install perfectly and resolve none of them. tzdata is the package that satisfies this and is declared in [dependencies]; if it has stopped shipping zone.tab under one of these names, this recipe has to know"
+nzone=$(grep -cv '^#' "$zonetab" 2>/dev/null || echo 0)
 
 # ---------------------------------------------------------------------------
 # 4. What the payload actually links, closed-world
@@ -172,4 +194,4 @@ PKG_CONFIG_LIBDIR="$DESTDIR/usr/lib/pkgconfig:/usr/lib/pkgconfig" \
 	pkg-config --print-requires-private libical 2>/dev/null | grep -q '^icu-i18n' \
 	|| die "libical.pc does not carry icu-i18n in Requires.private although the library links it; the two are set from the same ICU_FOUND and have come apart"
 
-log "installed libical with libical-glib, ICalGLib introspection, $nzone builtin timezones and ICU RSCALE support"
+log "installed libical with libical-glib, ICalGLib introspection and ICU RSCALE support; timezones come from $zonetab ($nzone zones), not from a builtin copy"
