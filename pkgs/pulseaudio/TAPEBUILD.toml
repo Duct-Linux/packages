@@ -1,0 +1,46 @@
+[package]
+name = "pulseaudio"
+description = "PulseAudio client libraries for applications that speak the PulseAudio protocol"
+version = "17.0"
+subversion = "1"
+authors = ["The PulseAudio developers"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# The bare dependency() no option can drop -- meson.build:615, in the block
+# common to client, daemon and modules, so -Ddaemon=false does not reach it.
+# This is the edge the whole wave was built to satisfy.
+libsndfile = ">=1.2.2"
+# -Dglib=enabled, and the reason this package is in the tree at all:
+# libpulse-mainloop-glib is built only inside `if glib_dep.found()`
+# (src/pulse/meson.build:118). gnome-settings-daemon requires that library.
+glib = ">=2.84.0"
+# -Ddbus=enabled. Verified against DT_NEEDED on the staged payload rather than
+# taken from the dependency() list: libpulsecommon links libdbus-1 directly, so
+# the client carries a real D-Bus edge even with the daemon gone.
+dbus = ">=1.16.2"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+# INVISIBLE TO tools/check-recipes.sh, which is why it is written here with a
+# reason rather than left to be discovered. po/meson.build calls
+# `i18n.gettext(...)`, a meson MODULE invocation -- it needs msgfmt and msgmerge
+# from gettext and contains no find_program() for the scanner to see. The
+# translations are built under `if get_option('client')`, which is the half of
+# this package that is enabled.
+gettext = ">=0.26.0"

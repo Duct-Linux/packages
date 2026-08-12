@@ -1,0 +1,35 @@
+[package]
+name = "opus"
+description = "Opus audio codec library"
+version = "1.5.2"
+subversion = "1"
+authors = ["Xiph.Org Foundation"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+# NO libogg. Opus the CODEC and Opus in an OGG CONTAINER are different
+# libraries: the container work lives in opusfile/libopusenc, which are separate
+# upstream projects and are not packaged here. libsndfile links libopus for the
+# codec and reaches Ogg through libogg directly, so this package needs none.
+# Worth stating because flac -- its neighbour in the same wave, from the same
+# upstream, for the same consumer -- does need libogg, and the asymmetry looks
+# like an omission until you know why.
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"

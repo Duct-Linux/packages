@@ -1,0 +1,67 @@
+Drop the ALAC bool typedef that GCC 15 rejects as a redeclared keyword.
+
+WITHOUT THIS, libsndfile 1.2.2 DOES NOT COMPILE ON THIS TOOLCHAIN. Both ALAC
+codec files open with
+
+    typedef enum
+    {	false = 0,
+    	true = 1
+    } bool ;
+
+which was ordinary C99 practice and is a syntax error in C23, where bool, true
+and false are keywords rather than names available for redefinition. This tree
+builds with GCC 15.2.0, whose default is -std=gnu23, so the two files stop the
+build outright:
+
+    error: cannot use keyword 'false' as enumeration constant
+    error: two or more data types in declaration specifiers
+
+DELETING THE TYPEDEF IS THE FIX RATHER THAN A WORKAROUND. C23 provides bool,
+true and false as builtins with exactly the values this enum was defining, so
+the code below it compiles unchanged and means the same thing. Nothing else in
+the file is touched, and no other file in libsndfile 1.2.2 has the problem --
+which is what BLFS 12.4's own build of this release establishes, since the
+book carries this single change and nothing more for the same compiler
+generation.
+
+WHY A PATCH AND NOT CFLAGS=-std=gnu17. _scripts/common.sh offers that route
+and names it as this tree's usual answer for code that predates C23, and it
+would work here. It is not used because it is the broader instrument: it moves
+the ENTIRE package back a language generation to fix two files, and it fixes
+them by preserving the obsolete definition rather than by removing it. The
+narrow change leaves the other ~200 source files compiling as the toolchain
+intends.
+
+The two hunks are not identical -- the encoder puts its opening brace on its
+own line and the decoder does not -- so this is generated from the source
+rather than written twice from memory.
+
+Upstream: the same deletion is BLFS 12.4's libsndfile page, expressed there as
+a sed over both files.
+--- a/src/ALAC/alac_decoder.c	2026-08-12 02:09:53
++++ b/src/ALAC/alac_decoder.c	2026-08-12 02:09:53
+@@ -38,10 +38,6 @@
+ #include "ALACBitUtilities.h"
+ #include "EndianPortable.h"
+ 
+-typedef enum
+-{	false = 0,
+-	true = 1
+-} bool ;
+ 
+ // constants/data
+ const uint32_t kMaxBitDepth = 32 ;			// max allowed bit depth is 32
+--- a/src/ALAC/alac_encoder.c	2026-08-12 02:09:53
++++ b/src/ALAC/alac_encoder.c	2026-08-12 02:09:53
+@@ -44,11 +44,6 @@
+ #include "ALACAudioTypes.h"
+ #include "EndianPortable.h"
+ 
+-typedef enum
+-{
+-	false = 0,
+-	true = 1
+-} bool ;
+ 
+ static void	GetConfig (ALAC_ENCODER *p, ALACSpecificConfig * config) ;
+ 

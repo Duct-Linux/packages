@@ -545,6 +545,50 @@ NETWORK_UI_PKGS := \
 GNOME_UI_PKGS := \
 	gnome-desktop mutter
 
+# The PulseAudio CLIENT library, and the three codecs it cannot be built
+# without. Not a second sound server -- see pkgs/pulseaudio/pkg.env, which is
+# where that argument belongs; this comment is about why the group is here and
+# in this order.
+#
+# WHY IT IS NOT IN MEDIA_PKGS, WHICH IS WHERE IT OBVIOUSLY BELONGS. MEDIA_PKGS
+# is the audio stack and this is audio, so topic says put it there. Dependency
+# order refuses: libsndfile needs libogg AND libvorbis, both of which are in
+# GNOME_PKGS -- they were packaged for libcanberra, which mutter's
+# -Dsound_player resolves -- and GNOME_PKGS is 60-odd positions LATER than
+# MEDIA_PKGS. Putting these four with the rest of the audio stack would build
+# libsndfile before two of its own dependencies, and check-build-order.sh would
+# say so. This is the bluez lesson in the other direction: grouping is not
+# ordering, and when they disagree the dependency wins.
+#
+# Placed after GNOME_PKGS and NETWORK_UI_PKGS for the reason CRYPTO_PKGS gives
+# for its own position -- last is the position that stays correct however the
+# earlier lists are rearranged. It has no edges into NETWORK_UI_PKGS at all;
+# following it costs nothing and needs no rethinking if either list grows.
+#
+# DEFINED ABOVE ALL_PKGS AND THAT IS LOAD-BEARING. ALL_PKGS is simply expanded
+# (`:=`), so a list defined below it expands to nothing and the packages vanish
+# from every check that reads the expansion -- silently, with the text of the
+# definition still visible in this file. That is exactly how clang was dropped
+# from the build once already; tools/check-recipes.sh asks `make -pn` for the
+# expanded value rather than reading the Makefile because of it.
+#
+# The internal order is the dependency order, and the edges are real:
+#
+#   flac         needs libogg (GNOME_PKGS). Its Ogg support is enabled by
+#                default and a missing libogg is only a WARNING, so this edge
+#                is asserted in the recipe rather than trusted to the order.
+#   opus         needs nothing here but libc. Ogg containers for Opus live in
+#                opusfile, which is a different project and is not packaged.
+#   libsndfile   needs flac, opus, libogg and libvorbis TOGETHER -- its
+#                configure tests the five pkg-config probes as one concatenated
+#                string and drops all of them on any single miss, with a
+#                warning. So all four predecessors are hard, and three of the
+#                five names come from packages in other groups.
+#   pulseaudio   needs libsndfile, which no option can drop, plus glib for the
+#                one library gnome-settings-daemon actually requires.
+PULSE_PKGS := \
+	flac opus libsndfile pulseaudio
+
 # The JavaScript engine chain, and the reason it is a chain rather than a
 # package: gnome-shell and gnome-settings-daemon are GJS applications -- the
 # shell is JavaScript from its top-level down -- and gjs is a binding for
@@ -580,7 +624,7 @@ ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
 	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(XORG_PKGS) $(GNOME_PKGS) \
-	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(BOOT_PKGS)
+	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #
