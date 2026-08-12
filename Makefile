@@ -513,6 +513,7 @@ GNOME_PKGS := \
 	libusb libgusb \
 	highway libjxl \
 	colord \
+	nspr nss \
 	libogg libvorbis sound-theme-freedesktop \
 	xcb-util startup-notification \
 	libical gnome-autoar
