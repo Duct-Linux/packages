@@ -564,6 +564,19 @@ GNOME_UI_PKGS := \
 # believes it is UTC -- and nothing fails, which is the shape that gets shipped.
 TZ_PKGS := tzdata
 
+# Password quality, and the group exists because the DICTIONARY is the package.
+#
+# cracklib is here rather than in an earlier group with the other small
+# libraries for one reason: nothing needs it until libpwquality does, and
+# libpwquality is a settings-tier leaf. Neither needs anything from a group
+# after this one.
+#
+# cracklib BEFORE libpwquality is a hard edge, not a preference: libpwquality's
+# configure.ac:175 raises AC_MSG_ERROR([No or unusable cracklib library]) unless
+# --disable-cracklib-check is passed, and it is not passed here.
+PWQUALITY_PKGS := \
+	cracklib libpwquality
+
 # The PulseAudio CLIENT library, and the three codecs it cannot be built
 # without. Not a second sound server -- see pkgs/pulseaudio/pkg.env, which is
 # where that argument belongs; this comment is about why the group is here and
@@ -711,7 +724,7 @@ ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
 	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(XORG_PKGS) $(GNOME_PKGS) \
-	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SETTINGS_PKGS) $(TZ_PKGS) $(BOOT_PKGS)
+	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SETTINGS_PKGS) $(TZ_PKGS) $(PWQUALITY_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #

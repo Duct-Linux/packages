@@ -1,0 +1,33 @@
+[package]
+name = "cracklib"
+description = "Password strength checking library and its dictionary"
+version = "2.10.3"
+subversion = "1"
+authors = ["Nathan Neulinger and the CrackLib project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# configure.ac:20 takes --with-zlib; the dictionary tools read compressed word
+# lists through it, and libcrack links it.
+zlib = ">=1.3.1"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"
+# The word list ships as .xz and cracklib-format decompresses with `gzip -cdf`,
+# which does not read xz -- so install.sh expands it with xz before feeding the
+# packer. A build-time program with no linkage for any check to see.
+xz = ">=5.6.0"
