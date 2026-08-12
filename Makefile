@@ -549,6 +549,21 @@ NETWORK_UI_PKGS := \
 GNOME_UI_PKGS := \
 	libcanberra gnome-desktop mutter
 
+# The time zone database. A group of one, and its POSITION IS FREE: tzdata needs
+# nothing but zic, which comes from glibc, so it could sit almost anywhere after
+# BASE_PKGS.
+#
+# It is here rather than beside glibc for a coordination reason rather than a
+# technical one -- BASE_PKGS is the core chain's list and several chains build
+# against it, so a data package with no ordering constraint has no business
+# widening that diff. Nothing in the tree builds against tzdata; what needs it
+# is the SESSION, at runtime.
+#
+# WHY IT EXISTS AT ALL: there was no timezone database in this tree. glibc's
+# localtime(3) reads /usr/share/zoneinfo directly, so without this every process
+# believes it is UTC -- and nothing fails, which is the shape that gets shipped.
+TZ_PKGS := tzdata
+
 # The PulseAudio CLIENT library, and the three codecs it cannot be built
 # without. Not a second sound server -- see pkgs/pulseaudio/pkg.env, which is
 # where that argument belongs; this comment is about why the group is here and
@@ -696,7 +711,7 @@ ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
 	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(XORG_PKGS) $(GNOME_PKGS) \
-	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SETTINGS_PKGS) $(BOOT_PKGS)
+	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SETTINGS_PKGS) $(TZ_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #
