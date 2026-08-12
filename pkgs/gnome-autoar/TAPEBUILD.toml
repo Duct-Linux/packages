@@ -18,15 +18,22 @@ script = "../_scripts/build-meson.sh"
 [install]
 script = "./install.sh"
 
-# The whole hard set, and it is short: meson.build:84-92 takes gio-2.0, glib-2.0,
-# gobject-2.0 and libarchive>=3.4.0, all unconditional. gtk+-3.0 is NOT here --
-# it is required only under -Dgtk, which pkg.env turns off, and declaring it
-# would place this package after NETWORK_UI_PKGS for a library it does not build.
+# meson.build:84-92 takes gio-2.0, glib-2.0, gobject-2.0 and libarchive>=3.4.0,
+# all unconditional.
+#
+# gtk3 IS here, and it is declared because the build proved it rather than
+# because the build file asked for it. -Dgtk=false does not decline GTK: the
+# option is a boolean reaching `required:`, where false means "do not fail if
+# missing" and not "do not look", so a present gtk+-3.0 is found and the widgets
+# library is built regardless (meson.build:94-101, enable_gtk = gtk_dep.found()).
+# The declaration follows the artefact, which is why this package sits in
+# GNOME_UI_PKGS after gtk3 rather than in GNOME_PKGS.
 [dependencies]
 glibc = ">=2.42.0"
 gcc = ">=15.2.0"
 glib = ">=2.84.0"
 libarchive = ">=3.8.1"
+gtk3 = ">=3.24.0"
 
 [dependencies.build]
 meson = ">=1.8.0"

@@ -516,7 +516,7 @@ GNOME_PKGS := \
 	nspr nss \
 	libogg libvorbis sound-theme-freedesktop \
 	xcb-util startup-notification \
-	libical gnome-autoar
+	libical
 
 # The GTK 3 island, and it is an island on purpose.
 #
@@ -563,8 +563,16 @@ NETWORK_UI_PKGS := \
 # -- both are GTK 3 programs (gnome-session/meson.build:86, and
 # gnome-settings-daemon/meson.build:107 wants gtk+-x11-3.0 specifically) -- and
 # mutter follows them, because it needs gnome-desktop-4 from here.
+# gnome-autoar is here for a reason worth reading before moving it back: it
+# does not WANT gtk3, it cannot REFUSE it. Its -Dgtk option is a boolean that
+# reaches meson's `required:`, where false means "do not fail if missing"
+# rather than "do not look" -- so with gtk+-3.0 present in the build image the
+# lookup succeeds and enable_gtk comes from .found(). It was written into
+# GNOME_PKGS with -Dgtk=false and CI failed on its own assertion, which is how
+# the edge was discovered. The declaration follows the artefact.
 GNOME_UI_PKGS := \
-	libcanberra gnome-desktop mutter
+	libcanberra gnome-desktop mutter \
+	gnome-autoar
 
 # The time zone database. A group of one, and its position WAS free.
 #
