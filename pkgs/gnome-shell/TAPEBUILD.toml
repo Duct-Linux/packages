@@ -1,0 +1,95 @@
+[package]
+name = "gnome-shell"
+description = "The GNOME desktop shell"
+# 48.4.0 rather than 48.4: tape's resolver requires three-component semver and
+# skips a package silently without it. The tarball is gnome-shell-48.4, so the
+# pkg.env URL and SRC_DIR keep upstream's two-component name -- exactly as
+# mutter 48.4.0 does against mutter-48.4.
+version = "48.4.0"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "./install.sh"
+
+# Read from meson.build:71-128 AND from the subprojects, because the top-level
+# file is not the whole requirement surface here -- gnome-autoar and libpulse
+# are reachable only through subprojects/extensions-tool and subprojects/gvc,
+# which ship populated rather than as wrap stubs.
+#
+#   at-spi2-core     atk-bridge-2.0                 :71
+#   e-d-s            libecal-2.0, libedataserver    :72-73, the unconditional pair
+#   gcr              gcr-4 >= 3.90                  :74
+#   gdk-pixbuf, glib (gio-2.0, gio-unix-2.0), libxml2, pango
+#   gjs              gjs-1.0 >= 1.81.2              :79, and also find_program'd
+#   gtk4             gtk4 >= 4.0                    :80
+#   mutter           mutter-clutter-16, mutter-cogl-16, mutter-mtk-16,
+#                    libmutter-16, all >= 48.0      :82-85
+#   polkit           polkit-agent-1                 :86
+#   gsettings-desktop-schemas                       :87
+#   gnome-desktop    gnome-desktop-4 >= 40          :88, which is why that
+#                    package's -Dbuild_gtk4=true matters
+#   libX11           x11                            :95, under have_x11_client,
+#                    which is TRUE here because mutter has xwayland enabled
+#   NetworkManager   libnm, and libsecret           :105-106, -Dnetworkmanager
+#   pipewire         libpipewire-0.3 >= 0.3.49      :119, -Dcamera_monitor
+#   gnome-autoar     gnome-autoar-0                 subprojects/extensions-tool
+#                                                   /meson.build:32
+#   json-glib        json-glib-1.0                  subprojects/extensions-tool
+#                                                   /meson.build:33 -- missed by
+#                                                   a first scan that stopped at
+#                                                   the autoar line
+#   pulseaudio       libpulse >= 12.99.3 and libpulse-mainloop-glib
+#                                                   subprojects/gvc/meson.build
+#                                                   :56-59, and gvc is not
+#                                                   optional -- it is the shell's
+#                                                   volume control
+#   libadwaita       used by the extensions app
+[dependencies]
+glibc = ">=2.42.0"
+gcc = ">=15.2.0"
+glib = ">=2.84.0"
+gtk4 = ">=4.18.0"
+mutter = ">=48.4.0"
+gnome-desktop = ">=44.3.0"
+gsettings-desktop-schemas = ">=48.0.0"
+evolution-data-server = ">=3.56.2"
+gnome-autoar = ">=0.4.5"
+json-glib = ">=1.10.6"
+at-spi2-core = ">=2.56.4"
+gcr = ">=4.4.0"
+gjs = ">=1.84.2"
+polkit = ">=126.0.0"
+gdk-pixbuf = ">=2.42.0"
+libxml2 = ">=2.13.0"
+pango = ">=1.56.0"
+libX11 = ">=1.8.12"
+NetworkManager = ">=1.54.0"
+libsecret = ">=0.21.7"
+pipewire = ">=1.4.7"
+pulseaudio = ">=17.0.0"
+libadwaita = ">=1.7.2"
+
+# python supplies python3 (meson.build:143) and python-docutils supplies rst2man,
+# which -Dman needs (meson.build:137-139). sassc is NOT here: its find_program
+# sits inside `if not fs.exists(stylesheet)` and the release tarball ships all
+# three stylesheets pre-built.
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.1"
+gettext = ">=0.26.0"
+python = ">=3.13.0"
+python-docutils = ">=0.21.2"

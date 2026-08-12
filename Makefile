@@ -672,6 +672,25 @@ ACCOUNTS_PKGS := \
 PULSE_PKGS := \
 	flac opus libsndfile pulseaudio
 
+# The shell itself, in a group of one, and the group exists for an ordering
+# reason discovered by check-build-order rather than by reading:
+#
+#     out of order: gnome-shell (position 219) needs pulseaudio (position 223)
+#
+# gnome-shell links libpulse, and NOTHING IN ITS OWN meson.build SAYS SO. The
+# dependency is in subprojects/gvc/meson.build:56-59 -- libpulse >= 12.99.3 and
+# libpulse-mainloop-glib -- and gvc is not optional, it is the shell's volume
+# control. gnome-shell ships its subprojects populated rather than as wrap
+# stubs, which is why a scan of the top-level file reports a complete set of
+# requirements and is wrong twice over: gnome-autoar came from the same place.
+#
+# It cannot go in GNOME_UI_PKGS with mutter and gnome-autoar, which is where it
+# belongs by topic, because PULSE_PKGS runs after that group. Same shape as
+# GNOME_UI_PKGS itself, which exists because gnome-desktop needed gtk3 from a
+# later list -- and the same answer: a new group at the earliest point where
+# every edge points backwards.
+SHELL_PKGS := gnome-shell
+
 # Location services: the two packages gnome-control-center's Privacy -> Location
 # panel and gnome-shell's location indicator sit on.
 #
@@ -781,7 +800,7 @@ ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) $(TZ_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
 	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(XORG_PKGS) $(GNOME_PKGS) \
-	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SETTINGS_PKGS) $(PWQUALITY_PKGS) $(ACCOUNTS_PKGS) $(BOOT_PKGS)
+	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(SHELL_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SETTINGS_PKGS) $(PWQUALITY_PKGS) $(ACCOUNTS_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #
