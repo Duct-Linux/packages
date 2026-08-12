@@ -26,6 +26,60 @@ mountpoint -q /dev/pts || mount -t devpts devpts /dev/pts -o gid=5,mode=620
 mountpoint -q /dev/shm || mount -t tmpfs  tmpfs  /dev/shm -o mode=1777
 chmod 1777 /tmp /var/tmp 2>/dev/null
 
+# THE tmpfiles.d RULE THIS TREE DOES NOT HAVE, AND THE REASON THE FIRST GREETER
+# NEVER DREW A PIXEL.
+#
+# systemd ships tmpfiles.d/x11.conf, four rules, all 1777:
+#
+#     D! /tmp/.X11-unix    D! /tmp/.ICE-unix
+#     D! /tmp/.XIM-unix    D! /tmp/.font-unix
+#
+# We run elogind, elogind has no tmpfiles, and nothing else here creates them.
+# mutter notices /tmp/.X11-unix is missing and makes it itself -- and then
+# REJECTS WHAT IT JUST MADE. meta-xwayland.c calls choose_xdisplay() twice in
+# consecutive statements (public connection, then private); each one starts with
+# mkdir("/tmp/.X11-unix", 01777) and, ON EEXIST ONLY, checks the mode it finds.
+# So the first call creates the directory and never looks at it, and the second
+# call finds it and applies (st_mode & 0022) == 0022 -- which the first call
+# cannot satisfy, because mkdir(2) is masked by the umask and 01777 lands as
+# 01755. The failure is a g_error, and a fatal glib log on aarch64 is
+# raise(SIGTRAP): gnome-shell died of signal 5, six spawns running, with the
+# reason in a greeter log nothing reads.
+#
+# WHY mkdir AND chmod ARE SEPARATE COMMANDS, and it is NOT the reason it first
+# looks like. `mkdir -p -m 1777` is the obvious one-liner. The tempting story is
+# that -m is umask-masked the way mkdir(2) is; that story is FALSE and was
+# measured false in GNU coreutils and in busybox alike -- POSIX gives -m chmod
+# semantics, so both produce 1777 under umask 022.
+# The real trap is the -p: **`mkdir -p -m 1777` applies the mode ONLY when it
+# creates the directory, and does nothing at all when one is already there.**
+# Measured, both implementations, on a directory pre-set to 0755: the mode after
+# the command is still 0755, silently, rc=0. And an already-there directory in
+# the WRONG mode is precisely the state this bug leaves behind -- mutter's own
+# first call makes 01755 before its second call rejects it. So the one-liner
+# would fix a clean boot and quietly fail to repair the exact case that produced
+# the failure. The unconditional chmod repairs both.
+#
+# systemd's x11.conf has a fifth rule that removes stale /tmp/.X[0-9]*-lock
+# files. Not carried: this root is a fresh overlay on every boot, so there is
+# never a stale one, and a boot script that deletes by glob is a worse thing to
+# own than the problem it solves.
+for d in .X11-unix .ICE-unix .XIM-unix .font-unix; do
+	mkdir -p "/tmp/$d" 2>/dev/null && chmod 1777 "/tmp/$d" 2>/dev/null
+done
+
+# Announced rather than assumed, and the two failure modes are told apart on
+# purpose: an empty reading means stat is missing and this check is BLIND,
+# which is not the same news as a mode that is genuinely wrong.
+x11mode=$(stat -c %a /tmp/.X11-unix 2>/dev/null)
+if [ "$x11mode" = "1777" ]; then
+	msg "X11 socket directories ready (/tmp/.X11-unix 1777)"
+elif [ -z "$x11mode" ]; then
+	msg "WARNING: cannot read the mode of /tmp/.X11-unix -- no stat, so this check is blind, not passing"
+else
+	msg "WARNING: /tmp/.X11-unix is $x11mode, not 1777 -- mutter will abort at Xwayland startup and gnome-shell will die of signal 5"
+fi
+
 # Written rather than set with hostname(1): uutils' hostname does not implement
 # setting one, and this is what the syscall does anyway.
 echo duct >/proc/sys/kernel/hostname

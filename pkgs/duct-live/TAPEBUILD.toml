@@ -17,7 +17,14 @@ version = "0.1.0"
 # gdm gates its whole greeter on sd_seat_can_graphical(), which is a read of
 # /run/systemd/seats and calls no D-Bus method at all. Plus a syslog sink, so
 # that gdm -- which logs only through syslog(3) -- can be heard.
-subversion = "4"
+# 5 -- the tmpfiles.d rule this tree does not have. mutter creates
+# /tmp/.X11-unix when it is missing and then rejects what it made, because
+# mkdir(2) is umask-masked and the check it applies on the second of two
+# consecutive calls demands the write bits back. gnome-shell died of signal 5
+# on every spawn of the first greeter that ever ran here. The boot script now
+# creates all four of systemd x11.conf's directories, with mkdir and chmod as
+# separate commands.
+subversion = "5"
 authors = ["Duct"]
 packagers = ["ItzYanick"]
 
