@@ -1,0 +1,62 @@
+Move the GSettings schemas off the legacy /desktop/ibus path.
+
+ibus still registers its schemas under path="/desktop/ibus/", a location that
+predates the org.* convention every other schema in this tree uses. The images
+build runs glib-compile-schemas over the whole installed set in one pass, so a
+schema whose path disagrees with its id is not a warning that scrolls past --
+it is a failure of the step that compiles everyone's schemas.
+
+This is BLFS 12.4's own fix for the package, expressed as a patch rather than
+as a sed in a build script so that `patch` fails loudly if upstream changes the
+file underneath it. A sed that matches nothing exits 0 and changes nothing,
+which is exactly the class of silent no-op this tree keeps finding.
+
+--- a/data/dconf/org.freedesktop.ibus.gschema.xml
++++ b/data/dconf/org.freedesktop.ibus.gschema.xml
+@@ -1,10 +1,10 @@
+ <?xml version="1.0" encoding="UTF-8"?>
+ <schemalist>
+-  <schema id="org.freedesktop.ibus" path="/desktop/ibus/">
++  <schema id="org.freedesktop.ibus" path="/org/freedesktop/ibus/">
+     <child name="general" schema="org.freedesktop.ibus.general"/>
+     <child name="panel" schema="org.freedesktop.ibus.panel"/>
+   </schema>
+-  <schema id="org.freedesktop.ibus.general" path="/desktop/ibus/general/">
++  <schema id="org.freedesktop.ibus.general" path="/org/freedesktop/ibus/general/">
+     <key name="preload-engines" type="as">
+       <default>[]</default>
+       <!-- Translators: Here “Preload” is a verb -->
+@@ -106,13 +106,13 @@
+       <description>Enable input method by default when the application gets input focus</description>
+     </key>
+     <key name="dconf-preserve-name-prefixes" type="as">
+-      <default>[ '/desktop/ibus/engine/pinyin', '/desktop/ibus/engine/bopomofo', '/desktop/ibus/engine/hangul' ]</default>
++      <default>[ '/org/freedesktop/ibus/engine/pinyin', '/org/freedesktop/ibus/engine/bopomofo', '/org/freedesktop/ibus/engine/hangul' ]</default>
+       <summary>DConf preserve name prefixes</summary>
+       <description>Prefixes of DConf keys to stop name conversion</description>
+     </key>
+     <child name="hotkey" schema="org.freedesktop.ibus.general.hotkey"/>
+   </schema>
+-  <schema id="org.freedesktop.ibus.general.hotkey" path="/desktop/ibus/general/hotkey/">
++  <schema id="org.freedesktop.ibus.general.hotkey" path="/org/freedesktop/ibus/general/hotkey/">
+     <key name="trigger" type="as">
+       <default>[ 'Control+space', 'Zenkaku_Hankaku', 'Alt+Kanji', 'Alt+grave', 'Hangul', 'Alt+Release+Alt_R' ]</default>
+       <summary>Trigger shortcut keys</summary>
+@@ -154,7 +154,7 @@
+       <description>The shortcut keys for switching to the previous input method</description>
+     </key>
+   </schema>
+-  <schema id="org.freedesktop.ibus.panel" path="/desktop/ibus/panel/">
++  <schema id="org.freedesktop.ibus.panel" path="/org/freedesktop/ibus/panel/">
+     <key name="show" type="i">
+       <default>0</default>
+       <summary>Auto hide</summary>
+@@ -244,7 +244,7 @@
+     </key>
+     <child name="emoji" schema="org.freedesktop.ibus.panel.emoji"/>
+   </schema>
+-  <schema id="org.freedesktop.ibus.panel.emoji" path="/desktop/ibus/panel/emoji/">
++  <schema id="org.freedesktop.ibus.panel.emoji" path="/org/freedesktop/ibus/panel/emoji/">
+     <key name="unicode-hotkey" type="as">
+       <default>[ '&lt;Control&gt;&lt;Shift&gt;u' ]</default>
+       <summary>Unicode shortcut keys for gtk_accelerator_parse</summary>

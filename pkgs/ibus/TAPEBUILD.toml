@@ -1,0 +1,52 @@
+[package]
+name = "ibus"
+description = "Intelligent Input Bus: the input method framework gnome-shell requires unconditionally"
+version = "1.5.32"
+subversion = "1"
+authors = ["Peng Huang and the ibus project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build.sh"
+
+[install]
+script = "./install.sh"
+
+# WHY THIS PACKAGE EXISTS, since nothing in this tree offers to type Japanese.
+#
+# gnome-shell 48 imports `gi://IBus` from SIX JavaScript modules, one of which
+# is js/misc/dependencies.js under a comment reading "Required dependencies".
+# There is NO meson option for it -- the string "ibus" does not appear in
+# gnome-shell's meson.build or meson.options at all -- so it cannot be built
+# out. Without the IBus-1.0 typelib gnome-shell dies at startup with
+#
+#   JS ERROR: Error: Requiring IBus, version 1.0: Typelib file for namespace
+#             'IBus', version '1.0' not found
+#
+# and gnome-session declares the greeter unrecoverable. Measured against a real
+# medium: of the 22 typelibs dependencies.js requires, 21 were present and this
+# was the only one missing.
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+gtk3 = ">=3.24.50"
+gtk4 = ">=4.18.5"
+dconf = ">=0.40.0"
+iso-codes = ">=4.18.0"
+libnotify = ">=0.8.6"
+libxkbcommon = ">=1.8.1"
+wayland = ">=1.23.1"
+dbus = ">=1.16.2"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.1"
+python = ">=3.13.0"
+gettext = ">=0.26.0"

@@ -6,7 +6,14 @@ description = "The GNOME desktop shell"
 # pkg.env URL and SRC_DIR keep upstream's two-component name -- exactly as
 # mutter 48.4.0 does against mutter-48.4.
 version = "48.4.0"
-subversion = "1"
+# 2 -- ibus declared. It is a RUNTIME dependency that nothing in gnome-shell's
+# build system mentions: six JS modules import gi://IBus, including
+# js/misc/dependencies.js under "Required dependencies", and there is no meson
+# option to disable it. Without the typelib the greeter dies at startup with
+# "Typelib file for namespace 'IBus', version '1.0' not found" and
+# gnome-session declares the component unrecoverable. No payload change, but
+# the closure did, and the closure is what an install resolves.
+subversion = "2"
 authors = ["The GNOME Project"]
 packagers = ["ItzYanick"]
 
@@ -56,6 +63,10 @@ script = "./install.sh"
 #                                                   volume control
 #   libadwaita       used by the extensions app
 [dependencies]
+# ibus is here for a reason no build-system scan can find: gnome-shell is a GJS
+# application and its hard requirements are in its JavaScript. See the pkg.env
+# note and js/misc/dependencies.js, which lists it among 22 required typelibs.
+ibus = ">=1.5.32"
 glibc = ">=2.42.0"
 gcc = ">=15.2.0"
 glib = ">=2.84.0"
