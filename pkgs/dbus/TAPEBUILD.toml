@@ -15,8 +15,11 @@ script = "../_scripts/prepare.sh"
 [build]
 script = "../_scripts/build-meson.sh"
 
+# Its own, because the setuid bit has to be set after the generic install and
+# the assertion has to run after finish_install's strip -- neither of which a
+# post-install.sh can do. See install.sh for why upstream does not set it.
 [install]
-script = "../_scripts/install-meson.sh"
+script = "install.sh"
 
 [dependencies]
 glibc = ">=2.42.0"
