@@ -642,6 +642,25 @@ LOCATION_PKGS := \
 # visible in this file.
 PRINT_PKGS := cups
 
+# The settings-tier leaves: three GNOME components that nothing else in the tree
+# needs, and that gnome-control-center and gnome-shell reach for one panel each.
+#
+# A group of one's own rather than an addition to GNOME_UI_PKGS, for the reason
+# that file's other groups give: four chains are editing this Makefile and a
+# group per tier means the only line any two of us touch is ALL_PKGS.
+#
+# Placed here because each needs something from an earlier group and nothing
+# needs them: gnome-keyring needs gck-1 and gcr-base-3 from gcr3
+# (SERVICES_PKGS), p11-kit and libgcrypt from CRYPTO_PKGS, and linux-pam from
+# SESSION_PKGS; tecla needs gtk4 and libadwaita from GTK_PKGS; gnome-menus needs
+# only glib.
+#
+# The internal order is not an edge -- none of the three needs another -- so it
+# is alphabetical, which is what a list with no constraint should be rather than
+# an accident that reads like one.
+SETTINGS_PKGS := \
+	gnome-keyring gnome-menus tecla
+
 # The JavaScript engine chain, and the reason it is a chain rather than a
 # package: gnome-shell and gnome-settings-daemon are GJS applications -- the
 # shell is JavaScript from its top-level down -- and gjs is a binding for
@@ -677,7 +696,7 @@ ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
 	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(XORG_PKGS) $(GNOME_PKGS) \
-	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(BOOT_PKGS)
+	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SETTINGS_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #
