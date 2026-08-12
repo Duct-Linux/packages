@@ -195,7 +195,7 @@ TOOLS_PKGS := \
 	\
 	gettext ninja cmake meson gperf \
 	libxml2 libxslt itstool python-markupsafe python-jinja2 python-mako \
-	python-setuptools python-pyyaml python-pycparser python-pyparsing
+	python-setuptools python-pyyaml python-pycparser python-pyparsing python-docutils
 
 SESSION_PKGS := \
 	libcap expat pcre2 \
@@ -499,7 +499,8 @@ GNOME_PKGS := \
 	highway libjxl \
 	colord gnome-desktop \
 	libogg libvorbis libcanberra sound-theme-freedesktop \
-	xcb-util startup-notification
+	xcb-util startup-notification \
+	mutter
 
 # The GTK 3 island, and it is an island on purpose.
 #
