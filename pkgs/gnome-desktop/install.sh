@@ -17,15 +17,22 @@
 # (libgnome-desktop/meson.build:153 sets filebase: 'gnome-desktop-4'), rather
 # than the library alone or a glob that either half would satisfy.
 #
-# The legacy GTK 3 library is asserted ABSENT, which is the other half of the
-# same idea. -Dlegacy_library is pinned false because nothing in this tree links
-# libgnome-desktop-3.0 and because gtk3 is packaged here for one consumer only
-# and must not accumulate others. A flag can be misspelled, renamed upstream, or
-# ignored; the file either exists or it does not, so the flag is checked by its
-# effect rather than trusted. This is also what stops the dependency on gtk3
-# creeping back silently -- gtk3 is built AFTER this package, so a
-# libgnome-desktop-3.0 appearing here would mean it had linked something that
-# did not exist yet.
+# The legacy GTK 3 library is asserted PRESENT, and this assertion was itself
+# wrong for four hours -- which is worth recording here rather than quietly
+# fixing, because the failure is instructive.
+#
+# When -Dlegacy_library was (mistakenly) turned off, this file asserted the
+# library was ABSENT, on the reasoning that a pinned flag should be checked by
+# its effect. That reasoning was right and the flag was wrong. When the flag was
+# corrected to true, THIS CHECK WAS NOT, so CI failed with:
+#
+#     error: the legacy GTK 3 library was built despite -Dlegacy_library=false
+#
+# The assertion did exactly its job: it caught a mismatch between what the
+# recipe intended and what the build produced. The mismatch was that the recipe
+# had two statements of intent -- the flag and the check -- and only one of them
+# had been updated. An outcome assertion is a second copy of the decision, and
+# it goes stale in the same way a comment does.
 
 . "$(dirname "$0")/../_scripts/common.sh"
 
@@ -38,10 +45,10 @@ DESTDIR="$DESTDIR" meson install -C "$BUILD_DIR" --no-rebuild --skip-subprojects
 [ -s "$DESTDIR/usr/lib/libgnome-desktop-4.so" ] || \
 	die "libgnome-desktop-4.so is missing or empty although its .pc was installed"
 
-if [ -e "$DESTDIR/usr/lib/libgnome-desktop-3.so" ] || \
-   [ -e "$DESTDIR/usr/lib/pkgconfig/gnome-desktop-3.0.pc" ]; then
-	die "the legacy GTK 3 library was built despite -Dlegacy_library=false. Nothing in this tree links libgnome-desktop-3.0 -- gnome-control-center, gnome-shell and mutter all ask for gnome-desktop-4 -- and gtk3 is packaged here for libnma alone and must not accumulate consumers. gtk3 is also built AFTER this package, so this would mean linking something that does not exist yet"
-fi
+[ -s "$DESTDIR/usr/lib/pkgconfig/gnome-desktop-3.0.pc" ] || \
+	die "gnome-desktop-3.0.pc is missing or empty. gnome-session (meson.build:97) and gnome-settings-daemon (meson.build:104) both require gnome-desktop-3.0 unconditionally, so the session does not start without it"
+[ -s "$DESTDIR/usr/lib/libgnome-desktop-3.so" ] || \
+	die "libgnome-desktop-3.so is missing or empty although its .pc was installed"
 
 typelib=$(find "$DESTDIR/usr/lib/girepository-1.0" -name 'GnomeDesktop-4.0.typelib' -print -quit 2>/dev/null)
 [ -n "$typelib" ] && [ -s "$typelib" ] || \
