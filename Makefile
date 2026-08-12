@@ -696,7 +696,7 @@ PULSE_PKGS := \
 # once rather than one per attempt. Nothing consumes gnome-shell or
 # gnome-session yet, so moving the group costs nothing; gdm will join it and
 # needs everything here.
-SHELL_PKGS := gnome-shell gnome-session gnome-settings-daemon
+SHELL_PKGS := gnome-shell gnome-session gnome-settings-daemon gdm
 
 # Location services: the two packages gnome-control-center's Privacy -> Location
 # panel and gnome-shell's location indicator sit on.
