@@ -2,7 +2,7 @@
 name = "gtk4"
 description = "GTK 4 user interface toolkit"
 version = "4.18.5"
-subversion = "1"
+subversion = "2"
 authors = ["The GNOME Project"]
 packagers = ["ItzYanick"]
 
@@ -31,6 +31,32 @@ libxkbcommon = ">=1.8.1"
 iso-codes = ">=4.18.0"
 mesa = ">=25.0.0"
 fribidi = ">=1.0.16"
+# -Dx11-backend=true. The X client libraries GTK's X11 backend links, plus the
+# cairo surface it draws X drawables through. Enabled so that mutter-x11-frames
+# -- a GTK 4 program that IS an X client under Xwayland -- can be built at all;
+# see pkg.env for the full lineage.
+#
+# THE cairo CONSTRAINT ABOVE CANNOT EXPRESS WHAT THIS ACTUALLY NEEDS, and that
+# is worth stating rather than papering over. What is required is cairo built
+# WITH the xlib surface -- 1.18.4-2, not 1.18.4-1 -- and a tape constraint
+# carries a VERSION ONLY: check-recipes' constraint_bounds parses >=X.Y.Z and
+# bare X.Y, with no subversion anywhere, and no recipe in the tree expresses
+# one. So `cairo = ">=1.18.4"` admits the build that has no cairo-xlib.pc.
+#
+# What protects this instead is ordering and resolution, not the constraint:
+# cairo precedes gtk4 in ALL_PKGS so a tree build gets the new one, and tape
+# resolves an install to the highest subversion published. The gap is real but
+# narrow -- it needs a system that pinned cairo at -1 deliberately -- and there
+# is no syntax available to close it.
+libX11 = ">=1.8.10"
+libXext = ">=1.3.6"
+libXrender = ">=0.9.11"
+libXi = ">=1.8.2"
+libXcursor = ">=1.2.3"
+libXdamage = ">=1.1.6"
+libXfixes = ">=6.0.1"
+libXrandr = ">=1.5.4"
+libXinerama = ">=1.1.5"
 
 [dependencies.build]
 meson = ">=1.8.0"
