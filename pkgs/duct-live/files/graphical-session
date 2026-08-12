@@ -142,7 +142,10 @@ fi
 
 say "starting $session on tty1"
 
-# Watch for the display coming up, and say so on the console.
+# Watch for the display coming up, and say so on the console. A GDM greeter
+# socket proves only that credentials can be requested. The live image also
+# autologs UID 1000 in, so keep watching until that user's GNOME session owns a
+# socket and emit a distinct marker for the boot test.
 #
 # THE SOCKET IS THE ASSERTION. A compositor's log says a great many
 # encouraging things before it has a usable display, and a boot test that greps
@@ -151,16 +154,25 @@ say "starting $session on tty1"
 # a client would connect to. Backgrounded, because the compositor has to be in
 # the foreground.
 (
+	greeter_seen=
 	for _ in $(seq 1 60); do
 		for sock in /run/user/*/wayland-*; do
 			if [ -S "$sock" ]; then
-				echo "duct-live: wayland display up: $sock" >>"$console"
-				exit 0
+				case $sock in
+					/run/user/1000/*)
+						echo "duct-live: GNOME live session up: $sock" >>"$console"
+						exit 0 ;;
+					*)
+						if [ -z "$greeter_seen" ]; then
+							echo "duct-live: GDM greeter display up: $sock" >>"$console"
+							greeter_seen=1
+						fi ;;
+				esac
 			fi
 		done
 		sleep 1
 	done
-	echo "duct-live: no wayland socket after 60s -- the display did not come up" >>"$console"
+	echo "duct-live: no UID 1000 GNOME Wayland socket after 60s" >>"$console"
 ) &
 
 # In the foreground, so busybox init sees the session end and restarts it.

@@ -24,7 +24,7 @@ version = "0.1.0"
 # on every spawn of the first greeter that ever ran here. The boot script now
 # creates all four of systemd x11.conf's directories, with mkdir and chmod as
 # separate commands.
-subversion = "5"
+subversion = "6"
 authors = ["Duct"]
 packagers = ["ItzYanick"]
 

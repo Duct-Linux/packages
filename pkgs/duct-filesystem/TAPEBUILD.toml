@@ -13,7 +13,7 @@ version = "0.1.0"
 # package), and so does install.sh, so without the bump publish.yml finds
 # 0.1.0-4 already published and KEEPS THE OLD BYTES: the templates would appear
 # to change and no installed system would ever see it.
-subversion = "6"
+subversion = "8"
 authors = ["Duct"]
 packagers = ["ItzYanick"]
 

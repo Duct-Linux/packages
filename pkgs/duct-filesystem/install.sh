@@ -59,7 +59,7 @@ VERSION="0.1 (bootstrap)"
 HOME_URL="https://yanick.gay/"
 EOF
 
-# THE USER DATABASE IS SHIPPED AS A TEMPLATE, NOT AS /etc/passwd.
+# THE USER DATABASE IS SHIPPED AS TEMPLATES, NOT AS LIVE /etc FILES.
 #
 # tape has no notion of a conffile: upgrade stages a temp file and renames it
 # over the target, unconditionally, with no path treated specially. So any file
@@ -108,8 +108,32 @@ messagebus:x:18:18:D-Bus Message Daemon User:/run/dbus:/usr/bin/false
 polkitd:x:27:27:PolicyKit Daemon Owner:/var/lib/polkit-1:/usr/bin/false
 gdm:x:21:21:GDM Daemon Owner:/var/lib/gdm:/usr/bin/false
 colord:x:71:71:Color Daemon Owner:/var/lib/colord:/usr/bin/false
+duct:x:1000:999:Duct Live User:/home/duct:/bin/bash
 nobody:x:65534:65534:Nobody:/nonexistent:/usr/bin/false
 EOF
+
+# PAM's pam_unix account and session phases consult shadow even when login(1)
+# was invoked with -f and authentication itself was skipped. A passwd entry
+# whose password field is `x` with no matching shadow entry is not a locked
+# account: it is an internally inconsistent account database, and pam_unix
+# reports "could not obtain user info". On the live image that made every
+# console session respawn and prevented GDM's greeter PAM session from opening.
+#
+# `!` locks password authentication for every pre-created account. The live
+# console deliberately uses `login -f root`; an installed system must set a
+# password or create its real user during installation. Empty ageing fields
+# mean no expiry policy is silently imposed here.
+cat >"$DESTDIR/usr/share/duct-filesystem/shadow.default" <<'EOF'
+root:!:::::::
+lp:!:::::::
+messagebus:!:::::::
+polkitd:!:::::::
+gdm:!:::::::
+colord:!:::::::
+duct:!:::::::
+nobody:!:::::::
+EOF
+chmod 0600 "$DESTDIR/usr/share/duct-filesystem/shadow.default"
 
 # lp IS UID 9 AND kmem IS GID 9, AND THAT IS NOT A COLLISION. Uids and gids are
 # separate namespaces -- /etc/passwd and /etc/group are different files, indexed
@@ -133,19 +157,19 @@ tty:x:5:
 disk:x:6:
 lp:x:7:
 kmem:x:9:
-wheel:x:10:
+wheel:x:10:duct
 cdrom:x:11:
 messagebus:x:18:
 lpadmin:x:19:
 gdm:x:21:
 polkitd:x:27:
-audio:x:63:
-video:x:64:
+audio:x:63:duct
+video:x:64:duct
 kvm:x:65:
-render:x:66:
-input:x:67:
+render:x:66:duct
+input:x:67:duct
 colord:x:71:
-users:x:999:
+users:x:999:duct
 nogroup:x:65534:
 EOF
 
