@@ -1,0 +1,37 @@
+[package]
+name = "gnome-autoar"
+description = "Archive integration library for GNOME"
+version = "0.4.5"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "./install.sh"
+
+# The whole hard set, and it is short: meson.build:84-92 takes gio-2.0, glib-2.0,
+# gobject-2.0 and libarchive>=3.4.0, all unconditional. gtk+-3.0 is NOT here --
+# it is required only under -Dgtk, which pkg.env turns off, and declaring it
+# would place this package after NETWORK_UI_PKGS for a library it does not build.
+[dependencies]
+glibc = ">=2.42.0"
+gcc = ">=15.2.0"
+glib = ">=2.84.0"
+libarchive = ">=3.8.1"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.1"
+gettext = ">=0.26.0"

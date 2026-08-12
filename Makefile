@@ -515,7 +515,7 @@ GNOME_PKGS := \
 	colord \
 	libogg libvorbis sound-theme-freedesktop \
 	xcb-util startup-notification \
-	libical
+	libical gnome-autoar
 
 # The GTK 3 island, and it is an island on purpose.
 #
