@@ -499,8 +499,7 @@ GNOME_PKGS := \
 	highway libjxl \
 	colord \
 	libogg libvorbis libcanberra sound-theme-freedesktop \
-	xcb-util startup-notification \
-	mutter
+	xcb-util startup-notification
 
 # The GTK 3 island, and it is an island on purpose.
 #
@@ -544,7 +543,7 @@ NETWORK_UI_PKGS := \
 # gnome-settings-daemon/meson.build:107 wants gtk+-x11-3.0 specifically) -- and
 # mutter follows them, because it needs gnome-desktop-4 from here.
 GNOME_UI_PKGS := \
-	gnome-desktop
+	gnome-desktop mutter
 
 # The JavaScript engine chain, and the reason it is a chain rather than a
 # package: gnome-shell and gnome-settings-daemon are GJS applications -- the
