@@ -607,6 +607,19 @@ TZ_PKGS := tzdata
 PWQUALITY_PKGS := \
 	cracklib libpwquality
 
+# Online accounts: the Online Accounts panel and the credential store behind it.
+#
+# rest BEFORE gnome-online-accounts is a hard edge rather than a preference:
+# GOA's meson.build:130 takes rest-1.0 with `fallback: ['librest', ...]`, and
+# every recipe here inherits --wrap-mode=nodownload, so a miss is a configure
+# failure instead of a vendored copy.
+#
+# Placed here because GOA needs gtk4 and libadwaita from GTK_PKGS, libsecret
+# from SERVICES_PKGS and libsoup from CRYPTO_PKGS, and nothing already in the
+# tree needs either of these two.
+ACCOUNTS_PKGS := \
+	rest gnome-online-accounts
+
 # The PulseAudio CLIENT library, and the three codecs it cannot be built
 # without. Not a second sound server -- see pkgs/pulseaudio/pkg.env, which is
 # where that argument belongs; this comment is about why the group is here and
@@ -760,7 +773,7 @@ ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) $(TZ_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
 	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(XORG_PKGS) $(GNOME_PKGS) \
-	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SETTINGS_PKGS) $(PWQUALITY_PKGS) $(BOOT_PKGS)
+	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SETTINGS_PKGS) $(PWQUALITY_PKGS) $(ACCOUNTS_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #
