@@ -2,7 +2,10 @@
 name = "duct-live"
 description = "PID 1, the boot scripts and the initramfs generator for a live Duct system"
 version = "0.1.0"
-subversion = "1"
+# 2: the boot script starts udev, the D-Bus system bus, seatd and bluetoothd,
+# and there is a graphical-session entry on tty1. The payload changed, so the
+# identity has to.
+subversion = "2"
 authors = ["Duct"]
 packagers = ["ItzYanick"]
 
@@ -16,6 +19,13 @@ script = "install.sh"
 # inside the resulting initramfs. bash is what a person gets on the console;
 # kmod is what loads a driver that is not built in; util-linux is what mounts
 # things once the real root is up.
+# WHAT IS DELIBERATELY NOT DECLARED, and it is most of what the boot script now
+# starts: eudev, dbus, elogind, seatd, bluez and a compositor. Every one of them
+# is guarded on its binary existing, because this package is what boots BOTH
+# media -- a console ISO carries none of them and must stay that way. Declaring
+# them would put a graphical stack on a medium whose whole point is not having
+# one. The cost is that a missing one is silent by design; the boot script says
+# which path it took, on the console, for exactly that reason.
 [dependencies]
 busybox = ">=1.37.0"
 bash = ">=5.3.0"
