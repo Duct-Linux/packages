@@ -1,0 +1,64 @@
+[package]
+name = "gdm"
+description = "The GNOME Display Manager"
+version = "48.0.0"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "./install.sh"
+
+# 48.0.0 rather than 48.0, for tape's three-component semver.
+#
+# Scanned untruncated: every dependency() and every error() in every meson.build.
+# The unconditional set is meson.build:51-69 and all of it is packaged:
+#
+#   eudev           udev              :51
+#   libgudev        gudev-1.0 >= 232  :52
+#   glib            glib/gobject/gio/gio-unix
+#   json-glib       >= 1.2.0          :67
+#   accountsservice >= 0.6.35         :69
+#   elogind         libelogind        :140, selected by -Dlogind-provider=elogind
+#
+# linux-pam is NOT found through dependency() -- meson.build:55 is
+# cc.find_library('pam') with cc.has_header checks on security/pam_appl.h and
+# security/pam_modutil.h. A dependency() scan alone would have missed the single
+# most important library in this package.
+#
+# gnome-session and gnome-shell are declared although NOTHING LINKS THEM. gdm's
+# greeter is gnome-shell running inside a gnome-session, spawned as processes --
+# the class of dependency no linkage check can see, so it is declared from what
+# the program DOES rather than from what readelf reports.
+#
+# dconf is dependency('dconf', required: false) at :66 and is present here, so
+# it is found and gdm reads its prefix (:223-228). Declared because it will be
+# linked in practice, not left to a soft probe's luck.
+[dependencies]
+glibc = ">=2.42.0"
+gcc = ">=15.2.0"
+glib = ">=2.84.0"
+json-glib = ">=1.10.6"
+accountsservice = ">=23.13.9"
+linux-pam = ">=1.7.0"
+elogind = ">=255.17.0"
+eudev = ">=3.2.14"
+libgudev = ">=238.0.0"
+dconf = ">=0.40.0"
+gnome-session = ">=48.0.0"
+gnome-shell = ">=48.4.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"

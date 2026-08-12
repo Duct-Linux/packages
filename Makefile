@@ -689,7 +689,7 @@ PULSE_PKGS := \
 # GNOME_UI_PKGS itself, which exists because gnome-desktop needed gtk3 from a
 # later list -- and the same answer: a new group at the earliest point where
 # every edge points backwards.
-SHELL_PKGS := gnome-shell gnome-session
+SHELL_PKGS := gnome-shell gnome-session gdm
 
 # Location services: the two packages gnome-control-center's Privacy -> Location
 # panel and gnome-shell's location indicator sit on.
