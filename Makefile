@@ -785,18 +785,13 @@ PRINT_PKGS := cups
 SETTINGS_PKGS := \
 	gnome-keyring gnome-menus tecla
 
-# End-user applications and their leaf support libraries. This group is late
-# because Settings and Disks depend on PWQUALITY_PKGS, and Settings also needs
-# ACCOUNTS_PKGS. Keeping the whole application closure here makes every edge
-# point backwards while preserving one manifest source for the GNOME ISO.
+# Essential live-desktop applications and their leaf support libraries. This
+# group is late because Settings needs PWQUALITY_PKGS and ACCOUNTS_PKGS.
 LIVE_APPS_PKGS := \
 	gsound gnome-bluetooth \
 	libportal tinysparql gtksourceview libspelling \
-	exempi poppler libhandy udisks2 libdvdread \
-	glibmm gtkmm libgtop catch2 \
 	gnome-control-center prmpt firefox duct-installer \
-	nautilus gnome-text-editor loupe papers \
-	gnome-disk-utility gnome-system-monitor
+	nautilus gnome-text-editor
 
 # The JavaScript engine chain, and the reason it is a chain rather than a
 # package: gnome-shell and gnome-settings-daemon are GJS applications -- the
