@@ -677,8 +677,14 @@ PULSE_PKGS := \
 # (BLFS also lists GTK-3 as Required for libgweather, and that one is wrong for
 # 4.4.4: the only `gtk` in its entire meson tree is the gtk_doc option. Read the
 # source, not the dependency page -- the page is misleading in both directions.)
+# python-pygobject IS IN THIS GROUP AND NOT WITH THE OTHER PYTHON MODULES, which
+# is where it belongs by topic and cannot go by ordering. The python-* modules
+# live in TOOLS_PKGS, which runs BEFORE glib -- and PyGObject needs
+# girepository-2.0, which glib ships. It is here rather than in a group of its
+# own because its only consumer is libgweather, two lines below.
 LOCATION_PKGS := \
-	geocode-glib geoclue
+	geocode-glib geoclue \
+	python-pygobject libgweather
 
 # Printing. A group of one, and it is here rather than in an existing list for
 # the ordering reason rather than the topic one.

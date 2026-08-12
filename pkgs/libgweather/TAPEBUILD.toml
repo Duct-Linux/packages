@@ -1,0 +1,44 @@
+[package]
+name = "libgweather"
+description = "Location and weather database library for GNOME"
+version = "4.4.4"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+geocode-glib = ">=3.26.4"
+libsoup = ">=3.6.5"
+json-glib = ">=1.10.6"
+libxml2 = ">=2.13.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.1"
+gettext = ">=0.26.0"
+# THE EDGE NO LINKAGE CHECK CAN SEE, and the reason python-pygobject exists in
+# this tree at all. data/meson.build generates the installed Locations.bin by
+# RUNNING build-aux/meson/gen_locations_variant.py, which imports
+# gi.repository.GLib. Nothing in the built artefact links PyGObject, nothing in
+# the dependency() list mentions it, and the build simply stops with an
+# ImportError if it is absent -- the same class as g-ir-scanner reading .gir
+# files off disk or gpgme spawning gpg.
+python-pygobject = ">=3.52.3"
+python = ">=3.13.0"
