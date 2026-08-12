@@ -2,7 +2,10 @@
 name = "wireplumber"
 description = "Session and policy manager for PipeWire"
 version = "0.5.10"
-subversion = "1"
+# 2 -- /etc/xdg/autostart/wireplumber.desktop. A new file in the payload is a
+# new identity, and this is the first version of this package that anything
+# starts.
+subversion = "2"
 authors = ["The WirePlumber project"]
 packagers = ["ItzYanick"]
 
