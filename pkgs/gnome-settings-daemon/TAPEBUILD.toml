@@ -1,0 +1,97 @@
+[package]
+name = "gnome-settings-daemon"
+description = "Settings daemons for the GNOME desktop session"
+version = "48.1.0"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "./install.sh"
+
+# 48.1.0 rather than 48.1: tape's resolver needs three-component semver and
+# skips a package silently without it. The tarball keeps upstream's name.
+#
+# Scanned untruncated -- every dependency() and every error() in every
+# meson.build, subprojects included. The unconditional block is meson.build
+# :97-117 and every member of it was already in this tree:
+#
+#   glib            glib-2.0, gio-2.0, gio-unix-2.0
+#   gnome-desktop   gnome-desktop-3.0 >= 3.37.1   :104. The THIRD consumer of
+#                   the legacy library, after gnome-session and the pair counted
+#                   when gnome-desktop's -Dlegacy_library was reversed.
+#   gsettings-desktop-schemas >= 46.beta          :105
+#   gtk3            gtk+-3.0 AND gtk+-x11-3.0     :106-107. The X11 variant is
+#                   unconditional, so this builds only because gtk3 was given
+#                   its X11 backend in another chain's recipe -- a cross-package
+#                   fact, not a property of this file.
+#   libgweather     gweather4                     :108
+#   libcanberra     libcanberra-gtk3              :109
+#   geoclue         libgeoclue-2.0 >= 2.3.1       :110
+#   libnotify       >= 0.7.3                      :111
+#   pulseaudio      libpulse-mainloop-glib >= 2.0 :112, and subprojects/gvc
+#   pango           >= 1.20.0                     :113
+#   polkit          polkit-gobject-1 >= 0.114     :114
+#   upower          upower-glib >= 0.99.12        :115
+#   libX11          x11                           :116
+#   libXfixes       xfixes >= 6.0                 :117
+#   elogind         libelogind >= 209             :130, under -Delogind=true
+#
+# And the option-gated set, all of whose options default ON and are left there
+# because the dependency exists here:
+#
+#   alsa-lib, libgudev, cups, colord, gcr (gck-2, since -Dgcr3 is false),
+#   ModemManager (mm-glib), NetworkManager (libnm), libwacom, geocode-glib
+#
+# libwacom is NOT option-gated: meson.build:173 sets enable_wacom from
+# host_is_linux_not_s390, so on both architectures this tree builds it is a hard
+# dependency with no switch at all.
+#
+# Plugin-level extras: fontconfig (plugins/xsettings), libXext (plugins/power),
+# libXi and xorgproto (plugins/common, which asks for kbproto and xi).
+[dependencies]
+glibc = ">=2.42.0"
+gcc = ">=15.2.0"
+glib = ">=2.84.0"
+gtk3 = ">=3.24.0"
+gnome-desktop = ">=44.3.0"
+gsettings-desktop-schemas = ">=48.0.0"
+libgweather = ">=4.4.4"
+libcanberra = ">=0.30.0"
+geoclue = ">=2.7.2"
+geocode-glib = ">=3.26.4"
+libnotify = ">=0.8.6"
+pulseaudio = ">=17.0.0"
+pango = ">=1.56.0"
+polkit = ">=126.0.0"
+upower = ">=1.90.9"
+libX11 = ">=1.8.12"
+libXfixes = ">=6.0.1"
+libXext = ">=1.3.6"
+libXi = ">=1.8.2"
+elogind = ">=255.17.0"
+alsa-lib = ">=1.2.14"
+libgudev = ">=238.0.0"
+cups = ">=2.4.12"
+colord = ">=1.4.8"
+gcr = ">=4.4.0"
+ModemManager = ">=1.24.2"
+NetworkManager = ">=1.54.0"
+libwacom = ">=2.16.1"
+fontconfig = ">=2.16.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"
+xorgproto = ">=2024.1.0"
