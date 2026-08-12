@@ -1,0 +1,28 @@
+[package]
+name = "tzdata"
+description = "IANA time zone database, compiled to TZif"
+version = "2025.2.0"
+subversion = "1"
+authors = ["IANA and the tz database contributors"]
+packagers = ["ItzYanick"]
+
+[source]
+# Not the generic stage: this tarball has no top-level directory, so the stage
+# has to create one. See fetch.sh.
+script = "./fetch.sh"
+
+[build]
+script = "./build.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+# NOTHING AT RUNTIME. These are data files; glibc reads them, they link nothing,
+# and a package with no [dependencies] beyond libc is what that should look
+# like. glibc is declared because zic comes from it -- a build-time program with
+# no linkage for any check to see, the same class as libtasn1's asn1Parser.
+glibc = ">=2.42.0"
+
+[dependencies.build]
+glibc = ">=2.42.0"
