@@ -23,42 +23,53 @@
 [ -s "$DESTDIR/usr/lib/girepository-1.0/Gtk-3.0.typelib" ] \
 	|| die "Gtk-3.0.typelib is missing; -Dintrospection=true did not take effect"
 
-# --- Wayland-only, asserted three ways --------------------------------------
+# --- BOTH backends, asserted three ways -------------------------------------
+# THIS ASSERTION USED TO EXPECT THE OPPOSITE, and the reversal is the point
+# rather than an embarrassment. It required targets= to contain wayland and NOT
+# x11, because GTK 3 existed here for exactly one consumer -- libnma -- which is
+# a Wayland client. The consumer set then grew: gnome-settings-daemon requires
+# gtk+-x11-3.0 by name and libcanberra-gtk3 includes gdk/gdkx.h. The check was
+# right for its facts and its facts changed; see pkg.env.
+#
 # 1. THE .pc FILE'S OWN ACCOUNT OF ITSELF. meson.build 954-965 builds a
 # `targets` variable from the enabled backends and writes it into gtk+-3.0.pc.
 # It is the most direct statement of what was built, and it is what another
-# package would read.
+# package's meson READS.
 pc=$DESTDIR/usr/lib/pkgconfig/gtk+-3.0.pc
-grep -q "^targets=.*wayland" "$pc" \
-	|| die "gtk+-3.0.pc does not list wayland in targets=; -Dwayland_backend=true did not take effect"
-if grep -qE "^targets=.*\bx11\b" "$pc"; then
-	die "gtk+-3.0.pc lists x11 in targets=; this was built with the X11 backend on a system that runs no X server"
-fi
+grep -qE "^targets=.*\bwayland\b" "$pc" \
+	|| die "gtk+-3.0.pc does not list wayland in targets=; -Dwayland_backend=true did not take effect and this is the primary backend of the desktop"
+grep -qE "^targets=.*\bx11\b" "$pc" \
+	|| die "gtk+-3.0.pc does not list x11 in targets=; -Dx11_backend=true was lost, and gnome-settings-daemon requires gtk+-x11-3.0 BY NAME while libcanberra-gtk3 includes gdk/gdkx.h"
 
-# 2. THE INSTALLED HEADER. gdk/meson.build 164 sets GDK_WINDOWING_X11 in
-# gdkconfig.h from x11_enabled, and that header is installed and read by every
-# package that compiles against GTK 3. A stale or wrongly-configured build
-# shows here even if the .pc were somehow right.
+# The X11-specific pkg-config file, which is the thing gnome-settings-daemon
+# actually asks for. The targets line and this file are produced by the same
+# flag, but a consumer resolves THIS -- so it is checked as itself rather than
+# inferred from the line above.
+[ -s "$DESTDIR/usr/lib/pkgconfig/gtk+-x11-3.0.pc" ] \
+	|| die "gtk+-x11-3.0.pc is missing; gnome-settings-daemon resolves that exact name and would fail to configure"
+
+# 2. THE INSTALLED HEADERS, which another package's COMPILER includes.
+# gdk/meson.build 164 sets GDK_WINDOWING_X11 in gdkconfig.h from x11_enabled,
+# and gdk/gdkx.h is what libcanberra-gtk3 includes directly.
 gdkconfig=$DESTDIR/usr/include/gtk-3.0/gdk/gdkconfig.h
 [ -s "$gdkconfig" ] || die "gdkconfig.h was not installed"
-if grep -q "define GDK_WINDOWING_X11" "$gdkconfig"; then
-	die "gdkconfig.h defines GDK_WINDOWING_X11; the X11 backend was compiled in"
-fi
 grep -q "define GDK_WINDOWING_WAYLAND" "$gdkconfig" \
 	|| die "gdkconfig.h does not define GDK_WINDOWING_WAYLAND; the Wayland backend was not compiled in"
+grep -q "define GDK_WINDOWING_X11" "$gdkconfig" \
+	|| die "gdkconfig.h does not define GDK_WINDOWING_X11; the X11 backend was not compiled in"
+[ -s "$DESTDIR/usr/include/gtk-3.0/gdk/gdkx.h" ] \
+	|| die "gdk/gdkx.h was not installed; libcanberra-gtk3 includes it directly and would fail to compile"
 
 # 3. THE LINKED LIBRARIES, which is the one a mistake cannot talk its way out
 # of. Guarded on readelf being present rather than assumed: an assertion whose
-# tool is missing has not passed, it has failed to run, so the absence is
-# reported rather than skipped silently.
+# tool is missing has not passed, it has failed to run.
 if command -v readelf >/dev/null 2>&1; then
-	if readelf -d "$DESTDIR/usr/lib/libgdk-3.so" 2>/dev/null | grep -q "libX11.so"; then
-		die "libgdk-3.so has a DT_NEEDED on libX11; this is an X11 build"
-	fi
 	readelf -d "$DESTDIR/usr/lib/libgdk-3.so" 2>/dev/null | grep -q "libwayland-client.so" \
 		|| die "libgdk-3.so does not link libwayland-client; the Wayland backend is not really there"
+	readelf -d "$DESTDIR/usr/lib/libgdk-3.so" 2>/dev/null | grep -q "libX11.so" \
+		|| die "libgdk-3.so does not link libX11; the X11 backend is not really there"
 else
-	log "warning: readelf is unavailable, so the DT_NEEDED check DID NOT RUN."
+	log "warning: readelf is unavailable, so the DT_NEEDED checks DID NOT RUN."
 	log "warning: the .pc and gdkconfig.h checks above still passed."
 fi
 
@@ -86,5 +97,6 @@ fi
 [ -x "$DESTDIR/usr/bin/gtk-update-icon-cache" ] \
 	|| die "gtk-update-icon-cache is missing; GTK 3 applications would find no icon cache"
 
-log "note: GTK 3 is here only so libnma can build, which gnome-control-center's"
-log "note: network panel requires. It is not a second application platform."
+log "note: GTK 3 serves three consumers now, not one: libnma for the network"
+log "note: panel, gnome-settings-daemon (gtk+-x11-3.0) and libcanberra-gtk3."
+log "note: It is still not a general application platform -- GTK 4 is."
