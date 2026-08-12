@@ -593,6 +593,35 @@ GNOME_UI_PKGS := \
 PULSE_PKGS := \
 	flac opus libsndfile pulseaudio
 
+# Location services: the two packages gnome-control-center's Privacy -> Location
+# panel and gnome-shell's location indicator sit on.
+#
+# Here rather than in GNOME_PKGS because geoclue needs mm-glib from
+# ModemManager, which is in NETWORK_PKGS -- earlier than this, which is the
+# direction that works -- and because geocode-glib needs libsoup 3 and json-glib
+# from groups earlier still. Nothing already in the tree needs either of these,
+# so the position is chosen to stay correct rather than to satisfy a constraint.
+#
+# The internal order is not an edge today -- geoclue does not need geocode-glib
+# -- but libgweather needs both, and geocode-glib first is the order that stays
+# right when it lands.
+#
+# LIBGWEATHER IS DELIBERATELY ABSENT, AND THIS IS THE REASON. It cannot be built
+# in this tree at all today: data/meson.build runs
+# build-aux/meson/gen_locations_variant.py UNCONDITIONALLY to generate the
+# Locations.bin it installs, and that script does
+# `from gi.repository import GLib` -- PyGObject, which is not packaged here.
+# Measured in a seeded container rather than inferred:
+# `python3 -c "from gi.repository import GLib"` is ModuleNotFoundError and there
+# is no `gi` anywhere under /usr/lib/python3*. BLFS lists PyGObject as Required
+# for the same reason.
+#
+# (BLFS also lists GTK-3 as Required for libgweather, and that one is wrong for
+# 4.4.4: the only `gtk` in its entire meson tree is the gtk_doc option. Read the
+# source, not the dependency page -- the page is misleading in both directions.)
+LOCATION_PKGS := \
+	geocode-glib geoclue
+
 # The JavaScript engine chain, and the reason it is a chain rather than a
 # package: gnome-shell and gnome-settings-daemon are GJS applications -- the
 # shell is JavaScript from its top-level down -- and gjs is a binding for
@@ -628,7 +657,7 @@ ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
 	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(XORG_PKGS) $(GNOME_PKGS) \
-	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(BOOT_PKGS)
+	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #

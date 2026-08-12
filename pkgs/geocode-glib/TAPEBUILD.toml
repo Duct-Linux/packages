@@ -1,0 +1,36 @@
+[package]
+name = "geocode-glib"
+description = "Convenience library for geocoding and reverse geocoding"
+version = "3.26.4"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+json-glib = ">=1.10.6"
+# libsoup 3, and -Dsoup2=false is what selects it. The option defaults TRUE and
+# this tree has no libsoup2, so the default asks for a library that does not
+# exist here.
+libsoup = ">=3.6.5"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.1"
+gettext = ">=0.26.0"
