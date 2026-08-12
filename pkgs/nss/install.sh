@@ -98,12 +98,29 @@ needs "$DESTDIR/usr/lib/libsoftokn3.so" 'libsqlite3\.so' || \
 [ ! -e "$DESTDIR/usr/lib/libsqlite3.so" ] || \
 	die "a libsqlite3.so was installed into this package, which belongs to the sqlite package alone"
 
-case "$(uname -m)" in
-x86_64)
+# USE_64 took, checked on EVERY 64-bit architecture rather than on x86_64 alone.
+#
+# The original of this check named x86_64 explicitly, and that is precisely why
+# it caught nothing when USE_64 was wrongly omitted on aarch64: the one
+# architecture that was broken was the one the assertion skipped. An arch
+# conditional in a check is a place where "verified" quietly means "verified on
+# the other architecture".
+if [ "$(getconf LONG_BIT 2>/dev/null)" = "64" ]; then
+	# The objdir name is the DIRECT evidence: coreconf/arch.mk:194-199 sets
+	# 64BIT_TAG=_64 from USE_64 and nothing else, so the tag is in the
+	# directory name if and only if the variable was read.
+	case "$(basename "$objdir")" in
+	*_64_*) : ;;
+	*)
+		die "the object directory is $(basename "$objdir"), with no _64_ tag. coreconf/arch.mk sets 64BIT_TAG=_64 from USE_64 alone, so this says USE_64 did not reach the build on a 64-bit machine -- freebl would then compile believing pointers are 32-bit"
+		;;
+	esac
+
+	# ...and the compiled result agrees. Two independent facts, because the
+	# objdir name proves the variable was read and this proves what came out.
 	readelf -h "$DESTDIR/usr/lib/libnss3.so" 2>/dev/null | grep -q 'ELF64' || \
-		die "libnss3.so is not a 64-bit object on x86_64; USE_64=1 was passed and did not take, which is exactly the failure a raw make build cannot report"
-	;;
-esac
+		die "libnss3.so is not a 64-bit object on a 64-bit machine; USE_64 was passed and did not take, which is exactly the failure a raw make build cannot report"
+fi
 
 log "installed NSS $(basename "$objdir"); no bundled zlib or sqlite was staged"
 finish_install

@@ -24,19 +24,47 @@
 
 cd "$SRC_PATH/nss"
 
-# USE_64 is x86_64 only, exactly as nspr's --enable-64bit is. NSS's coreconf
-# treats a 64-bit x86 build as opt-in; on aarch64 there is no 32-bit variant to
-# opt out of and setting it is not meaningful. Reproduced as a condition rather
-# than hardcoded, because this tree builds both architectures and a recipe that
-# assumed one would be silently wrong on the other.
-arch=$(uname -m)
+# USE_64 GOES ON EVERY 64-BIT ARCHITECTURE, AND IT IS NOT NSPR'S FLAG.
+#
+# This looked like nspr's --enable-64bit and is not. That one really is x86_64
+# only -- BLFS conditions it the same way -- because NSPR's configure defaults
+# to 32-bit on x86 and detects 64-bit correctly everywhere else. Reading USE_64
+# as the same "opt out of the 32-bit x86 variant" switch is what broke the
+# aarch64 build while x86_64 stayed green: the two flags look alike, share a
+# purpose, and have different scopes.
+#
+# What USE_64 actually is, traced to the end rather than guessed:
+#
+#   lib/freebl/Makefile:35-36   ifdef USE_64 -> DEFINES += -DNSS_USE_64
+#   lib/freebl/drbg.c:588       #if defined(NS_PTR_GT_32) || (defined(NSS_USE_64)
+#                                   && !defined(NS_PTR_LE_32))
+#   lib/freebl/drbg.c:611/617   the two arms assert sizeof(size_t) > 4 and <= 4
+#
+# Nothing else defines NSS_USE_64 in the make build. So without USE_64, freebl
+# compiles believing pointers are 32-bit while the compiler emits a 64-bit
+# object, and the mismatched arm's PR_STATIC_ASSERT fails. Its expansion is
+# `extern void pr_static_assert(int arg[(condition) ? 1 : -1])`, so the symptom
+# is "size of array 'arg' is negative" -- which reads like an array bug in
+# freebl and is a word-size assertion.
+#
+# Conditioned on the POINTER WIDTH rather than on an architecture name, because
+# sizeof(size_t) is the thing NSS is actually testing. An arch list would have
+# to be revisited for every new target; this cannot be wrong on one.
+long_bit=$(getconf LONG_BIT 2>/dev/null) || \
+	die "could not determine the pointer width with getconf LONG_BIT, and USE_64 must not be guessed: setting it wrongly in either direction produces a build whose only complaint is a negative array size in freebl"
 bits=""
-if [ "$arch" = "x86_64" ]; then
+case "$long_bit" in
+64)
 	bits="USE_64=1"
-	log "x86_64: passing USE_64=1"
-else
-	log "$arch: omitting USE_64, which x86 alone needs"
-fi
+	log "$(uname -m): 64-bit pointers, passing USE_64=1"
+	;;
+32)
+	log "$(uname -m): 32-bit pointers, omitting USE_64"
+	;;
+*)
+	die "getconf LONG_BIT returned '$long_bit', which is neither 32 nor 64"
+	;;
+esac
 
 # System sqlite when its header is present. It is -- sqlite is packaged -- but
 # the condition is kept rather than hardcoded so that the recipe states the
