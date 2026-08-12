@@ -1,0 +1,39 @@
+[package]
+name = "gnome-keyring"
+description = "Stores passwords and encryption keys for the GNOME desktop"
+version = "48.0.0"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+# gck-1 and gcr-base-3, which come from the gcr3 package rather than from gcr.
+# This is the entire reason gcr-3 exists in this tree alongside gcr-4: those two
+# .so files, for this consumer. meson.build:37-38 asks for both by name.
+gcr3 = ">=3.41.2"
+libgcrypt = ">=1.11.0"
+p11-kit = ">=0.25.5"
+dbus = ">=1.16.2"
+# -Dpam=true. cc.find_library('pam') -- the helper that unlocks the keyring with
+# the login password.
+linux-pam = ">=1.7.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"

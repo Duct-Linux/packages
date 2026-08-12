@@ -1,0 +1,53 @@
+[package]
+name = "geoclue"
+description = "D-Bus geolocation service"
+version = "2.7.2"
+subversion = "1"
+authors = ["The GeoClue project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+json-glib = ">=1.10.6"
+libsoup = ">=3.6.5"
+# mm-glib, from the three modem sources. NOT inherited: those options default
+# TRUE and ModemManager is packaged, so doing nothing would have acquired this
+# edge silently. Enabled on purpose (see pkg.env) and declared here so the
+# artefact and the recipe agree about it.
+#
+# SPELLED WITH ITS CAPITALS, WHICH IS CORRECT AND CURRENTLY LOSSY. Dependency
+# names are TOML *keys*, and the builder reads this table through viper
+# (stage9Wrap.go), which lowercases every key -- while `package.name` is a
+# *value* and keeps its case. So this row publishes as `modemmanager` and no
+# name in the index matches it. Verified against a repo.db fetched 2026-08-12:
+# ZERO dependency rows in the whole index contain an uppercase letter, while 16
+# published packages do, and a `modemmanager` row already exists (from
+# NetworkManager, which hit this first).
+#
+# Written correctly anyway rather than worked around: the recipe should say what
+# is true, the defect is in the builder rather than here, and the repair that
+# needs no republish is a case-insensitive lookup in the resolver. Spelling it
+# `modemmanager` to match the broken output would make this recipe wrong on the
+# day that lands. Nothing in this tree can install geoclue until it does; that
+# is a property of the bug, not of this edge.
+ModemManager = ">=1.24.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.1"

@@ -1,0 +1,67 @@
+[package]
+name = "cups"
+description = "The printing system gnome-control-center's Printers panel talks to"
+version = "2.4.12"
+subversion = "1"
+authors = ["OpenPrinting"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+# In-tree: cups ships a hand-written Makefile and configure substitutes only
+# Makedefs, so an out-of-tree configure leaves the build directory with no
+# Makefile. See build.sh.
+script = "./build.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+# BOUNDED ON PURPOSE, and the bound is the point rather than the floor.
+# An unbounded ">=3.5.0" is admitted by 4.x under Masterminds/semver, which is
+# what tape's resolver uses -- so a second openssl major in the index resolves
+# ahead of the one CI seeds, and libcups ends up built against .so.3 headers and
+# installed against a .so.4 that does not exist on the system. openssl 4.0.1 was
+# withdrawn on 2026-08-11, so nothing is live today; the bound is what stops
+# that being a fact about the index rather than about this recipe.
+openssl = ">=3.5.0,<4.0.0"
+# --enable-pam. cupsd authenticates administrators through PAM, and the config
+# template it installs is chosen by probing for /etc/pam.d/system-auth -- which
+# THIS package ships. So linux-pam is a dependency in both directions: the
+# library cupsd links, and the file that makes cups pick the right template.
+linux-pam = ">=1.7.0"
+# --enable-dbus. The notifier that tells the Printers panel a job changed state.
+dbus = ">=1.16.2"
+# --enable-libusb. The USB printing backend, which for a desktop is most
+# printing.
+libusb = ">=1.0.29"
+zlib = ">=1.3.1"
+# BOTH OF THESE WERE FOUND BY THE DT_NEEDED AUDIT, NOT BY READING configure --
+# which is the closed-world rule earning its keep. Neither appears in any
+# dependency list, on any BLFS page, or in this recipe's flags.
+#
+# libcrypt.so.2, on libcups, cupsd AND the usb backend. scheduler/auth.c:689
+# calls crypt() to check a password against /etc/shadow, so this is the
+# authentication path rather than an incidental link.
+libxcrypt = ">=4.4.38"
+# libacl.so.1, on cupsd. cups-common.m4:314 is `test "x$enable_acl" != xno`
+# followed by AC_SEARCH_LIBS([acl_init], [acl]) -- on unless explicitly
+# disabled, and acl IS packaged here, so it resolved by ambient detection. Kept
+# (cupsd sets ACLs on spool files) and now stated as a decision in pkg.env
+# rather than inherited.
+acl = ">=2.3.2"
+# The lp user and the lpadmin group, added to duct-filesystem's passwd and group
+# templates in this same change. Declared rather than assumed because cupsd
+# calls getpwnam(CUPS_DEFAULT_USER) at startup and exits if the account is not
+# there -- a runtime edge with no linkage for any DT_NEEDED audit to find, the
+# same class as gpgme spawning gpg.
+duct-filesystem = ">=0.1.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
