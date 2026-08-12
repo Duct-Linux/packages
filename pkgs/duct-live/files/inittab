@@ -18,6 +18,28 @@
 # later. See files/console-session.
 ::respawn:-/usr/libexec/duct-live/console-session
 
+# tty1 -- the greeter, on a medium that has one.
+#
+# THIS IS THE ONE ENTRY THAT IS NOT A SHELL, and it is on tty1 because that is
+# the terminal a display manager expects to own. On a medium with neither a
+# display manager nor a compositor the script says so and exits, which costs
+# nothing under `once` and leaves the explanation on the screen.
+#
+# It can collide with the console entry above, and only in one case: no serial
+# port, so /dev/console is tty0, which is tty1. console-session asks
+# graphical-session whether it is going to start something and stands aside if
+# it is -- so the greeter gets tty1 and the shells are on tty2 and tty3.
+#
+# `once` RATHER THAN `respawn`, and the reason is what happens on a bad day. A
+# respawned greeter that dies at startup restarts forever: the screen flickers,
+# the error scrolls past, and there is nothing left to read. Started once, a
+# greeter that dies leaves its last words on tty1 and stays there -- and
+# because console-session has already stood aside from tty1, the shells on
+# tty2 and tty3 keep the machine usable while you read them. On a live medium
+# the failure being inspectable is worth more than the session being resilient;
+# there is no state to protect and rebooting costs nothing.
+tty1::once:/usr/libexec/duct-live/graphical-session
+
 # Two more virtual terminals, on tty2 and tty3.
 #
 # Not tty1: with no console= parameter /dev/console follows the active virtual

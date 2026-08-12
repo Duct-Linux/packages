@@ -1,0 +1,165 @@
+#!/usr/bin/bash
+# What busybox init starts on tty1 when this medium has something graphical on
+# it, and what it says when it does not.
+#
+#   graphical-session                 start it, or hold tty1
+#   graphical-session --would-start   say nothing; exit 0 if it would start
+#                                     something. console-session asks this
+#                                     before taking tty1 for a shell.
+#
+# There is no systemd here and no display-manager.service, so a greeter is
+# started the way a shell is: an inittab entry running a script that decides.
+# This is console-session's sibling and follows its rule -- EVERY branch
+# announces itself, so a boot log can be asserted on which one was taken, and
+# "this never ran" cannot be read as "this ran and did nothing".
+#
+# Order of preference, and it is a preference rather than a fallback chain:
+#
+#   gdm      the real answer. It runs its own PAM stack, creates its own
+#            session through logind, and starts the shell.
+#   weston   NOT a desktop, and not a substitute for one. It is the smallest
+#            thing in this tree that opens a DRM device, brings up EGL and
+#            enumerates input through libinput -- which is the entire boot path
+#            a GNOME session needs underneath it. So it is what proves that
+#            path works before gdm exists. It is built here with the kiosk
+#            shell and NO clients, so what appears on the screen is a blank
+#            compositor: the thing being demonstrated is a live Wayland
+#            display, and this script waits for the socket and says so.
+#
+# duct.live.session= on the kernel command line overrides the choice: `gdm`,
+# `weston`, or `none` to leave tty1 alone.
+
+PATH=/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin
+export PATH
+
+query=
+[ "${1:-}" = "--would-start" ] && query=1
+
+say() { [ -n "$query" ] || echo "duct-live: $*"; }
+
+# The kernel command line, read the way the initramfs reads it.
+want=
+for arg in $(cat /proc/cmdline 2>/dev/null); do
+	case $arg in
+		duct.live.session=*) want=${arg#duct.live.session=} ;;
+	esac
+done
+
+# What is installed. gdm has been in /usr/sbin on every distribution that ships
+# it, but this tree has moved a binary between bin and sbin before, so both are
+# looked at rather than assumed.
+gdm=
+weston=
+for c in /usr/sbin/gdm /usr/bin/gdm; do
+	if [ -x "$c" ]; then gdm=$c; break; fi
+done
+for c in /usr/bin/weston /usr/local/bin/weston; do
+	if [ -x "$c" ]; then weston=$c; break; fi
+done
+
+session=
+case $want in
+	none)   session= ;;
+	gdm)    session=$gdm ;;
+	weston) session=$weston ;;
+	"")     session=${gdm:-$weston} ;;
+	*)
+		say "unknown duct.live.session=$want; choosing by what is installed"
+		session=${gdm:-$weston}
+		;;
+esac
+
+# The query console-session asks. Nothing is printed and nothing is started:
+# the answer is the exit status.
+if [ -n "$query" ]; then
+	[ -n "$session" ] && exit 0
+	exit 1
+fi
+
+if [ -z "$session" ]; then
+	case $want in
+		none)
+			say "duct.live.session=none -- tty1 left to the console entry" ;;
+		gdm|weston)
+			say "duct.live.session=$want, but $want is not installed on this medium" ;;
+		*)
+			say "no display manager and no compositor on this medium; tty1 idle."
+			say "a graphical medium is built with: make -C images iso DESKTOP=1" ;;
+	esac
+	# EXIT rather than starting a shell here. When /dev/console is a virtual
+	# terminal it is tty1, and the inittab's console entry is already running a
+	# session on it -- a second one would be two shells on one terminal fighting
+	# over every keystroke. Exiting is free because the inittab entry is `once`:
+	# nothing respawns this, and the line above stays on the screen.
+	exit 0
+fi
+
+# XDG_RUNTIME_DIR.
+#
+# gdm does not need this from us: it authenticates through PAM, and
+# pam_elogind creates /run/user/<uid> for the session it opens. weston started
+# from an inittab entry has no PAM anywhere in its ancestry, so nothing has
+# created one -- and a compositor with no XDG_RUNTIME_DIR has nowhere to put
+# the socket that is the entire point of starting it.
+if [ -n "$weston" ] && [ "$session" = "$weston" ]; then
+	uid=$(id -u)
+	XDG_RUNTIME_DIR=/run/user/$uid
+	export XDG_RUNTIME_DIR
+	if [ ! -d "$XDG_RUNTIME_DIR" ]; then
+		mkdir -p "$XDG_RUNTIME_DIR"
+		chmod 0700 "$XDG_RUNTIME_DIR"
+		chown "$uid" "$XDG_RUNTIME_DIR" 2>/dev/null || true
+	fi
+fi
+
+say "starting $session on tty1"
+
+# Watch for the display coming up, and say so on the console.
+#
+# THE SOCKET IS THE ASSERTION. A compositor's log says a great many
+# encouraging things before it has a usable display, and a boot test that greps
+# for one of them is testing prose. A Wayland socket in a runtime directory is
+# the artefact: it exists only once the compositor is listening, and it is what
+# a client would connect to. Backgrounded, because the compositor has to be in
+# the foreground.
+(
+	for _ in $(seq 1 60); do
+		for sock in /run/user/*/wayland-*; do
+			if [ -S "$sock" ]; then
+				echo "duct-live: wayland display up: $sock"
+				exit 0
+			fi
+		done
+		sleep 1
+	done
+	echo "duct-live: no wayland socket after 60s -- the display did not come up"
+) &
+
+# In the foreground, so busybox init sees the session end and restarts it.
+case $session in
+	*gdm)
+		# --nodaemon for the same reason: a gdm that forks and returns looks
+		# to init like a session that exited immediately, and init would
+		# respawn it in a loop against a daemon that is already running.
+		exec "$session" --nodaemon
+		;;
+	*weston)
+		# --shell=kiosk IS NOT OPTIONAL, and the reason is not visible from
+		# the command line. weston's default shell is "desktop", and this
+		# tree builds weston -Dshell-desktop=false -Dshell-kiosk=true -- so
+		# the default names a desktop-shell.so that was never built and weston
+		# exits at startup having initialised everything else first. Read from
+		# frontend/main.c, not from the manual page.
+		#
+		# --continue-without-input because the drm backend otherwise refuses
+		# to start on a machine with no input device, which is exactly what an
+		# emulated boot test is.
+		exec "$session" --shell=kiosk --continue-without-input
+		;;
+esac
+
+# Only reachable if the case above grows a branch that does not exec. Said out
+# loud rather than exiting silently, because a tty1 that is simply blank is the
+# one outcome nobody can diagnose from the screen.
+say "$session was chosen and not started -- no branch above knows how to run it"
+exit 1

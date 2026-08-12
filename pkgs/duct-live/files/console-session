@@ -23,6 +23,38 @@
 PATH=/usr/local/bin:/usr/bin:/usr/local/sbin:/usr/sbin
 export PATH
 
+# Stand aside on tty1 when a greeter is going to take it.
+#
+# The collision is invisible until it happens and then it is the worst kind of
+# visible. /dev/console follows the LAST console= on the kernel command line;
+# with a serial port that is ttyS0 and this entry is nowhere near tty1, but on
+# a machine with no serial port it is tty0, which is tty1 -- the terminal the
+# inittab's graphical entry starts a greeter on. Two processes on one terminal
+# fight over every keystroke, and on an ISO being demonstrated that is the
+# failure everybody sees.
+#
+# The decision belongs to whoever knows whether a session will start, so it is
+# asked rather than duplicated: graphical-session --would-start prints nothing
+# and answers with its exit status, which means the two scripts cannot come to
+# different conclusions from the same medium.
+#
+# Deliberately not a hold on tty2 and tty3: they are ordinary shells and no
+# greeter touches them. Only the /dev/console entry can land on tty1.
+console_active=$(sed -n 's/.* //p' /sys/class/tty/console/active 2>/dev/null)
+case $(tty 2>/dev/null):$console_active in
+	/dev/console:tty[0-9]*)
+		if /usr/libexec/duct-live/graphical-session --would-start 2>/dev/null; then
+			echo
+			echo "duct-live: tty1 belongs to the graphical session on this medium."
+			echo "duct-live: shells are on tty2 and tty3 (alt+F2, alt+F3)."
+			echo
+			while :; do
+				sleep 3600
+			done
+		fi
+		;;
+esac
+
 # -f root: skip authentication rather than prompt for a password nobody set.
 # A live system with no accounts has no password to ask for, and a login prompt
 # that cannot be satisfied is worse than none.

@@ -58,24 +58,107 @@ if [ -x /usr/sbin/ldconfig ]; then
 	/usr/sbin/ldconfig 2>/dev/null || true
 fi
 
-# Coldplug, without udev.
+# Devices: udev if this medium has one, a modalias sweep if it does not.
 #
-# Everything needed to reach this point is built into the kernel; everything
-# else -- the GPU, the network card, the sound device -- is a module, and with
-# no udev running there is nothing to notice they exist. Each device that needs
-# a driver advertises a modalias in sysfs, which is precisely the string
-# modprobe matches against, so feeding the whole set to modprobe loads exactly
-# the drivers this machine has hardware for.
+# THE TWO ARE NOT INTERCHANGEABLE and only one of them runs. The sweep below
+# loads drivers, and that is all it does: it creates no symlinks, applies no
+# permissions, sets no ACLs and TAGS NOTHING. Tags are how a seat is assembled
+# -- elogind decides what belongs to seat0 by reading udev's properties -- so a
+# graphical session on a machine that was coldplugged this way finds a seat
+# with no master device and fails in a way that reads as a compositor bug.
 #
-# -a takes many aliases at once, -b honours the blacklist, -q keeps the console
-# clear of one "module not found" line per device that has no driver -- which
-# is most of them, and is not an error.
-if [ -x /usr/bin/modprobe ] && [ -d /usr/lib/modules/"$(uname -r)" ]; then
+# So: udevd when it is installed, and the sweep only when it is not. A console
+# ISO carries no eudev and takes exactly the path it always took.
+udev_running=
+for udevd in /usr/sbin/udevd /usr/bin/udevd; do
+	[ -x "$udevd" ] || continue
+	msg "starting udevd"
+	"$udevd" --daemon && udev_running=1
+	break
+done
+
+if [ -n "$udev_running" ]; then
+	# Two triggers, subsystems before devices, because that is the order the
+	# kernel would have announced them in on a cold boot: a device event whose
+	# subsystem has not been seen is a rule set that has not been applied.
+	# settle waits for the queue rather than for a fixed sleep -- and does not
+	# fail the boot if it times out, because a slow device is not a reason to
+	# have no console.
+	msg "replaying device events through udev"
+	udevadm trigger --type=subsystems --action=add 2>/dev/null || true
+	udevadm trigger --type=devices --action=add 2>/dev/null || true
+	udevadm settle --timeout=30 2>/dev/null || \
+		msg "udev did not settle in 30s; continuing"
+elif [ -x /usr/bin/modprobe ] && [ -d /usr/lib/modules/"$(uname -r)" ]; then
+	# Coldplug, without udev.
+	#
+	# Everything needed to reach this point is built into the kernel;
+	# everything else -- the GPU, the network card, the sound device -- is a
+	# module, and with no udev running there is nothing to notice they exist.
+	# Each device that needs a driver advertises a modalias in sysfs, which is
+	# precisely the string modprobe matches against, so feeding the whole set
+	# to modprobe loads exactly the drivers this machine has hardware for.
+	#
+	# -a takes many aliases at once, -b honours the blacklist, -q keeps the
+	# console clear of one "module not found" line per device that has no
+	# driver -- which is most of them, and is not an error.
 	msg "loading drivers for detected hardware"
 	find /sys/devices -name modalias -type f -print0 2>/dev/null |
 		xargs -0 -r cat 2>/dev/null |
 		sort -u |
 		xargs -r /usr/bin/modprobe -abq 2>/dev/null || true
+fi
+
+# The D-Bus system bus.
+#
+# Started here rather than activated, because it is what does the activating:
+# polkit, elogind, NetworkManager, accountsservice, upower and colord are all
+# started by dbus-daemon on the first call to their name, and none of them can
+# be reached before it is listening. elogind in particular is D-Bus activated
+# and nothing else starts it -- its own service file is
+# `Exec=/usr/libexec/elogind --daemon` -- so the bus is the whole of what makes
+# a session possible.
+#
+# AFTER the machine id above, and that ordering is real: dbus-daemon reads
+# /etc/machine-id at startup, and a bus that came up before it was written
+# would hand out the empty one for the life of the boot.
+if [ -x /usr/bin/dbus-daemon ]; then
+	msg "starting the D-Bus system bus"
+	mkdir -p /run/dbus
+	/usr/bin/dbus-daemon --system --fork || msg "the system bus did not start"
+fi
+
+# seatd, if it is installed.
+#
+# Only some compositors want it: mutter speaks to logind directly, and weston
+# reaches a seat through libseat, which tries seatd first, then logind, then a
+# root-only builtin path. Starting it when it is present means weston gets a
+# real seat without needing a registered login session, and costs a daemon
+# nothing else talks to.
+#
+# -g video, the group duct-filesystem already creates for exactly this: the
+# devices a seat hands out are the DRM node and the input devices, and both are
+# group-owned rather than world-readable.
+for seatd in /usr/sbin/seatd /usr/bin/seatd; do
+	[ -x "$seatd" ] || continue
+	msg "starting seatd"
+	"$seatd" -g video &
+	break
+done
+
+# bluetoothd.
+#
+# NOTHING ELSE WILL EVER START IT. bluez installs its D-Bus activation file
+# inside `if SYSTEMD` in Makefile.am, so a build with --disable-systemd ships
+# no org.bluez.service and there is no other activation path -- the package
+# says so in its own post-install and has been waiting for someone to pick it
+# up. Without this, the Bluetooth panel loads, finds no org.bluez, and offers
+# to turn on an adapter that never appears.
+if [ -x /usr/libexec/bluetooth/bluetoothd ]; then
+	msg "starting bluetoothd"
+	mkdir -p /var/lib/bluetooth
+	/usr/libexec/bluetooth/bluetoothd --daemon || \
+		msg "bluetoothd did not start"
 fi
 
 msg "Duct live system ready"
