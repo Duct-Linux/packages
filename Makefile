@@ -785,6 +785,9 @@ PRINT_PKGS := cups
 SETTINGS_PKGS := \
 	gnome-keyring gnome-menus tecla \
 	gsound gnome-bluetooth gnome-control-center \
+	libportal tinysparql gtksourceview libspelling \
+	exempi poppler libhandy udisks2 libdvdread \
+	glibmm gtkmm libgtop catch2 \
 	prmpt firefox duct-installer \
 	nautilus gnome-text-editor loupe papers \
 	gnome-disk-utility gnome-system-monitor
