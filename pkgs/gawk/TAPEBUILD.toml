@@ -2,7 +2,13 @@
 name = "gawk"
 description = "GNU awk"
 version = "5.3.2"
-subversion = "2"
+# 3 -- --sysconfdir=/etc, moving gawk.sh and gawk.csh out of /usr/etc/profile.d
+# and into /etc/profile.d. The upstream version is unchanged and the payload
+# differs only in where two files sit, which is precisely the shape that needs a
+# subversion: without it publish.yml finds 5.3.2-2 published and keeps the old
+# bytes, and the misplaced files stay misplaced on every installed system while
+# the recipe claims otherwise.
+subversion = "3"
 authors = ["upstream"]
 packagers = ["ItzYanick"]
 

@@ -134,7 +134,27 @@ while IFS='|' read -r name desc cfgargs deps; do
 		echo "SRC_SHA256=\$${var}_SHA256"
 		echo "SRC_DIR=\$${var}_SRCDIR"
 		echo
-		echo "CONFIGURE_ARGS=\"--disable-nls${cfgargs:+ $cfgargs}\""
+		# --sysconfdir=/etc IS EMITTED FOR EVERY GENERATED RECIPE, and it is
+		# the generic build.sh's missing half rather than a per-package
+		# choice. That script passes --prefix=/usr and nothing else, and
+		# autoconf -- unlike meson, which special-cases a /usr prefix and maps
+		# sysconfdir to the absolute /etc -- defaults sysconfdir to
+		# ${prefix}/etc. So anything a generated package installs under
+		# sysconfdir lands in /usr/etc: installed, correct-looking, and read by
+		# nothing. gawk shipped exactly that for four published subversions
+		# (profile.d/gawk.sh and gawk.csh) and gnome-menus was caught by hand
+		# with the same mechanism.
+		#
+		# It goes BEFORE $cfgargs so a recipe can still override it: configure
+		# takes the LAST occurrence of a repeated option, and findutils already
+		# relies on that ordering for --localstatedir.
+		#
+		# This fixes the class only GOING FORWARD -- the loop above refuses to
+		# touch a recipe whose directory already exists, so every recipe
+		# generated before today keeps whatever it was written with. The
+		# already-generated ones are a separate sweep; gawk, the one that had
+		# actually landed in /usr/etc, is fixed in its own pkg.env.
+		echo "CONFIGURE_ARGS=\"--disable-nls --sysconfdir=/etc${cfgargs:+ $cfgargs}\""
 	} >"$dir/pkg.env"
 
 	echo "  ok   $name $version"
