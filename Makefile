@@ -783,12 +783,18 @@ PRINT_PKGS := cups
 # is alphabetical, which is what a list with no constraint should be rather than
 # an accident that reads like one.
 SETTINGS_PKGS := \
-	gnome-keyring gnome-menus tecla \
-	gsound gnome-bluetooth gnome-control-center \
+	gnome-keyring gnome-menus tecla
+
+# End-user applications and their leaf support libraries. This group is late
+# because Settings and Disks depend on PWQUALITY_PKGS, and Settings also needs
+# ACCOUNTS_PKGS. Keeping the whole application closure here makes every edge
+# point backwards while preserving one manifest source for the GNOME ISO.
+LIVE_APPS_PKGS := \
+	gsound gnome-bluetooth \
 	libportal tinysparql gtksourceview libspelling \
 	exempi poppler libhandy udisks2 libdvdread \
 	glibmm gtkmm libgtop catch2 \
-	prmpt firefox duct-installer \
+	gnome-control-center prmpt firefox duct-installer \
 	nautilus gnome-text-editor loupe papers \
 	gnome-disk-utility gnome-system-monitor
 
@@ -827,7 +833,7 @@ ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) $(TZ_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
 	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(XORG_PKGS) $(GNOME_PKGS) \
-	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SHELL_PKGS) $(SETTINGS_PKGS) $(PWQUALITY_PKGS) $(ACCOUNTS_PKGS) $(BOOT_PKGS)
+	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SHELL_PKGS) $(SETTINGS_PKGS) $(PWQUALITY_PKGS) $(ACCOUNTS_PKGS) $(LIVE_APPS_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #
