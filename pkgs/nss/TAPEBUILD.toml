@@ -21,9 +21,13 @@ script = "./install.sh"
 [dependencies]
 glibc = ">=2.42.0"
 nspr = ">=4.37.0"
-zlib = ">=1.3.1"
 sqlite = ">=3.50.0"
 
+# zlib is a BUILD dependency only, and that is a finding rather than a tidy-up.
+# It is needed to link cmd/{selfserv,tstclnt,signtool,modutil}, the only four
+# things in the tree that include coreconf/zlib.mk -- and this package installs
+# none of them. Nothing shipped here has libz in DT_NEEDED.
 [dependencies.build]
 pkgconf = ">=2.5.0"
 perl = ">=5.42.0"
+zlib = ">=1.3.1"

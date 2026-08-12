@@ -12,14 +12,29 @@
 # ignored and produces a different build with no diagnostic. So each variable
 # the build passes is proved by its effect:
 #
-#   USE_SYSTEM_ZLIB / ZLIB_LIBS   proved by DT_NEEDED naming the system libz.
-#                                 A bundled zlib is linked statically and leaves
-#                                 NO trace in the link line -- the libraries
-#                                 would look identical.
-#   NSS_USE_SYSTEM_SQLITE         proved by DT_NEEDED naming libsqlite3.
+#   USE_SYSTEM_ZLIB / ZLIB_LIBS   proved by the ABSENCE of a staged libzlib.a.
+#   NSS_USE_SYSTEM_SQLITE         proved by the ABSENCE of a staged libsqlite3,
+#                                 not by DT_NEEDED -- see below.
 #   USE_64 (x86_64)               proved by the ELF class of the result.
 #   the standalone patch          proved by nss.pc existing at all, since NSS
 #                                 ships no pkg-config file upstream.
+#
+# BOTH "system library" flags are proved by ABSENCE, and that is deliberate.
+# DT_NEEDED cannot answer either question:
+#
+#   zlib     NOTHING WE INSTALL LINKS ZLIB AT ALL. coreconf/zlib.mk is included
+#            by exactly four Makefiles -- cmd/{selfserv,tstclnt,signtool,modutil}
+#            -- and by no library. We install none of those four. A DT_NEEDED
+#            check for libz here can never pass, on any setting.
+#   sqlite   lib/softoken/config.mk passes -lsqlite3 EITHER WAY, and
+#            coreconf/location.mk defaults SQLITE_LIB_DIR to $(DIST)/lib. A
+#            bundled build links NSS's OWN libsqlite3 and DT_NEEDED names it
+#            identically. The check would pass on exactly the build it exists
+#            to catch.
+#
+# What does differ is what gets STAGED into dist/, so that is what is checked:
+# lib/Makefile builds lib/zlib and lib/sqlite only when the respective flag is
+# undefined. Absent flag, present artefact.
 
 . "$(dirname "$0")/../_scripts/common.sh"
 
@@ -65,11 +80,23 @@ needs() { readelf -d "$1" 2>/dev/null | grep -qE "NEEDED.*\[$2"; }
 needs "$DESTDIR/usr/lib/libnss3.so" 'lib' || \
 	die "the DT_NEEDED reader found no NEEDED entries at all in libnss3.so, which cannot be true of a linked shared library -- the check is broken, so its results below would be meaningless"
 
-needs "$DESTDIR/usr/lib/libnss3.so" 'libz\.so' || \
-	die "libnss3.so does not link the system zlib. USE_SYSTEM_ZLIB=1 and ZLIB_LIBS=-lz were passed, but NSS has no configure to reject a misspelling -- and a bundled zlib is linked statically, leaving the library looking identical while carrying a second copy of a packaged dependency"
-
 needs "$DESTDIR/usr/lib/libsoftokn3.so" 'libsqlite3\.so' || \
-	die "libsoftokn3.so does not link the system sqlite. NSS_USE_SYSTEM_SQLITE=1 was passed and silently ignored, or the header check in build.sh passed while the build disagreed -- either way this package now carries its own sqlite"
+	die "libsoftokn3.so links no sqlite at all. This is weaker than it looks -- it cannot tell system sqlite from NSS's own, which is what the staging check below is for -- but softoken without any sqlite means the storage backend did not link"
+
+# USE_SYSTEM_ZLIB took: lib/Makefile sets ZLIB_SRCDIR=zlib only when the flag is
+# undefined, so a bundled build stages a static libzlib.a here. It would never
+# reach $DESTDIR -- we copy only *.so, *.chk and libcrmf.a -- which is exactly
+# why it has to be caught at the staging directory instead.
+[ ! -e "$objdir/lib/libzlib.a" ] || \
+	die "$objdir/lib/libzlib.a exists, so NSS built its own zlib: USE_SYSTEM_ZLIB was not defined. Nothing we install links zlib, so this would ship looking correct while the four cmd/ tools that do use it carry a second copy of a packaged library"
+
+# NSS_USE_SYSTEM_SQLITE took. This one is not cosmetic: a bundled build stages
+# libsqlite3.so, and the *.so glob above would have INSTALLED it -- putting a
+# second, NSS-built sqlite into /usr/lib on top of the packaged one.
+[ ! -e "$objdir/lib/libsqlite3.so" ] || \
+	die "$objdir/lib/libsqlite3.so exists, so NSS built its own sqlite: NSS_USE_SYSTEM_SQLITE was not defined (coreconf sets it on Darwin only, never on Linux). The *.so glob in this script would then ship it over the packaged sqlite"
+[ ! -e "$DESTDIR/usr/lib/libsqlite3.so" ] || \
+	die "a libsqlite3.so was installed into this package, which belongs to the sqlite package alone"
 
 case "$(uname -m)" in
 x86_64)
@@ -78,5 +105,5 @@ x86_64)
 	;;
 esac
 
-log "installed NSS $(basename "$objdir"), system zlib and sqlite confirmed by DT_NEEDED"
+log "installed NSS $(basename "$objdir"); no bundled zlib or sqlite was staged"
 finish_install

@@ -5,8 +5,14 @@
 # at all. NSS is driven entirely by make variables, and THE ABSENCE OF CONFIGURE
 # IS THE HAZARD -- a misspelled variable produces no warning and no error, just
 # a quietly different build. NSS_ENABLE_WEROR=0 would build with -Werror and
-# fail confusingly; USE_SYSTEM_ZLIB=0 would silently link a bundled zlib. Every
-# variable set here has its OUTCOME asserted in install.sh.
+# fail confusingly; a misspelled NSS_USE_SYSTEM_SQLITE would build and ship a
+# second sqlite. Every variable set here has its OUTCOME asserted in install.sh.
+#
+# USE_SYSTEM_ZLIB and ZLIB_LIBS are ALREADY SET for us by coreconf/Linux.mk:191,
+# so passing them changes nothing on this platform. They are passed anyway so
+# the recipe states its intent rather than inheriting it silently, and their
+# outcome is asserted like everything else -- which means the assertion is
+# really a guard on that upstream default, not on our spelling.
 #
 # The build happens in $SRC_PATH/nss, one level inside the tarball root, which
 # is also where the patch expects to have been applied (-p1 from the root).
