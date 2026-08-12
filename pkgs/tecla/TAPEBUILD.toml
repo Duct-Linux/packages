@@ -1,0 +1,38 @@
+[package]
+name = "tecla"
+description = "Keyboard layout viewer"
+version = "48.0.2"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-meson.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+gtk4 = ">=4.18.0"
+libadwaita = ">=1.7.0"
+# >=1.8.0, NOT the 1.11.0 BLFS's dependency page names. That page lists the
+# version the BOOK ships, not a minimum tecla requires -- meson.build:50 is a
+# bare `dependency('xkbcommon')` with no version at all. This tree has 1.8.1, so
+# the floor copied off the page would have been UNSATISFIABLE: tecla would
+# build, publish and index perfectly and resolve for nobody. Costed from the
+# build system rather than the dependency list, the same way the flags are.
+libxkbcommon = ">=1.8.0"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"
