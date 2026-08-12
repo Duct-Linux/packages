@@ -1,0 +1,67 @@
+[package]
+name = "evolution-data-server"
+description = "Calendar, contacts and mail backend libraries for GNOME"
+version = "3.56.2"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "../_scripts/prepare.sh"
+
+[build]
+script = "../_scripts/build-cmake.sh"
+
+[install]
+script = "./install.sh"
+
+# Every one of these is an UNCONDITIONAL hard requirement -- a REQUIRED
+# pkg_check_modules or a FATAL_ERROR -- not an optional feature. The whole
+# hard-requirement surface was read at once rather than discovered one CI run at
+# a time; the optional half is documented in pkg.env.
+#
+#   glib        gio-2.0, gmodule-2.0        CMakeLists.txt:359-364, REQUIRED
+#   libxml2     libxml-2.0                  :362
+#   libsoup     libsoup-3.0>=3.1.1          :363, and it must be the 3.x API
+#   icu         icu-i18n, icu-uc            :379, FATAL_ERROR at :384/:396
+#   json-glib   json-glib-1.0               :423, REQUIRED
+#   util-linux  uuid>=2.0                   :424, REQUIRED. util-linux owns
+#               libuuid and uuid.pc in this tree -- e2fsprogs names uuid only to
+#               DISABLE its private copies (see its pkg.env), so it is the wrong
+#               package to declare here.
+#   sqlite      sqlite3>=3.7.17             :850, REQUIRED
+#   libsecret   libsecret-1                 :932, REQUIRED
+#   nspr/nss    via FindSMIME               :932/:944. NOT optional despite
+#               ENABLE_SMIME appearing to offer a way out -- see pkg.env.
+#   libical     libical-glib>=3.0.7         :938, REQUIRED
+#   zlib        zlib.h + deflateEnd         :353-356, FATAL_ERROR, and camel
+#               links it explicitly (-lz in CAMEL_LDFLAGS, :946)
+[dependencies]
+glibc = ">=2.42.0"
+gcc = ">=15.2.0"
+glib = ">=2.84.0"
+libxml2 = ">=2.13.0"
+libsoup = ">=3.6.5"
+libsecret = ">=0.21.7"
+nspr = ">=4.37.0"
+nss = ">=3.115.0"
+libical = ">=3.0.20"
+sqlite = ">=3.50.0"
+icu = ">=77.1.0"
+json-glib = ">=1.10.6"
+util-linux = ">=2.41.1"
+zlib = ">=1.3.1"
+
+# gperf is a hard build requirement with its own FATAL_ERROR (CMakeLists.txt
+# :331, "You need gperf to build evolution-data-server").
+[dependencies.build]
+cmake = ">=4.4.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gperf = ">=3.3.0"
+gettext = ">=0.26.0"
+gobject-introspection = ">=1.84.0"
+glib-introspection = ">=2.84.1"

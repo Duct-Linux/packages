@@ -516,7 +516,7 @@ GNOME_PKGS := \
 	nspr nss \
 	libogg libvorbis sound-theme-freedesktop \
 	xcb-util startup-notification \
-	libical
+	libical evolution-data-server
 
 # The GTK 3 island, and it is an island on purpose.
 #
