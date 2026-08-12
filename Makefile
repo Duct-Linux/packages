@@ -565,15 +565,28 @@ NETWORK_UI_PKGS := \
 GNOME_UI_PKGS := \
 	libcanberra gnome-desktop mutter
 
-# The time zone database. A group of one, and its POSITION IS FREE: tzdata needs
-# nothing but zic, which comes from glibc, so it could sit almost anywhere after
-# BASE_PKGS.
+# The time zone database. A group of one, and its position WAS free.
 #
-# It is here rather than beside glibc for a coordination reason rather than a
-# technical one -- BASE_PKGS is the core chain's list and several chains build
-# against it, so a data package with no ordering constraint has no business
-# widening that diff. Nothing in the tree builds against tzdata; what needs it
-# is the SESSION, at runtime.
+# IT IS NOT ANY MORE, AND ONLY THE ALL_PKGS LINE MOVED. tzdata still needs
+# nothing but zic from glibc, so nothing about the group itself changed -- but
+# libical now declares tzdata in [dependencies], and check-build-order rejected
+# the old placement outright: "out of order: libical (position 208) needs
+# tzdata (position 224)". libical is in GNOME_PKGS, so TZ_PKGS is expanded
+# early in ALL_PKGS instead, which is the smallest move that satisfies it and
+# leaves room for any later consumer.
+#
+# It is still NOT inside BASE_PKGS, and that half of the original reason
+# survives intact: BASE_PKGS is the core chain's list and several chains build
+# against it, so a data package has no business widening that diff. What has
+# died is "with no ordering constraint" -- finding 28's mechanism exactly, a
+# declaration pointing at a package that was outside every checked set until
+# something declared it.
+#
+# Nothing in the tree still BUILDS against tzdata. libical's dependency is a
+# runtime one on the DATA: with -DUSE_BUILTIN_TZDATA=False it reads every zone
+# from the first of four hardcoded directories holding a zone.tab, and tzdata
+# is what puts one there. The session needs it for the same reason, one layer
+# up.
 #
 # WHY IT EXISTS AT ALL: there was no timezone database in this tree. glibc's
 # localtime(3) reads /usr/share/zoneinfo directly, so without this every process
@@ -736,11 +749,11 @@ SETTINGS_PKGS := \
 JS_PKGS := \
 	icu mozjs gjs
 
-ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
+ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) $(TZ_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
 	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(XORG_PKGS) $(GNOME_PKGS) \
-	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SETTINGS_PKGS) $(TZ_PKGS) $(PWQUALITY_PKGS) $(BOOT_PKGS)
+	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SETTINGS_PKGS) $(PWQUALITY_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #

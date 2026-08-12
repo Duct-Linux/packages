@@ -2,7 +2,11 @@
 name = "libical"
 description = "iCalendar protocol implementation and its libical-glib GObject binding"
 version = "3.0.20"
-subversion = "1"
+# 2: tzdata added to [dependencies] when -DUSE_BUILTIN_TZDATA flipped to False.
+# [dependencies] reaches TAPEPACKAGE.toml, so without this bump the publish
+# would see an identity it has already indexed, keep the old manifest, and ship
+# a libical whose timezones come from a package nothing pulls in.
+subversion = "2"
 authors = ["The libical Developers"]
 packagers = ["ItzYanick"]
 
@@ -39,6 +43,13 @@ libxml2 = ">=2.13.0"
 # artefact links it, and asserted in install.sh so the autodetection cannot
 # silently stop happening.
 icu = ">=77.1.0"
+# THE ZONES THEMSELVES, and this is a runtime dependency on DATA rather than on
+# a library -- nothing here links it and no build step reads it, so no linkage
+# check and no build could ever discover it. With -DUSE_BUILTIN_TZDATA=False
+# libical takes every timezone from the first of four hardcoded directories
+# holding a zone.tab (icaltz-util.c:104-109), and tzdata is what puts one
+# there. Without it installed, libical resolves NO timezone and nothing fails.
+tzdata = ">=2025.2.0"
 
 [dependencies.build]
 cmake = ">=4.4.0"
