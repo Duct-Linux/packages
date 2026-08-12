@@ -109,6 +109,38 @@ elif [ -x /usr/bin/modprobe ] && [ -d /usr/lib/modules/"$(uname -r)" ]; then
 		xargs -r /usr/bin/modprobe -abq 2>/dev/null || true
 fi
 
+# NO SYSLOG SINK IS STARTED HERE, AND THAT IS A MEASUREMENT RATHER THAN AN
+# OVERSIGHT. Read this before adding one.
+#
+# The problem is real. gdm routes every g_warning and g_critical through
+# syslog(3) and NOTHING ELSE: common/gdm-log.c's handler picks stderr only
+# when `is_sd_booted` is true, and in gdm 48.0 that is a `static gboolean =
+# FALSE` which is READ TWICE AND ASSIGNED NOWHERE IN THE TARBALL -- so the
+# stderr branch is dead code on every system, and syslog is the only channel
+# gdm will ever use. A gdm that starts, does nothing and says nothing is
+# therefore indistinguishable from a healthy one idling, which is exactly what
+# the first gdm boot looked like. Same for sshd, cups, wpa_supplicant and
+# polkit, which put anything that matters there too.
+#
+# THE OBVIOUS FIX DOES NOT WORK. busybox is already PID 1 here, so `busybox
+# syslogd -n -O /dev/console` looks free. It was tried and MEASURED, and this
+# tree's busybox syslogd BINDS /dev/log AND NEVER READS FROM IT: its own
+# startup banner reaches the sink, and not one client message does. Controlled
+# three ways against the same rootfs -- util-linux `logger`, busybox `logger`,
+# and glibc's own syslog(3) through python -- with both output modes (-O file
+# and -C circular buffer read back with logread). Nothing arrives. The same
+# three clients, on the same socket path, in the same image, ALL DELIVER to a
+# nine-line python listener that binds /dev/log itself, which is the positive
+# arm that makes the negative one mean something.
+#
+# So the sink is not merely useless, it is ACTIVELY MISLEADING: a /dev/log
+# that nobody drains makes the system look instrumented while discarding
+# exactly the messages someone went looking for. With no /dev/log at all,
+# syslog(3) fails and the messages are lost the same way -- minus the false
+# impression. Absence is the honest state until busybox syslogd is fixed or a
+# real syslog daemon is packaged, and this comment is here so the next person
+# starts from the control rather than re-deriving it.
+#
 # The D-Bus system bus.
 #
 # Started here rather than activated, because it is what does the activating:
@@ -126,6 +158,44 @@ if [ -x /usr/bin/dbus-daemon ]; then
 	msg "starting the D-Bus system bus"
 	mkdir -p /run/dbus
 	/usr/bin/dbus-daemon --system --fork || msg "the system bus did not start"
+fi
+
+# elogind, STARTED HERE AND NOT LEFT TO D-BUS ACTIVATION.
+#
+# The previous reading of this was correct and incomplete, and the gap is worth
+# stating exactly, because it is what kept a greeter off the screen: elogind IS
+# D-Bus activated -- its own service file is `Exec=/usr/libexec/elogind
+# --daemon` -- so every client that CALLS org.freedesktop.login1 brings it up
+# with no help from this script. gdm is not such a client.
+#
+# GDM ASKS THE FILESYSTEM. gdm-local-display-factory.c gates the entire greeter
+# on `sd_seat_can_graphical()` (lines 863 and 1136), and in libelogind that
+# function is a read of /run/systemd/seats/ -- the string is in the library, and
+# the matching writes are in the elogind binary. No D-Bus method is called, so
+# there is nothing for dbus-daemon to activate on. With elogind not running the
+# directory does not exist, the call returns an error, and the factory's
+# `if (ret < 0) return;` sends gdm quietly back to its main loop. gdm then runs
+# forever, holds /run/gdm/gdm.pid, spawns no session worker, and says NOTHING --
+# measured, with a process list: gdm alive, no greeter, /run/systemd absent.
+#
+# THE GENERAL SHAPE: AN ACTIVATION MECHANISM ONLY FIRES FOR CLIENTS THAT USE
+# THE ACTIVATING CHANNEL. "It is D-Bus activated" is a fact about the daemon
+# and reads like a fact about the system; the first consumer that asks a
+# different way finds it absent, and absence returns as "no seats" rather than
+# as "not running". A display manager is exactly that consumer -- it needs a
+# seat BEFORE anyone has logged in, which is before any activation could have
+# happened.
+#
+# Starting it explicitly does not conflict with the activation path: whoever
+# gets there first takes org.freedesktop.login1, and dbus-daemon does not
+# activate a name that is already owned. AFTER the bus, because elogind needs
+# it to take that name; BEFORE seatd and the greeter, because both are asking
+# about seats.
+if [ -x /usr/libexec/elogind ]; then
+	msg "starting elogind -- gdm reads /run/systemd/seats, which nothing else creates"
+	if ! el_err=$(/usr/libexec/elogind --daemon 2>&1); then
+		msg "elogind did not start: ${el_err:-it printed nothing}"
+	fi
 fi
 
 # seatd, if it is installed.
@@ -162,7 +232,23 @@ if [ -x /usr/libexec/bluetooth/bluetoothd ]; then
 	# and not one thing about why -- and a diagnosis you cannot read is the
 	# reason the next person re-runs the whole boot to learn what the console
 	# already knew.
-	if ! bt_err=$(/usr/libexec/bluetooth/bluetoothd --daemon 2>&1); then
+	#
+	# AND NO --daemon. That message, once it could be read, said "Unknown
+	# option --daemon" -- bluetoothd has never had one. Read from the shipped
+	# binary rather than from a manual page, its long options are exactly
+	# compat, configfile, debug, experimental, nodetach, plugin and version:
+	# it DETACHES BY DEFAULT, and --nodetach is the flag that would keep it in
+	# the foreground. So the flag asked for the default behaviour under a name
+	# the parser does not know, and the daemon this whole block exists to start
+	# has never once started. (gdm's --nodaemon in graphical-session was the
+	# same mistake in the same boot -- a plausible flag from another
+	# distribution's invocation, never checked against the binary.)
+	#
+	# The command substitution does not hang on a daemon that detaches:
+	# bluetoothd forks through daemon(0,0), which points its stdio at
+	# /dev/null and closes this pipe. An option-parse failure happens before
+	# that fork, which is exactly the failure this capture is here to report.
+	if ! bt_err=$(/usr/libexec/bluetooth/bluetoothd 2>&1); then
 		msg "bluetoothd did not start: ${bt_err:-it printed nothing}"
 	fi
 fi

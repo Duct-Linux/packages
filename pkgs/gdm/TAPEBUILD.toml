@@ -2,7 +2,13 @@
 name = "gdm"
 description = "The GNOME Display Manager"
 version = "48.0.0"
-subversion = "1"
+# 2 -- the greeter's own PAM session gains pam_elogind. Upstream's pam-lfs
+# profile is the only one of three that names pam_systemd.so without its
+# pam_elogind.so sibling, and the leading '-' makes the miss silent: the
+# greeter was opened with nothing that registers a session, so it had no
+# XDG_RUNTIME_DIR to put a Wayland socket in. The payload changed, so the
+# identity has to.
+subversion = "2"
 authors = ["The GNOME Project"]
 packagers = ["ItzYanick"]
 

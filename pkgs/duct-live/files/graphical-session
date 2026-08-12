@@ -166,10 +166,38 @@ say "starting $session on tty1"
 # In the foreground, so busybox init sees the session end and restarts it.
 case $session in
 	*gdm)
-		# --nodaemon for the same reason: a gdm that forks and returns looks
-		# to init like a session that exited immediately, and init would
-		# respawn it in a loop against a daemon that is already running.
-		exec "$session" --nodaemon >>"$console" 2>&1
+		# NO FLAGS, AND --nodaemon IN PARTICULAR IS FATAL.
+		#
+		# This used to pass --nodaemon, for a real reason: a gdm that forks
+		# and returns looks to init like a session that exited immediately,
+		# and init would respawn it against a daemon already running. The
+		# reason is sound and the flag is not -- gdm 48 does not have it.
+		#
+		# daemon/main.c:308-314 is the entire option table:
+		#
+		#     { "fatal-warnings", ... }
+		#     { "timed-exit", ... }
+		#     { "version", ... }
+		#
+		# and nothing in daemon/main.c calls fork(), daemon() or setsid(), so
+		# gdm 48 never detaches and the behaviour --nodaemon asked for is the
+		# only behaviour there is. GOption rejects an unknown option before
+		# anything else runs:
+		#
+		#     Failed to parse options: Unknown option --nodaemon
+		#
+		# and gdm exits. This inittab entry is `once`, so nothing retries: the
+		# whole desktop is one unknown flag away from a tty1 that simply goes
+		# quiet, which is what the first gdm boot test did.
+		#
+		# GREPPING THE TARBALL FOR THE FLAG FINDS IT AND IS WRONG. --nodaemon
+		# occurs seven times in gdm 48.0 -- every one of them in a translated
+		# documentation string under docs/, some already marked obsolete. The
+		# option was removed from the code and its documentation outlived it,
+		# so the name is present in the source, present in the manual, and
+		# absent from the parser. Check an option against the OPTION TABLE or
+		# against the binary, never against the tarball as a whole.
+		exec "$session" >>"$console" 2>&1
 		;;
 	*weston)
 		# --shell=kiosk IS NOT OPTIONAL, and the reason is not visible from
