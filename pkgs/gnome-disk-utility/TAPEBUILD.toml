@@ -14,7 +14,7 @@ script = "../_scripts/build-meson.sh"
 [install]
 script = "../_scripts/install-meson.sh"
 [dependencies]
-+glibc = ">=0.0.0"
+glibc = ">=0.0.0"
 glib = ">=0.0.0"
 gtk3 = ">=0.0.0"
 libcanberra = ">=0.0.0"
