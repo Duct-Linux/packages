@@ -157,8 +157,14 @@ done
 if [ -x /usr/libexec/bluetooth/bluetoothd ]; then
 	msg "starting bluetoothd"
 	mkdir -p /var/lib/bluetooth
-	/usr/libexec/bluetooth/bluetoothd --daemon || \
-		msg "bluetoothd did not start"
+	# Its message, not just its exit status. The first desktop boot printed
+	# "bluetoothd did not start" and nothing else, which says a daemon failed
+	# and not one thing about why -- and a diagnosis you cannot read is the
+	# reason the next person re-runs the whole boot to learn what the console
+	# already knew.
+	if ! bt_err=$(/usr/libexec/bluetooth/bluetoothd --daemon 2>&1); then
+		msg "bluetoothd did not start: ${bt_err:-it printed nothing}"
+	fi
 fi
 
 msg "Duct live system ready"

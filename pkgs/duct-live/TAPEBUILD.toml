@@ -5,7 +5,11 @@ version = "0.1.0"
 # 2: the boot script starts udev, the D-Bus system bus, seatd and bluetoothd,
 # and there is a graphical-session entry on tty1. The payload changed, so the
 # identity has to.
-subversion = "2"
+# 3 -- the session's own output goes to /dev/console. On tty1 it went to a
+# screen nobody watches (serial console) or under a compositor's framebuffer
+# (no serial), so a boot test could see udev, the bus and seatd and not one
+# line from the session itself.
+subversion = "3"
 authors = ["Duct"]
 packagers = ["ItzYanick"]
 
