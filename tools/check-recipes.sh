@@ -768,6 +768,32 @@ def version_forms(version: str) -> list[str]:
     # "77-01" against the tag's "77-1". Widening the dash form to cover both
     # would loosen a rule that ca-certificates needs to stay tight, so this is a
     # separate spelling rather than a relaxation of that one.
+    # The tz database's spelling, and it is the third instance of the same
+    # shape as sqlite's and icu's above rather than a new kind of problem.
+    #
+    # IANA releases the time zone database as YEAR plus a LETTER -- 2025b is the
+    # second release of 2025 -- and ships it as tzdata2025b.tar.gz. That is not
+    # semver and cannot be made into it, so a recipe must declare something like
+    # 2025.2.0 for tape's resolver, which then appears nowhere in the source.
+    # The two rules are individually right and jointly exclude the package:
+    # declaring "2025b" satisfies this check and makes the resolver SKIP THE
+    # PACKAGE SILENTLY, which is the exact failure the semver rule exists to
+    # prevent.
+    #
+    # So the letter is derived rather than guessed: minor 1 is 'a', 2 is 'b',
+    # and so on, which is upstream's own documented sequence. Bounded to 26 and
+    # to a patch of 0, so it cannot quietly match anything else -- a version
+    # like 3.2.0 does not become "3b" because 3 is not a plausible year.
+    # Re-split from `version` rather than reusing `parts`, which the trailing-".0"
+    # loop above has already truncated -- by this point a 2025.2.0 has become
+    # ["2025", "2"] and a three-component test against it silently never fires.
+    # Caught by testing the function rather than by reading it.
+    tz_parts = version.split(".")
+    if len(tz_parts) == 3 and all(x.isdigit() for x in tz_parts):
+        year, release, patch = (int(x) for x in tz_parts)
+        if 1970 <= year <= 2999 and 1 <= release <= 26 and patch == 0:
+            forms.append(f"{year}{chr(ord('a') + release - 1)}")
+
     for form in list(forms):
         if "." in form:
             forms.append(form.replace(".", "_"))
