@@ -687,9 +687,16 @@ PULSE_PKGS := \
 # It cannot go in GNOME_UI_PKGS with mutter and gnome-autoar, which is where it
 # belongs by topic, because PULSE_PKGS runs after that group. Same shape as
 # GNOME_UI_PKGS itself, which exists because gnome-desktop needed gtk3 from a
-# later list -- and the same answer: a new group at the earliest point where
-# every edge points backwards.
-SHELL_PKGS := gnome-shell gnome-session gdm
+# later list -- and the same answer: a group at the earliest point where every
+# edge points backwards.
+#
+# THAT POINT MOVED WHEN gnome-settings-daemon JOINED. It needs libgweather,
+# geoclue and geocode-glib from LOCATION_PKGS and cups from PRINT_PKGS, so the
+# whole tier now sits after both -- check-build-order reported all four edges at
+# once rather than one per attempt. Nothing consumes gnome-shell or
+# gnome-session yet, so moving the group costs nothing; gdm will join it and
+# needs everything here.
+SHELL_PKGS := gnome-shell gnome-session gnome-settings-daemon gdm
 
 # Location services: the two packages gnome-control-center's Privacy -> Location
 # panel and gnome-shell's location indicator sit on.
@@ -800,7 +807,7 @@ ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) $(TZ_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
 	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(XORG_PKGS) $(GNOME_PKGS) \
-	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(SHELL_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SETTINGS_PKGS) $(PWQUALITY_PKGS) $(ACCOUNTS_PKGS) $(BOOT_PKGS)
+	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SHELL_PKGS) $(SETTINGS_PKGS) $(PWQUALITY_PKGS) $(ACCOUNTS_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #

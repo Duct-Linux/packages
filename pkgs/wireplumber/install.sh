@@ -57,12 +57,44 @@ lib=$(find "$DESTDIR/usr/lib" -maxdepth 1 -name 'libwireplumber-0.5.so.*' -type 
 # because the module directory is a meson computation and pinning the whole path
 # would make this fail for the wrong reason if that layout moved.
 #
-# This is the assertion that -Dsystem-lua=true is doing what the recipe claims.
 # Everything else in this package can be present and correct while this one file
 # is absent, and the result is a session manager with no policy engine.
+#
+# WHAT THIS FILE'S EXISTENCE DOES **NOT** PROVE is -Dsystem-lua=true, and the
+# comment here used to say that it did. The module is built either way: with a
+# subproject lua it would simply have that lua linked into it. Existence is a
+# fact about the module; provenance is a fact about what the module LINKS, and
+# they are different questions. Corrected after the NSS/sqlite case elsewhere in
+# this tree, where a system-versus-bundled check passed on exactly the build it
+# was written to catch.
 lua_module=$(find "$DESTDIR/usr/lib" -name 'libwireplumber-module-lua-scripting.so' -print -quit 2>/dev/null)
 [ -n "$lua_module" ] && [ -s "$lua_module" ] \
 	|| die "the Lua scripting module was not installed; wireplumber would start, connect to pipewire and apply no policy at all -- no default sink, no device routing, no volume restore"
+
+# THE PROVENANCE, asserted separately and in the direction that can only be true
+# one way.
+#
+# Here -- unlike the NSS case -- DT_NEEDED does discriminate, and it is worth
+# saying why rather than borrowing the conclusion: meson builds a subproject lua
+# as a STATIC library and links it into this module, so a bundled build shows no
+# liblua entry at all. A dynamic liblua can therefore only be the packaged one.
+# When the two candidates would produce the same NEEDED name, this check would
+# be worthless and the absence check below would be the whole of it.
+command -v readelf >/dev/null 2>&1 \
+	|| die "no readelf; cannot tell a system lua from a bundled one, and that is the whole point of -Dsystem-lua=true"
+if ! readelf -d "$lua_module" 2>/dev/null | grep -q 'NEEDED.*liblua'; then
+	die "the Lua module links no liblua: -Dsystem-lua=true did not take effect and a lua was built into the module instead. The packaged lua is patched (BLFS's shared-library patch, with -O2 restored); a vendored 5.4.4 is not, and nothing else would ever say so"
+fi
+
+# AND THE ABSENCE, because the tarball's own fallback is one release away from
+# becoming reachable. subprojects/lua.wrap is download-only and this tree builds
+# --wrap-mode=nodownload, so it cannot fire today -- but a tarball that starts
+# shipping subprojects/packagecache/ makes exactly that wrap live, with nothing
+# in the .wrap file changing to announce it. Prove it by what is NOT staged.
+bundled=$(find "$DESTDIR" -name 'liblua*' -print 2>/dev/null | head -1)
+if [ -n "$bundled" ]; then
+	die "this package staged $bundled -- a lua of its own. Only the lua package may ship one, and two packages owning one path is an install error"
+fi
 
 # The policy scripts, which are data and are installed by a different target
 # than the module that runs them. Counted rather than checked for existence: an
