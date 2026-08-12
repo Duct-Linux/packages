@@ -9,7 +9,15 @@ version = "0.1.0"
 # screen nobody watches (serial console) or under a compositor's framebuffer
 # (no serial), so a boot test could see udev, the bus and seatd and not one
 # line from the session itself.
-subversion = "3"
+# 4 -- the first gdm boot. Three things, all found by booting: gdm was started
+# with --nodaemon, an option gdm 48 does not have, so it exited at once and
+# tty1 went quiet; bluetoothd was started with --daemon, which it has never
+# had, so the daemon this script exists to start had never once started; and
+# elogind is now started here rather than left to D-Bus activation, because
+# gdm gates its whole greeter on sd_seat_can_graphical(), which is a read of
+# /run/systemd/seats and calls no D-Bus method at all. Plus a syslog sink, so
+# that gdm -- which logs only through syslog(3) -- can be heard.
+subversion = "4"
 authors = ["Duct"]
 packagers = ["ItzYanick"]
 
