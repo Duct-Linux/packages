@@ -696,7 +696,20 @@ PULSE_PKGS := \
 # once rather than one per attempt. Nothing consumes gnome-shell or
 # gnome-session yet, so moving the group costs nothing; gdm will join it and
 # needs everything here.
-SHELL_PKGS := gnome-shell gnome-session gnome-settings-daemon gdm
+# ibus LEADS THIS GROUP, and it is a runtime edge rather than a build one --
+# which is exactly why it was found by booting and not by check-build-order.
+# gnome-shell does not link ibus and its meson.build does not mention it: the
+# string "ibus" appears nowhere in gnome-shell's meson.build or meson.options.
+# What it does is `import IBus from 'gi://IBus'` in six JavaScript modules, one
+# of them js/misc/dependencies.js under a heading reading "Required
+# dependencies". A GJS application's requirements are in its JAVASCRIPT, and no
+# amount of reading the build system will list them -- the same lesson
+# gnome-shell already taught this file about libpulse hiding in a subproject,
+# one layer further out.
+# It sits ahead of gnome-shell so the declared dependency points backwards; all
+# of its own prerequisites -- gtk3, gtk4, dconf, iso-codes, libnotify,
+# libxkbcommon, wayland, dbus -- are many groups earlier.
+SHELL_PKGS := ibus gnome-shell gnome-session gnome-settings-daemon gdm
 
 # Location services: the two packages gnome-control-center's Privacy -> Location
 # panel and gnome-shell's location indicator sit on.
