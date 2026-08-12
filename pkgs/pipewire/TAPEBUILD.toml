@@ -7,7 +7,10 @@ version = "1.4.7"
 # subversion is for. Without the bump, publish.yml keys on
 # (name, version, subversion, arch), finds 1.4.7-1 already published, and KEEPS
 # THE OLD BYTES -- so the re-enable would appear to land and change nothing.
-subversion = "2"
+# 3 -- /etc/xdg/autostart/pipewire.desktop, which is a new file in the payload
+# and therefore a new identity. It is also the first version of this package
+# that anything starts.
+subversion = "3"
 authors = ["The PipeWire project"]
 packagers = ["ItzYanick"]
 
