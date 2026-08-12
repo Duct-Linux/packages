@@ -1,0 +1,25 @@
+[package]
+name = "nspr"
+description = "Netscape Portable Runtime"
+version = "4.37.0"
+subversion = "1"
+authors = ["Mozilla"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+
+[prepare]
+script = "./prepare.sh"
+
+[build]
+script = "./build.sh"
+
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
