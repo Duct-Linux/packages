@@ -37,13 +37,21 @@ for p in gdm-autologin gdm-launch-environment gdm-fingerprint gdm-smartcard gdm-
 		die "/etc/pam.d/$p is missing or empty. gdm installs PAM files only for a KNOWN distro: -Ddefault-pam-config=autodetect probes the build environment for /etc/lfs-release, which the Duct builder does not have, and then installs NOTHING. With linux-pam's other stack denying, that is a greeter that rejects every user -- and this is the only check that can tell an empty pam.d from a complete one"
 done
 
-# --- sysconfdir reached /etc and not /usr/etc -------------------------------
+# --- nothing under /usr/etc -------------------------------------------------
 #
-# gdm derives eight paths from sysconfdir, and meson's default is `etc` relative
-# to --prefix=/usr. The PAM check above already proves the pam_prefix branch; this
-# proves the rest did not diverge, and asserts the absence of the wrong tree.
+# HONEST ABOUT WHAT THIS CHECK IS: it cannot fail today. meson special-cases a
+# /usr prefix and resolves sysconfdir to the absolute /etc on its own
+# (BUILTIN_DIR_NOPREFIX_OPTIONS in mesonbuild/options.py), so this passes with
+# or without the -Dsysconfdir=/etc pin in pkg.env. It is a regression guard on
+# that upstream special case, not a live test of this recipe -- the same
+# category as a pinned default, and it is labelled so that nobody later reads a
+# passing check as evidence that the flag is doing work.
+#
+# The eight sysconfdir-derived paths listed in pkg.env are why it is worth
+# keeping: if meson ever drops the special case, this fires before a daemon
+# ships compiled to look for its configuration where nothing writes.
 [ ! -d "$DESTDIR/usr/etc" ] || \
-	die "files were installed under /usr/etc, so -Dsysconfdir=/etc did not take. gdm compiles SYSCONFDIR into the daemon and derives its config, dm, dconf and D-Bus policy paths from it, so this is a daemon looking for its configuration in a directory nothing else writes to"
+	die "files were installed under /usr/etc. meson's /usr-prefix special case for sysconfdir has changed, or this package was built under a different prefix -- gdm compiles SYSCONFDIR into the daemon and derives its config, dm, dconf and D-Bus policy paths from it"
 
 # --- no systemd units, which this tree cannot start -------------------------
 #
