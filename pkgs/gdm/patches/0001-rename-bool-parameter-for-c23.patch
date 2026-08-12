@@ -1,0 +1,58 @@
+gdm 48.0: rename a parameter called `bool`, which C23 made a keyword
+
+common/gdm-settings-utils.h:47 declares
+
+    gboolean gdm_settings_parse_value_as_boolean (const char *value,
+                                                  gboolean   *bool);
+
+and the definition in gdm-settings-utils.c:290 matches. `bool` was an ordinary
+identifier through C17; C23 promoted it to a KEYWORD, and gcc 15 -- which this
+tree uses -- defaults to -std=gnu23. So the header no longer parses:
+
+    gdm-settings-utils.h:47:77: error: expected ';', ',' or ')' before 'bool'
+
+and every translation unit that includes it fails, which is why the log also
+shows an implicit-declaration error for the function in gdm-settings-direct.c:
+that one is a consequence, not a second defect.
+
+Renamed to bool_out in the five places it appears across the two files. A
+parameter name is not part of the ABI and no caller changes.
+
+The alternative was -Dc_std=gnu17, or CFLAGS=-std=gnu17 as gmp's pkg.env does.
+Rejected: it compiles the whole package to an older standard to work around one
+identifier, and it would silently keep doing so after upstream fixes this.
+
+--- a/common/gdm-settings-utils.h	2026-08-12 10:33:31
++++ b/common/gdm-settings-utils.h	2026-08-12 10:33:31
+@@ -44,7 +44,7 @@
+                                                                 GSList     **list);
+ 
+ gboolean                  gdm_settings_parse_value_as_boolean  (const char *value,
+-                                                                gboolean   *bool);
++                                                                gboolean   *bool_out);
+ gboolean                  gdm_settings_parse_value_as_integer  (const char *value,
+                                                                 int        *intval);
+ gboolean                  gdm_settings_parse_value_as_double   (const char *value,
+--- a/common/gdm-settings-utils.c	2026-08-12 10:33:31
++++ b/common/gdm-settings-utils.c	2026-08-12 10:33:31
+@@ -287,16 +287,16 @@
+ /* adapted from GKeyFile */
+ gboolean
+ gdm_settings_parse_value_as_boolean (const char *value,
+-                                     gboolean   *bool)
++                                     gboolean   *bool_out)
+ {
+         g_return_val_if_fail (value != NULL, FALSE);
+-        g_return_val_if_fail (bool != NULL, FALSE);
++        g_return_val_if_fail (bool_out != NULL, FALSE);
+ 
+         if (g_ascii_strcasecmp (value, "true") == 0 || strcmp (value, "1") == 0) {
+-                *bool = TRUE;
++                *bool_out = TRUE;
+                 return TRUE;
+         } else if (g_ascii_strcasecmp (value, "false") == 0 || strcmp (value, "0") == 0) {
+-                *bool = FALSE;
++                *bool_out = FALSE;
+                 return TRUE;
+         } else {
+                 return FALSE;
