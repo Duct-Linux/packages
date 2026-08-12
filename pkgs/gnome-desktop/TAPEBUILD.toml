@@ -2,7 +2,7 @@
 name = "gnome-desktop"
 description = "Shared library for GNOME desktop components"
 version = "44.3.0"
-subversion = "1"
+subversion = "2"
 authors = ["The GNOME Project"]
 packagers = ["ItzYanick"]
 
@@ -22,6 +22,7 @@ script = "./install.sh"
 glibc = ">=2.42.0"
 glib = ">=2.84.0"
 gtk4 = ">=4.18.0"
+gtk3 = ">=3.24.0"
 gsettings-desktop-schemas = ">=48.0.0"
 iso-codes = ">=4.18.0"
 libseccomp = ">=2.6.0"
