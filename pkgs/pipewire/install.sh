@@ -113,4 +113,49 @@ alsa_module=$(find "$DESTDIR/usr/lib/alsa-lib" -name 'libasound_module_pcm_pipew
 [ -s "$DESTDIR/usr/share/pipewire/pipewire.conf" ] || die "/usr/share/pipewire/pipewire.conf is missing or empty; the daemon would not start"
 [ -s "$DESTDIR/usr/share/pipewire/pipewire-pulse.conf" ] || die "/usr/share/pipewire/pipewire-pulse.conf is missing or empty"
 
-log "installed pipewire with its ALSA backend, client library and configuration"
+# ---------------------------------------------------------------------------
+# What starts the daemon
+#
+# NOTHING DID, and no assertion above could have noticed: every one of them
+# describes a pipewire that is installed perfectly and never runs. Upstream
+# starts it from a systemd user unit, which this build does not install and
+# this system could not read; the tarball still carries the autostart file
+# distributions used before that -- src/daemon/pipewire.desktop.in -- with its
+# meson install rule COMMENTED OUT (src/daemon/meson.build:147-159). So the
+# file exists, upstream stopped shipping it, and on a system with no systemd
+# there is no other start path at all.
+#
+# /etc/xdg/autostart is what gnome-session reads when it brings a session up,
+# which makes this the same class of file as a unit: not a component of the
+# package, but the thing that decides whether the package ever executes.
+#
+# Upstream's own content, with one change: Exec is made ABSOLUTE. Upstream's
+# `Exec=pipewire` resolves against whatever PATH the session manager happens to
+# have, and a session manager's PATH is not a thing this package can assert
+# anything about -- an absolute path is one the assertion below can check.
+#
+# X-GNOME-Autostart-Phase=Initialization is upstream's and is load-bearing:
+# it runs before the Application phase, which is where wireplumber starts, and
+# a policy engine that connects before the daemon exists gets nothing.
+install -d -m 0755 "$DESTDIR/etc/xdg/autostart"
+sed 's|^Exec=pipewire$|Exec=/usr/bin/pipewire|' \
+	"$SRC_PATH/src/daemon/pipewire.desktop.in" \
+	>"$DESTDIR/etc/xdg/autostart/pipewire.desktop"
+chmod 0644 "$DESTDIR/etc/xdg/autostart/pipewire.desktop"
+
+# Assert the PATH INSIDE THE FILE, not the file. A desktop entry whose Exec
+# names something that is not there is a session that starts silently without
+# audio, and the file itself looks perfect. The sed above is exactly the kind
+# of edit that stops matching when upstream reformats a line, and the failure
+# would be invisible: the file would ship with the unsubstituted `Exec=pipewire`
+# and still be a valid desktop entry.
+exec_path=$(sed -n 's/^Exec=//p' "$DESTDIR/etc/xdg/autostart/pipewire.desktop" | head -1)
+case $exec_path in
+	/*) ;;
+	*) die "the autostart file's Exec is '$exec_path', not an absolute path -- upstream's template changed and the substitution missed it" ;;
+esac
+[ -x "$DESTDIR$exec_path" ] \
+	|| die "the autostart file execs $exec_path and this package does not install it"
+
+log "installed pipewire with its ALSA backend, client library, configuration"
+log "and the autostart entry that is the only thing here that starts it"
