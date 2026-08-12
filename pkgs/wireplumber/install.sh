@@ -84,4 +84,47 @@ if [ -d "$DESTDIR/usr/lib/systemd" ]; then
 	die "/usr/lib/systemd exists; -Dsystemd-user-service=false did not take effect and this package is shipping units for an init system Duct does not have"
 fi
 
-log "installed wireplumber with its Lua policy engine and $n policy script(s)"
+# ---------------------------------------------------------------------------
+# What starts the daemon
+#
+# The assertion above says this package is shipping units for an init system
+# Duct does not have if /usr/lib/systemd exists. It is right, and it leaves a
+# hole it cannot see: with -Dsystemd-user-service=false there is now NOTHING
+# that starts wireplumber, and every check in this file describes a policy
+# engine that is installed perfectly and never runs. A pipewire with no session
+# manager is a sound server with no default sink -- it starts, it accepts
+# clients, and nothing is routed anywhere.
+#
+# Written here rather than taken from the tarball, because unlike pipewire this
+# project ships no autostart file at all: upstream targets systemd exclusively.
+# /etc/xdg/autostart is what gnome-session reads, and it belongs in this package
+# rather than on the ISO for the reason seed-etc.sh gives for living in
+# duct-filesystem -- an ISO-only file is missing on every installed system.
+#
+# NO X-GNOME-Autostart-Phase, deliberately, and it is the ordering that matters
+# rather than the omission: pipewire's entry carries
+# X-GNOME-Autostart-Phase=Initialization, and the default phase (Application)
+# runs after it. A session manager that connects before the daemon exists finds
+# no socket and exits.
+install -d -m 0755 "$DESTDIR/etc/xdg/autostart"
+cat >"$DESTDIR/etc/xdg/autostart/wireplumber.desktop" <<'DESKTOP'
+[Desktop Entry]
+Version=1.0
+Name=WirePlumber Session Manager
+Comment=Start the WirePlumber session and policy manager for PipeWire
+Exec=/usr/bin/wireplumber
+Terminal=false
+Type=Application
+DESKTOP
+chmod 0644 "$DESTDIR/etc/xdg/autostart/wireplumber.desktop"
+
+# Assert the path INSIDE the file against the binary this package installed.
+# An Exec naming something absent is a session that comes up silently without
+# audio routing while the desktop entry itself looks perfect -- and the binary
+# is the half that can move, since a later recipe change could put it in sbin.
+exec_path=$(sed -n 's/^Exec=//p' "$DESTDIR/etc/xdg/autostart/wireplumber.desktop" | head -1)
+[ -x "$DESTDIR$exec_path" ] \
+	|| die "the autostart entry execs $exec_path and this package does not install it there"
+
+log "installed wireplumber with its Lua policy engine and $n policy script(s),"
+log "and the autostart entry that is the only thing here that starts it"
