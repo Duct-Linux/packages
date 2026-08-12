@@ -492,6 +492,21 @@ XORG_PKGS := xwayland
 # packaged for no other reason than that libjxl's own copy of it is an empty
 # submodule directory in the release tarball. Nothing else in the tree links
 # highway today.
+#
+# libical has no edge inside this group at all, and is here rather than in
+# GNOME_UI_PKGS because of what it LINKS rather than what it is for. Its
+# consumer is evolution-data-server, which is a session component -- but libical
+# itself links glib and gobject and nothing GTK, and GNOME_UI_PKGS is the tier
+# for packages that link GTK 3 and therefore cannot be built until gtk3 exists.
+# Putting it there would state a constraint that is not true.
+#
+# Its four edges all point backwards from here, which is the direction that
+# works: glib and glib-introspection from GLIB_PKGS, libxml2 from TOOLS_PKGS,
+# perl from BUILDER_PKGS, and icu from JS_PKGS -- the last being the tightest,
+# and it is satisfied because JS_PKGS precedes this list in ALL_PKGS by two
+# positions. icu is not optional and not chosen: find_package(ICU) in libical's
+# CMakeLists is unconditional and unguarded, so an icu that built later would
+# not fail this package, it would silently produce one without RSCALE support.
 GNOME_PKGS := \
 	lcms2 xdg-user-dirs gnome-backgrounds \
 	libnotify at-spi2-core \
@@ -499,7 +514,8 @@ GNOME_PKGS := \
 	highway libjxl \
 	colord \
 	libogg libvorbis sound-theme-freedesktop \
-	xcb-util startup-notification
+	xcb-util startup-notification \
+	libical
 
 # The GTK 3 island, and it is an island on purpose.
 #
