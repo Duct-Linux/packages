@@ -2,7 +2,12 @@
 name = "duct-filesystem"
 description = "The Duct directory skeleton and base system files"
 version = "0.1.0"
-subversion = "4"
+# 5 -- the lp user and the lpadmin group, for cups. This file reaches the
+# artefact (TAPEPACKAGE.toml is generated from it and shipped inside the
+# package), and so does install.sh, so without the bump publish.yml finds
+# 0.1.0-4 already published and KEEPS THE OLD BYTES: the templates would appear
+# to change and no installed system would ever see it.
+subversion = "5"
 authors = ["Duct"]
 packagers = ["ItzYanick"]
 

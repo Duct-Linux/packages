@@ -622,6 +622,26 @@ PULSE_PKGS := \
 LOCATION_PKGS := \
 	geocode-glib geoclue
 
+# Printing. A group of one, and it is here rather than in an existing list for
+# the ordering reason rather than the topic one.
+#
+# cups needs libusb for its USB backend, and libusb is in GNOME_PKGS -- so any
+# earlier group would build cups before its own dependency and
+# check-build-order.sh would say so. Everything else it needs is far earlier:
+# openssl from SUPPORT_PKGS, linux-pam and dbus from SESSION_PKGS, zlib and
+# duct-filesystem from BASE_PKGS.
+#
+# WHY IT IS PACKAGED AT ALL, since nothing in the tree links it today:
+# gnome-control-center 48.4 declares cups `required: false` and then asserts
+# cups_dep.found() on the next line, and asserts cc.has_header() on cups/cups.h
+# and cups/ppd.h after that. The soft lookup is cancelled twice, so the Printers
+# panel is not optional -- the whole application fails to configure without it.
+#
+# Defined above ALL_PKGS for the reason PULSE_PKGS gives: ALL_PKGS is simply
+# expanded, so a list defined below it expands to nothing while its text stays
+# visible in this file.
+PRINT_PKGS := cups
+
 # The JavaScript engine chain, and the reason it is a chain rather than a
 # package: gnome-shell and gnome-settings-daemon are GJS applications -- the
 # shell is JavaScript from its top-level down -- and gjs is a binding for
@@ -657,7 +677,7 @@ ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
 	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(XORG_PKGS) $(GNOME_PKGS) \
-	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(BOOT_PKGS)
+	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #

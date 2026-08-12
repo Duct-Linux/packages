@@ -103,12 +103,26 @@ install -d -m 0755 "$DESTDIR/usr/share/duct-filesystem"
 # runtime directory created under one to be readable under the other.
 cat >"$DESTDIR/usr/share/duct-filesystem/passwd.default" <<'EOF'
 root:x:0:0:root:/root:/bin/bash
+lp:x:9:7:Print Service User:/var/spool/cups:/usr/bin/false
 messagebus:x:18:18:D-Bus Message Daemon User:/run/dbus:/usr/bin/false
 polkitd:x:27:27:PolicyKit Daemon Owner:/var/lib/polkit-1:/usr/bin/false
 gdm:x:21:21:GDM Daemon Owner:/var/lib/gdm:/usr/bin/false
 colord:x:71:71:Color Daemon Owner:/var/lib/colord:/usr/bin/false
 nobody:x:65534:65534:Nobody:/nonexistent:/usr/bin/false
 EOF
+
+# lp IS UID 9 AND kmem IS GID 9, AND THAT IS NOT A COLLISION. Uids and gids are
+# separate namespaces -- /etc/passwd and /etc/group are different files, indexed
+# independently, and nothing in glibc or the kernel relates the two numbers. The
+# pair looks wrong at a glance precisely because every other entry here happens
+# to use matching numbers, which is a convention rather than a rule; lp is the
+# one account that does not, because BLFS gives it uid 9 with the EXISTING lp
+# group (gid 7) as its primary group rather than a group of its own.
+#
+# Both numbers come from BLFS's cups page verbatim -- `useradd ... -g lp -u 9 lp`
+# and `groupadd -g 19 lpadmin` -- and they are fixed rather than allocated for
+# the reason stated above: a live ISO and an installed system have to agree, or a
+# spool directory written under one is unreadable under the other.
 
 # The device groups are what seat management hands out: elogind puts the
 # logged-in user's ACL on the DRM node and the input devices, but the groups
@@ -122,6 +136,7 @@ kmem:x:9:
 wheel:x:10:
 cdrom:x:11:
 messagebus:x:18:
+lpadmin:x:19:
 gdm:x:21:
 polkitd:x:27:
 audio:x:63:
