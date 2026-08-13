@@ -2,7 +2,7 @@
 name = "sqlite"
 description = "Embedded SQL database engine, required by libsoup3"
 version = "3.50.4"
-subversion = "2"
+subversion = "3"
 authors = ["D. Richard Hipp and contributors"]
 packagers = ["ItzYanick"]
 
@@ -13,7 +13,7 @@ script = "../_scripts/fetch.sh"
 script = "../_scripts/prepare.sh"
 
 [build]
-script = "../_scripts/build.sh"
+script = "./build.sh"
 
 [install]
 script = "../_scripts/install.sh"
