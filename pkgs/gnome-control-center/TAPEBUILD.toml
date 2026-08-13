@@ -1,0 +1,57 @@
+[package]
+name = "gnome-control-center"
+description = "GNOME Settings application"
+version = "48.4.0"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+[prepare]
+script = "./prepare.sh"
+[build]
+script = "../_scripts/build-meson.sh"
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+gtk4 = ">=4.18.0"
+libadwaita = ">=1.7.0"
+tecla = ">=47.0.0"
+accountsservice = ">=23.11.69"
+colord = ">=1.4.7"
+colord-gtk = ">=0.3.1"
+gdk-pixbuf = ">=2.42.0"
+gnome-desktop = ">=44.3.0"
+gnome-settings-daemon = ">=48.0.0"
+gnome-online-accounts = ">=3.54.0"
+gsettings-desktop-schemas = ">=48.0.0"
+libxml2 = ">=2.13.0"
+pulseaudio = ">=17.0.0"
+upower = ">=1.90.7"
+libgudev = ">=238.0.0"
+libX11 = ">=1.8.0"
+libXi = ">=1.8.0"
+libepoxy = ">=1.5.10"
+gcr = ">=4.4.0"
+libpwquality = ">=1.4.5"
+polkit = ">=126.0.0"
+cups = ">=2.4.0"
+ibus = ">=1.5.32"
+libsoup = ">=3.0.0"
+json-glib = ">=1.10.0"
+ModemManager = ">=1.24.0"
+NetworkManager = ">=1.24.0"
+libnma = ">=1.10.2"
+gnome-bluetooth = ">=47.2.0"
+libwacom = ">=1.4.0"
+libgtop = ">=2.41.3"
+
+[dependencies.build]
+meson = ">=1.8.0"
+ninja = ">=1.13.0"
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"

@@ -1,0 +1,20 @@
+[package]
+name = "prmpt"
+description = "GPU-accelerated terminal emulator built with Ghostty and Tauri"
+version = "0.7.5"
+subversion = "1"
+authors = ["dssnet"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "./fetch.sh"
+[install]
+script = "./install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+gtk3 = ">=3.24.0"
+glib = ">=2.84.0"
+
+[dependencies.build]
+

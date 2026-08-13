@@ -785,6 +785,14 @@ PRINT_PKGS := cups
 SETTINGS_PKGS := \
 	gnome-keyring gnome-menus tecla
 
+# Essential live-desktop applications and their leaf support libraries. This
+# group is late because Settings needs PWQUALITY_PKGS and ACCOUNTS_PKGS.
+LIVE_APPS_PKGS := \
+	gsound gnome-bluetooth colord-gtk libgtop \
+	gtksourceview libspelling \
+	gnome-control-center prmpt firefox duct-installer \
+	gnome-text-editor
+
 # The JavaScript engine chain, and the reason it is a chain rather than a
 # package: gnome-shell and gnome-settings-daemon are GJS applications -- the
 # shell is JavaScript from its top-level down -- and gjs is a binding for
@@ -820,7 +828,7 @@ ALL_PKGS := $(BASE_PKGS) $(BUILDER_PKGS) $(SUPPORT_PKGS) $(TZ_PKGS) \
 	$(TOOLS_PKGS) $(SESSION_PKGS) $(FS_PKGS) $(FONT_PKGS) $(GLIB_PKGS) \
 	$(GRAPHICS_PKGS) $(MEDIA_PKGS) $(GTK_PKGS) $(CRYPTO_PKGS) \
 	$(SERVICES_PKGS) $(NETWORK_PKGS) $(JS_PKGS) $(XORG_PKGS) $(GNOME_PKGS) \
-	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SHELL_PKGS) $(SETTINGS_PKGS) $(PWQUALITY_PKGS) $(ACCOUNTS_PKGS) $(BOOT_PKGS)
+	$(NETWORK_UI_PKGS) $(GNOME_UI_PKGS) $(PULSE_PKGS) $(LOCATION_PKGS) $(PRINT_PKGS) $(SHELL_PKGS) $(SETTINGS_PKGS) $(PWQUALITY_PKGS) $(ACCOUNTS_PKGS) $(LIVE_APPS_PKGS) $(BOOT_PKGS)
 
 # Packages that are not machine-specific: built once, installable everywhere.
 #
