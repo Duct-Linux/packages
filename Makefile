@@ -789,9 +789,9 @@ SETTINGS_PKGS := \
 # group is late because Settings needs PWQUALITY_PKGS and ACCOUNTS_PKGS.
 LIVE_APPS_PKGS := \
 	gsound gnome-bluetooth \
-	libportal tinysparql gtksourceview libspelling \
+	gtksourceview libspelling \
 	gnome-control-center prmpt firefox duct-installer \
-	nautilus gnome-text-editor
+	gnome-text-editor
 
 # The JavaScript engine chain, and the reason it is a chain rather than a
 # package: gnome-shell and gnome-settings-daemon are GJS applications -- the
