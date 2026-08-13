@@ -2,7 +2,7 @@
 name = "tape"
 description = "The Duct package manager"
 version = "0.1.0"
-subversion = "5"
+subversion = "6"
 authors = ["ItzYanick"]
 packagers = ["ItzYanick"]
 
