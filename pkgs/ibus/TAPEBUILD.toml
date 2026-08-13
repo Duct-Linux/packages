@@ -2,7 +2,7 @@
 name = "ibus"
 description = "Intelligent Input Bus: the input method framework gnome-shell requires unconditionally"
 version = "1.5.32"
-subversion = "1"
+subversion = "2"
 authors = ["Peng Huang and the ibus project"]
 packagers = ["ItzYanick"]
 
