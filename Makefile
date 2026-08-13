@@ -788,7 +788,7 @@ SETTINGS_PKGS := \
 # Essential live-desktop applications and their leaf support libraries. This
 # group is late because Settings needs PWQUALITY_PKGS and ACCOUNTS_PKGS.
 LIVE_APPS_PKGS := \
-	gsound gnome-bluetooth \
+	gsound gnome-bluetooth colord-gtk \
 	gtksourceview libspelling \
 	gnome-control-center prmpt firefox duct-installer \
 	gnome-text-editor
