@@ -8,6 +8,11 @@ cat >"$DESTDIR/usr/bin/prmpt" <<'EOF'
 #!/bin/sh
 # Avoid the AppImage FUSE 2 dependency; its embedded runtime extracts to a
 # temporary directory and starts the application from there.
+# WebKitGTK's DMA-BUF and accelerated compositing paths can abort a Wayland
+# session on virtual GPUs.  Prmpt is a terminal, so the shared-memory software
+# path is the safer default and has no meaningful UI-performance cost.
+export WEBKIT_DISABLE_DMABUF_RENDERER="${WEBKIT_DISABLE_DMABUF_RENDERER:-1}"
+export WEBKIT_DISABLE_COMPOSITING_MODE="${WEBKIT_DISABLE_COMPOSITING_MODE:-1}"
 exec /usr/lib/prmpt/Prmpt.AppImage --appimage-extract-and-run "$@"
 EOF
 chmod 0755 "$DESTDIR/usr/bin/prmpt"

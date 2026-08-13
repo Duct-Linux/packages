@@ -2,7 +2,7 @@
 name = "prmpt"
 description = "GPU-accelerated terminal emulator built with Ghostty and Tauri"
 version = "0.7.5"
-subversion = "1"
+subversion = "2"
 authors = ["dssnet"]
 packagers = ["ItzYanick"]
 
@@ -17,4 +17,3 @@ gtk3 = ">=3.24.0"
 glib = ">=2.84.0"
 
 [dependencies.build]
-
