@@ -2,7 +2,7 @@
 name = "sqlite"
 description = "Embedded SQL database engine, required by libsoup3"
 version = "3.50.4"
-subversion = "1"
+subversion = "2"
 authors = ["D. Richard Hipp and contributors"]
 packagers = ["ItzYanick"]
 
