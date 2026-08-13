@@ -7,8 +7,3 @@ set -eu
 # live image, so omit this one panel from both compilation and registration.
 sed -i "/^[[:space:]]*'printers',[[:space:]]*$/d" "$SRC_PATH/panels/meson.build"
 sed -i '/^[[:space:]]*"printers",[[:space:]]*$/d' "$SRC_PATH/shell/cc-panel-list.c"
-
-# The privacy panel additionally needs libgtop's C API, whose C++ dependency
-# closure is not in Duct yet. Omit it for the same reason as printers.
-sed -i "/^[[:space:]]*'privacy',[[:space:]]*$/d" "$SRC_PATH/panels/meson.build"
-sed -i '/^[[:space:]]*"privacy",[[:space:]]*$/d' "$SRC_PATH/shell/cc-panel-list.c"

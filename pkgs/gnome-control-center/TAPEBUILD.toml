@@ -48,6 +48,7 @@ NetworkManager = ">=1.24.0"
 libnma = ">=1.10.2"
 gnome-bluetooth = ">=47.2.0"
 libwacom = ">=1.4.0"
+libgtop = ">=2.41.3"
 
 [dependencies.build]
 meson = ">=1.8.0"

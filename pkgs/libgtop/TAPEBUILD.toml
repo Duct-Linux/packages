@@ -1,0 +1,24 @@
+[package]
+name = "libgtop"
+description = "Portable system monitoring library for GNOME"
+version = "2.41.3"
+subversion = "1"
+authors = ["The GNOME Project"]
+packagers = ["ItzYanick"]
+
+[source]
+script = "../_scripts/fetch.sh"
+[prepare]
+script = "../_scripts/prepare.sh"
+[build]
+script = "../_scripts/build.sh"
+[install]
+script = "../_scripts/install.sh"
+
+[dependencies]
+glibc = ">=2.42.0"
+glib = ">=2.84.0"
+
+[dependencies.build]
+pkgconf = ">=2.5.0"
+gettext = ">=0.26.0"
