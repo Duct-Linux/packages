@@ -2,7 +2,7 @@
 name = "duct-installer"
 description = "Graphical installer for Duct Linux"
 version = "0.1.0"
-subversion = "1"
+subversion = "2"
 authors = ["Duct"]
 packagers = ["ItzYanick"]
 
@@ -28,4 +28,3 @@ libadwaita = ">=1.7.0"
 meson = ">=1.8.0"
 ninja = ">=1.13.0"
 pkgconf = ">=2.5.0"
-
